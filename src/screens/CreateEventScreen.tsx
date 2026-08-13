@@ -166,7 +166,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 22, fontWeight: '700', marginBottom: 8 },
   label: { fontSize: 13, fontWeight: '600', marginTop: 8 },
   meta: { color: '#6b6b64', fontSize: 12 },
-  input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12 },
+  input: { color: '#1a1a20', borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12 },
   textarea: { minHeight: 70, textAlignVertical: 'top' },
   rowGap: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   choice: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 10 },

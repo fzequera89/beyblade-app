@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, padding: 20, backgroundColor: '#fff' },
   title: { fontSize: 22, fontWeight: '700', marginBottom: 12 },
   form: { gap: 8, marginTop: 8 },
-  input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 10 },
+  input: { color: '#1a1a20', borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 10 },
   button: { backgroundColor: '#2f5ad6', borderRadius: 8, padding: 12, alignItems: 'center' },
   buttonText: { color: '#fff', fontWeight: '600' },
   row: {

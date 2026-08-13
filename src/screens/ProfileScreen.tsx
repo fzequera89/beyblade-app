@@ -272,7 +272,7 @@ const styles = StyleSheet.create({
   historyScore: { fontSize: 12, color: '#6b6b64' },
   win: { color: '#1f7a4d', fontWeight: '700' },
   loss: { color: '#b00020', fontWeight: '700' },
-  input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12, width: '100%' },
+  input: { color: '#1a1a20', borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12, width: '100%' },
   button: { backgroundColor: '#2f5ad6', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 12, width: '100%' },
   secondaryButton: { backgroundColor: '#444' },
   buttonText: { color: '#fff', fontWeight: '600' },

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Text, TextInput, Pressable, StyleSheet, Alert } from 'react-native';
 import { supabase } from '../lib/supabase';
 import Screen from '../components/Screen';
+import PasswordInput from '../components/PasswordInput';
 
 export default function SignUpScreen({ navigation }: any) {
   const [email, setEmail] = useState('');
@@ -34,14 +35,7 @@ export default function SignUpScreen({ navigation }: any) {
         value={email}
         onChangeText={setEmail}
       />
-      <TextInput
-        style={styles.input}
-        placeholder="Contraseña"
-        placeholderTextColor="#8a8a8a"
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
-      />
+      <PasswordInput value={password} onChangeText={setPassword} />
       <Pressable style={styles.button} onPress={signUp} disabled={loading}>
         <Text style={styles.buttonText}>Registrarme</Text>
       </Pressable>
@@ -55,7 +49,7 @@ export default function SignUpScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', padding: 24, gap: 12, backgroundColor: '#fff' },
   title: { fontSize: 24, fontWeight: '700', textAlign: 'center', marginBottom: 16 },
-  input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12 },
+  input: { color: '#1a1a20', borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12 },
   button: { backgroundColor: '#2f5ad6', borderRadius: 8, padding: 14, alignItems: 'center' },
   buttonText: { color: '#fff', fontWeight: '600' },
   link: { textAlign: 'center', color: '#2f5ad6', marginTop: 8 },

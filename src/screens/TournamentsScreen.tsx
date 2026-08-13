@@ -112,7 +112,7 @@ const styles = StyleSheet.create({
   cardStatus: { color: '#6b6b64', fontSize: 12, textTransform: 'capitalize' },
   empty: { textAlign: 'center', color: '#6b6b64', marginTop: 40 },
   newRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
-  input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 10 },
+  input: { color: '#1a1a20', borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 10 },
   button: { backgroundColor: '#2f5ad6', borderRadius: 8, padding: 12, alignItems: 'center', justifyContent: 'center' },
   buttonText: { color: '#fff', fontWeight: '600' },
   linkButton: { marginTop: 12 },

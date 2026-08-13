@@ -196,7 +196,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 22, fontWeight: '700' },
   meta: { color: '#6b6b64', fontSize: 12, marginTop: 6, marginBottom: 16 },
   form: { gap: 8 },
-  input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12, width: '100%' },
+  input: { color: '#1a1a20', borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12, width: '100%' },
   rowGap: { flexDirection: 'row', gap: 8 },
   button: { backgroundColor: '#2f5ad6', borderRadius: 8, padding: 12, alignItems: 'center', flex: 1 },
   secondaryButton: { backgroundColor: '#444' },

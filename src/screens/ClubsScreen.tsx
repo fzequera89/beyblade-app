@@ -150,7 +150,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 22, fontWeight: '700' },
   meta: { color: '#6b6b64', fontSize: 12, marginTop: 6 },
   form: { gap: 8, marginTop: 12 },
-  input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12 },
+  input: { color: '#1a1a20', borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12 },
   textarea: { minHeight: 70, textAlignVertical: 'top' },
   rowGap: { flexDirection: 'row', gap: 8 },
   row: {

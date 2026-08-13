@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
   seasonName: { fontWeight: '600' },
   empty: { color: '#6b6b64' },
   newSeasonRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
-  input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 10 },
+  input: { color: '#1a1a20', borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 10 },
   button: { backgroundColor: '#2f5ad6', borderRadius: 8, padding: 12, alignItems: 'center', marginTop: 10 },
   secondaryButton: { backgroundColor: '#444' },
   buttonText: { color: '#fff', fontWeight: '600' },

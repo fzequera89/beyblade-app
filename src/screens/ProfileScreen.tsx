@@ -164,6 +164,9 @@ export default function ProfileScreen({ navigation }: any) {
           <Pressable style={[styles.button, styles.secondaryButton]} onPress={() => navigation.navigate('Venues')}>
             <Text style={styles.buttonText}>Venues</Text>
           </Pressable>
+          <Pressable style={[styles.button, styles.secondaryButton]} onPress={() => navigation.navigate('NearMe')}>
+            <Text style={styles.buttonText}>Bladers Near Me</Text>
+          </Pressable>
           {isAdmin && (
             <Pressable style={[styles.button, styles.secondaryButton]} onPress={() => navigation.navigate('Admin')}>
               <Text style={styles.buttonText}>Panel de administrador</Text>

@@ -11,7 +11,14 @@ type Challenge = {
   match_id: string | null;
   challenger: { id: string; display_name: string } | null;
   challenged: { id: string; display_name: string } | null;
+  match: { id: string; status: string } | null;
 };
+
+// Los dos embeds de `players` sí necesitan nombre de FK porque hay dos caminos
+// (challenger y challenged). El de `matches` no: hay una sola relación, así que
+// PostgREST la infiere sola y no hay que adivinar cómo nombró Postgres la llave.
+const SELECT =
+  'id, status, match_id, challenger:players!challenges_challenger_id_fkey(id, display_name), challenged:players!challenges_challenged_id_fkey(id, display_name), match:matches(id, status)';
 
 export default function ChallengesScreen({ navigation }: any) {
   const { playerId } = useAuth();
@@ -22,23 +29,22 @@ export default function ChallengesScreen({ navigation }: any) {
 
   const load = useCallback(async () => {
     setLoading(true);
+    // Se traen TODOS los estados, no solo 'pending': un reto aceptado es la única
+    // puerta de entrada a su match, porque un match de reto no tiene torneo ni
+    // aparece en el historial del perfil hasta que se confirma.
     const [{ data: recv }, { data: snt }] = await Promise.all([
       supabase
         .from('challenges')
-        .select(
-          'id, status, match_id, challenger:players!challenges_challenger_id_fkey(id, display_name), challenged:players!challenges_challenged_id_fkey(id, display_name)'
-        )
+        .select(SELECT)
         .eq('challenged_id', playerId)
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false }),
+        .order('created_at', { ascending: false })
+        .limit(30),
       supabase
         .from('challenges')
-        .select(
-          'id, status, match_id, challenger:players!challenges_challenger_id_fkey(id, display_name), challenged:players!challenges_challenged_id_fkey(id, display_name)'
-        )
+        .select(SELECT)
         .eq('challenger_id', playerId)
         .order('created_at', { ascending: false })
-        .limit(20),
+        .limit(30),
     ]);
     setLoading(false);
     setReceived((recv as any) ?? []);
@@ -88,16 +94,58 @@ export default function ChallengesScreen({ navigation }: any) {
     load();
   }
 
+  const pendingReceived = received.filter((c) => c.status === 'pending');
+
+  // Matches que ya se pueden jugar, vengan del lado que vengan. Un match de reto
+  // solo es alcanzable desde aquí, así que se listan hasta que quedan confirmados.
+  const toPlay = [...received, ...sent].filter(
+    (c) => c.status === 'accepted' && c.match && c.match.status !== 'confirmed'
+  );
+
+  const sentPending = sent.filter((c) => c.status !== 'accepted');
+
+  function opponentOf(c: Challenge) {
+    return (c.challenger?.id === playerId ? c.challenged?.display_name : c.challenger?.display_name) ?? '—';
+  }
+
+  function matchLabel(status: string | undefined) {
+    if (status === 'reported') return 'Resultado reportado · falta confirmar';
+    if (status === 'disputed') return 'Resultado en disputa';
+    return 'Sin jugar todavía';
+  }
+
   return (
     <Screen style={styles.container}>
       <FlatList
         style={{ flex: 1 }}
-        data={received}
+        data={pendingReceived}
         keyExtractor={(c) => c.id}
         refreshing={loading}
         onRefresh={load}
         contentContainerStyle={{ gap: 8, paddingBottom: 24 }}
-        ListHeaderComponent={<Text style={styles.title}>Retos recibidos</Text>}
+        ListHeaderComponent={
+          <View>
+            {toPlay.length > 0 && (
+              <View style={{ marginBottom: 20 }}>
+                <Text style={styles.title}>Mis matches</Text>
+                {toPlay.map((c) => (
+                  <Pressable
+                    key={c.id}
+                    style={styles.matchCard}
+                    onPress={() => navigation.navigate('MatchDetail', { matchId: c.match_id })}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.name}>vs {opponentOf(c)}</Text>
+                      <Text style={styles.matchStatus}>{matchLabel(c.match?.status)}</Text>
+                    </View>
+                    <Text style={styles.chevron}>›</Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+            <Text style={styles.title}>Retos recibidos</Text>
+          </View>
+        }
         renderItem={({ item }) => (
           <View style={styles.card}>
             <Text style={styles.name}>{item.challenger?.display_name ?? '—'} te retó</Text>
@@ -115,10 +163,10 @@ export default function ChallengesScreen({ navigation }: any) {
         ListFooterComponent={
           <View>
             <Text style={styles.sectionTitle}>Retos enviados</Text>
-            {sent.length === 0 ? (
-              <Text style={styles.empty}>No has retado a nadie todavía.</Text>
+            {sentPending.length === 0 ? (
+              <Text style={styles.empty}>No tienes retos enviados sin responder.</Text>
             ) : (
-              sent.map((c) => (
+              sentPending.map((c) => (
                 <View key={c.id} style={styles.card}>
                   <Text style={styles.name}>
                     Retaste a {c.challenged?.display_name ?? '—'} · <Text style={styles.status}>{c.status}</Text>
@@ -146,6 +194,18 @@ const styles = StyleSheet.create({
   title: { fontSize: 22, fontWeight: '700', marginBottom: 12 },
   sectionTitle: { fontSize: 16, fontWeight: '700', marginTop: 20, marginBottom: 8 },
   card: { borderWidth: 1, borderColor: '#eee', borderRadius: 10, padding: 12, marginBottom: 8 },
+  matchCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#2f5ad6',
+    backgroundColor: '#e8edfd',
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 8,
+  },
+  matchStatus: { fontSize: 12, color: '#2f5ad6', marginTop: 3 },
+  chevron: { fontSize: 22, color: '#2f5ad6', fontWeight: '700' },
   name: { fontSize: 14, fontWeight: '600' },
   status: { fontWeight: '400', color: '#6b6b64', textTransform: 'capitalize' },
   actionsRow: { flexDirection: 'row', gap: 8, marginTop: 10 },

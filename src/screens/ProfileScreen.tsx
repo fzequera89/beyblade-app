@@ -14,11 +14,25 @@ type Player = {
   matches_played: number;
 };
 
+type HistoryMatch = {
+  id: string;
+  score_a: number;
+  score_b: number;
+  player_a_id: string;
+  winner_id: string | null;
+  elo_a_change: number | null;
+  elo_b_change: number | null;
+  confirmed_at: string | null;
+  player_a: { display_name: string } | null;
+  player_b: { display_name: string } | null;
+};
+
 export default function ProfileScreen({ navigation }: any) {
   const { session } = useAuth();
   const [player, setPlayer] = useState<Player | null>(null);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ display_name: '', city: '', main_beyblade: '', play_style: '' });
+  const [history, setHistory] = useState<HistoryMatch[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -44,6 +58,17 @@ export default function ProfileScreen({ navigation }: any) {
       main_beyblade: data.main_beyblade ?? '',
       play_style: data.play_style ?? '',
     });
+
+    const { data: matches } = await supabase
+      .from('matches')
+      .select(
+        'id, score_a, score_b, player_a_id, winner_id, elo_a_change, elo_b_change, confirmed_at, player_a:players!matches_player_a_id_fkey(display_name), player_b:players!matches_player_b_id_fkey(display_name)'
+      )
+      .or(`player_a_id.eq.${data.id},player_b_id.eq.${data.id}`)
+      .eq('status', 'confirmed')
+      .order('confirmed_at', { ascending: false })
+      .limit(20);
+    setHistory((matches as any) ?? []);
   }
 
   async function save() {
@@ -130,6 +155,31 @@ export default function ProfileScreen({ navigation }: any) {
           <Pressable style={[styles.button, styles.secondaryButton]} onPress={() => navigation.navigate('Leagues')}>
             <Text style={styles.buttonText}>Mis ligas</Text>
           </Pressable>
+
+          {history.length > 0 && (
+            <View style={{ width: '100%', marginTop: 20 }}>
+              <Text style={styles.sectionTitle}>Historial</Text>
+              {history.map((m) => {
+                const isA = m.player_a_id === player.id;
+                const opponent = isA ? m.player_b?.display_name : m.player_a?.display_name;
+                const won = m.winner_id === player.id;
+                const myChange = isA ? m.elo_a_change : m.elo_b_change;
+                return (
+                  <View key={m.id} style={styles.historyRow}>
+                    <Text style={won ? styles.win : styles.loss}>{won ? 'W' : 'L'}</Text>
+                    <Text style={styles.historyOpponent}>vs {opponent ?? '—'}</Text>
+                    <Text style={styles.historyScore}>
+                      {m.score_a}-{m.score_b}
+                    </Text>
+                    <Text style={won ? styles.win : styles.loss}>
+                      {(myChange ?? 0) >= 0 ? '+' : ''}
+                      {myChange}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          )}
         </>
       )}
       <Pressable style={styles.signOut} onPress={() => supabase.auth.signOut()}>
@@ -149,6 +199,20 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 20, fontWeight: '700' },
   statLabel: { fontSize: 12, color: '#6b6b64' },
   field: { fontSize: 14, color: '#333' },
+  sectionTitle: { fontSize: 16, fontWeight: '700', marginBottom: 8 },
+  historyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    paddingVertical: 8,
+    width: '100%',
+  },
+  historyOpponent: { flex: 1, fontSize: 13 },
+  historyScore: { fontSize: 12, color: '#6b6b64' },
+  win: { color: '#1f7a4d', fontWeight: '700' },
+  loss: { color: '#b00020', fontWeight: '700' },
   input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12, width: '100%' },
   button: { backgroundColor: '#2f5ad6', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 12, width: '100%' },
   secondaryButton: { backgroundColor: '#444' },

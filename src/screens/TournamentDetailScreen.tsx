@@ -114,7 +114,7 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
         hasBracket ? (
           <Pressable
             style={[styles.button, styles.secondaryButton]}
-            onPress={() => navigation.navigate('Bracket', { tournamentId })}
+            onPress={() => navigation.navigate('Bracket', { tournamentId, leagueId, isOrganizer })}
           >
             <Text style={styles.buttonText}>Ver bracket</Text>
           </Pressable>
@@ -131,7 +131,7 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
       {hasBracket && !isOrganizer && (
         <Pressable
           style={[styles.button, styles.secondaryButton]}
-          onPress={() => navigation.navigate('Bracket', { tournamentId })}
+          onPress={() => navigation.navigate('Bracket', { tournamentId, leagueId, isOrganizer })}
         >
           <Text style={styles.buttonText}>Ver bracket</Text>
         </Pressable>

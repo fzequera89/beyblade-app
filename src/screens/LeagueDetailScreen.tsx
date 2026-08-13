@@ -104,6 +104,15 @@ export default function LeagueDetailScreen({ route, navigation }: any) {
         </Pressable>
       )}
 
+      {role && (
+        <Pressable
+          style={[styles.button, styles.secondaryButton]}
+          onPress={() => navigation.navigate('LeagueStandings', { leagueId })}
+        >
+          <Text style={styles.buttonText}>Ranking / Reporte</Text>
+        </Pressable>
+      )}
+
       <Text style={styles.sectionTitle}>Temporadas</Text>
       <FlatList
         data={seasons}
@@ -157,6 +166,7 @@ const styles = StyleSheet.create({
   newSeasonRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
   input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 10 },
   button: { backgroundColor: '#2f5ad6', borderRadius: 8, padding: 12, alignItems: 'center', marginTop: 10 },
+  secondaryButton: { backgroundColor: '#444' },
   buttonText: { color: '#fff', fontWeight: '600' },
   linkButton: { marginTop: 12 },
   link: { color: '#2f5ad6', fontWeight: '600' },

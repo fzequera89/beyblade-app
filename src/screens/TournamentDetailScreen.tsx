@@ -73,6 +73,19 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
     load();
   }
 
+  async function toggleCheckIn(targetPlayerId: string, currentlyCheckedIn: boolean) {
+    const { error } = await supabase
+      .from('tournament_registrations')
+      .update({ checked_in_at: currentlyCheckedIn ? null : new Date().toISOString() })
+      .eq('tournament_id', tournamentId)
+      .eq('player_id', targetPlayerId);
+    if (error) {
+      Alert.alert('Error', error.message);
+      return;
+    }
+    load();
+  }
+
   async function generateBracket() {
     setBusy(true);
     try {
@@ -137,17 +150,24 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
         </Pressable>
       )}
 
-      <Text style={styles.sectionTitle}>Jugadores</Text>
+      <Text style={styles.sectionTitle}>Jugadores{isOrganizer ? ' (toca para check-in)' : ''}</Text>
       <FlatList
         data={registrations}
         keyExtractor={(r) => r.player_id}
         contentContainerStyle={{ gap: 6 }}
-        renderItem={({ item }) => (
-          <View style={styles.playerRow}>
-            <Text>{item.players?.display_name ?? '—'}</Text>
-            {item.checked_in_at ? <Text style={styles.badge}>check-in</Text> : null}
-          </View>
-        )}
+        renderItem={({ item }) => {
+          const row = (
+            <View style={styles.playerRow}>
+              <Text>{item.players?.display_name ?? '—'}</Text>
+              {item.checked_in_at ? <Text style={styles.badge}>check-in</Text> : null}
+            </View>
+          );
+          return isOrganizer ? (
+            <Pressable onPress={() => toggleCheckIn(item.player_id, !!item.checked_in_at)}>{row}</Pressable>
+          ) : (
+            row
+          );
+        }}
         ListEmptyComponent={!loading ? <Text style={styles.empty}>Nadie registrado todavía.</Text> : null}
       />
 

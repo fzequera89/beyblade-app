@@ -1,0 +1,262 @@
+<title>Beyblade League App — Wireframes Fase 0</title>
+<style>
+:root{
+  --bg:#f2f1ec; --panel:#ffffff; --ink:#1c1c1a; --sub:#6b6b64;
+  --line:#c9c7bd; --line-strong:#9a988c; --accent:#2f5ad6; --accent-soft:#e8edfd;
+  --frame:#2a2a28; --status-pending:#b8860b; --status-ok:#1f7a4d;
+}
+:root[data-theme="dark"]{
+  --bg:#15161a; --panel:#1d1f24; --ink:#e9e8e2; --sub:#9a998f;
+  --line:#3a3c42; --line-strong:#54565e; --accent:#7d9bff; --accent-soft:#232a44;
+  --frame:#e9e8e2; --status-pending:#e0b34d; --status-ok:#5fd39a;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#15161a; --panel:#1d1f24; --ink:#e9e8e2; --sub:#9a998f;
+    --line:#3a3c42; --line-strong:#54565e; --accent:#7d9bff; --accent-soft:#232a44;
+    --frame:#e9e8e2; --status-pending:#e0b34d; --status-ok:#5fd39a;
+  }
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:ui-monospace,"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+  padding:2.5rem 1.5rem 4rem; min-height:100vh;
+}
+.masthead{max-width:1180px;margin:0 auto 2.5rem}
+.masthead .kicker{font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:600}
+.masthead h1{font-size:1.6rem;margin:.35rem 0 .3rem;font-weight:700;letter-spacing:-.01em}
+.masthead p{color:var(--sub);font-size:.85rem;max-width:62ch;line-height:1.5;margin:0}
+
+.board{
+  max-width:1180px;margin:0 auto;
+  display:flex; gap:2.25rem; flex-wrap:wrap; align-items:flex-start;
+}
+.screen{width:280px; flex:0 0 auto}
+.screen-label{
+  display:flex; justify-content:space-between; align-items:baseline;
+  margin-bottom:.6rem; padding-bottom:.4rem; border-bottom:1px solid var(--line);
+}
+.screen-label .name{font-size:.85rem;font-weight:700}
+.screen-label .tag{font-size:.65rem;color:var(--sub)}
+
+.frame{
+  border:2px solid var(--frame); border-radius:22px; padding:8px;
+  background:var(--panel);
+}
+.frame-inner{
+  border:1px dashed var(--line-strong); border-radius:15px;
+  min-height:520px; padding:.85rem; display:flex; flex-direction:column; gap:.6rem;
+  position:relative; overflow:hidden;
+}
+.notch{width:60px;height:5px;border-radius:3px;background:var(--line-strong);margin:0 auto .4rem}
+
+.block{border:1px dashed var(--line-strong); border-radius:8px; padding:.5rem .6rem; position:relative}
+.block .ann{
+  position:absolute; top:-.6rem; left:.5rem; background:var(--panel);
+  padding:0 .3rem; font-size:.58rem; color:var(--accent); letter-spacing:.03em;
+}
+.fill{color:var(--sub); font-size:.68rem; line-height:1.35}
+.placeholder-line{height:7px; background:var(--line); border-radius:3px; margin:.25rem 0}
+.placeholder-line.w60{width:60%} .placeholder-line.w40{width:40%} .placeholder-line.w80{width:80%}
+
+.row{display:flex; gap:.5rem; align-items:center}
+.avatar{width:38px;height:38px;border-radius:50%;border:1.5px dashed var(--line-strong);flex:0 0 auto;
+  display:flex;align-items:center;justify-content:center;font-size:.6rem;color:var(--sub)}
+.avatar.sm{width:26px;height:26px}
+.pill{
+  border:1px solid var(--line-strong); border-radius:999px; padding:.15rem .55rem;
+  font-size:.6rem; color:var(--sub); white-space:nowrap;
+}
+.pill.accent{border-color:var(--accent); color:var(--accent); font-weight:600}
+.pill.ok{border-color:var(--status-ok); color:var(--status-ok); font-weight:600}
+.pill.pending{border-color:var(--status-pending); color:var(--status-pending); font-weight:600}
+
+.tabs{display:flex; gap:.4rem}
+.tab{font-size:.6rem; padding:.25rem .5rem; border:1px solid var(--line); border-radius:6px; color:var(--sub)}
+.tab.active{border-color:var(--accent); color:var(--accent); background:var(--accent-soft); font-weight:600}
+
+.stat-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:.4rem}
+.stat{border:1px dashed var(--line-strong); border-radius:8px; padding:.4rem .3rem; text-align:center}
+.stat b{display:block;font-size:.78rem}
+.stat span{font-size:.55rem;color:var(--sub)}
+
+.btn{
+  border:1px solid var(--accent); color:var(--accent); border-radius:8px;
+  text-align:center; font-size:.65rem; font-weight:700; padding:.5rem; letter-spacing:.02em;
+}
+.btn.solid{background:var(--accent); color:var(--panel); border-color:var(--accent)}
+
+.list-item{display:flex; justify-content:space-between; align-items:center; gap:.4rem}
+
+/* bracket specific */
+.bracket-col{display:flex; flex-direction:column; gap:.55rem; flex:1}
+.bracket-cols{display:flex; gap:.4rem; flex:1}
+.match-node{border:1px dashed var(--line-strong); border-radius:6px; padding:.3rem .4rem; font-size:.58rem}
+.match-node .p{display:flex; justify-content:space-between}
+.match-node .p.win{color:var(--accent); font-weight:700}
+.match-node .p.lose{color:var(--sub)}
+
+/* result report specific */
+.vs-row{display:flex; align-items:center; justify-content:space-between}
+.vs-mid{font-size:.6rem; color:var(--sub); font-weight:700}
+.round-row{display:flex; align-items:center; justify-content:space-between; gap:.3rem}
+.dot-select{display:flex; gap:.25rem}
+.dot{width:16px;height:16px;border-radius:4px;border:1px dashed var(--line-strong)}
+.dot.on{background:var(--accent); border-color:var(--accent)}
+
+.legend{
+  max-width:1180px;margin:2rem auto 0; display:flex; gap:1.2rem; flex-wrap:wrap;
+  font-size:.68rem; color:var(--sub);
+}
+.legend .k{display:inline-flex;align-items:center;gap:.35rem}
+.legend .swatch{width:10px;height:10px;border:1px dashed var(--line-strong);border-radius:2px}
+</style>
+
+<div class="masthead">
+  <div class="kicker">Fase 0 — Beyblade League App</div>
+  <h1>Wireframes de pantallas núcleo</h1>
+  <p>Baja fidelidad, solo estructura y jerarquía de información — no define color ni tipografía final de producto. Anotaciones en azul indican qué dato o módulo alimenta cada bloque.</p>
+</div>
+
+<div class="board">
+
+  <!-- SCREEN 1: PERFIL -->
+  <div class="screen">
+    <div class="screen-label"><span class="name">01 · Perfil / Player Card</span><span class="tag">M1</span></div>
+    <div class="frame"><div class="frame-inner">
+      <div class="notch"></div>
+
+      <div class="block" style="text-align:center">
+        <span class="ann">header</span>
+        <div class="avatar" style="margin:0 auto .4rem;width:56px;height:56px">avatar</div>
+        <div class="placeholder-line w60" style="margin:.3rem auto"></div>
+        <div class="placeholder-line w40" style="margin:0 auto"></div>
+        <div class="row" style="justify-content:center;margin-top:.4rem">
+          <span class="pill accent">ELO 1307</span>
+          <span class="pill">Liga Norte</span>
+        </div>
+      </div>
+
+      <div class="block">
+        <span class="ann">stats · M9</span>
+        <div class="stat-grid">
+          <div class="stat"><b>62%</b><span>win rate</span></div>
+          <div class="stat"><b>38</b><span>matches</span></div>
+          <div class="stat"><b>#4</b><span>ranking</span></div>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <span class="tab active">Historial</span>
+        <span class="tab">Combos</span>
+        <span class="tab">Badges</span>
+      </div>
+
+      <div class="block" style="flex:1">
+        <span class="ann">Combo activo</span>
+        <div class="list-item"><span class="fill">Main Beyblade · combo</span><span class="pill">favorito</span></div>
+        <div class="placeholder-line w80"></div>
+        <div class="placeholder-line w60"></div>
+      </div>
+
+      <div class="block">
+        <span class="ann">QR</span>
+        <div class="row" style="justify-content:space-between">
+          <span class="fill">Scan to view player</span>
+          <div class="avatar sm" style="border-radius:4px">QR</div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- SCREEN 2: BRACKET -->
+  <div class="screen">
+    <div class="screen-label"><span class="name">02 · Torneo / Bracket</span><span class="tag">M3</span></div>
+    <div class="frame"><div class="frame-inner">
+      <div class="notch"></div>
+
+      <div class="block">
+        <span class="ann">header</span>
+        <div class="placeholder-line w60"></div>
+        <div class="row" style="justify-content:space-between;margin-top:.3rem">
+          <span class="pill pending">Ronda 2 de 4</span>
+          <span class="pill">16 jugadores</span>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <span class="tab active">Bracket</span>
+        <span class="tab">Check-in</span>
+        <span class="tab">Reglas</span>
+      </div>
+
+      <div class="block" style="flex:1">
+        <span class="ann">árbol de bracket</span>
+        <div class="bracket-cols">
+          <div class="bracket-col">
+            <div class="match-node"><div class="p win">Carlos</div><div class="p lose">Ana</div></div>
+            <div class="match-node"><div class="p win">Miguel</div><div class="p lose">Diego</div></div>
+            <div class="match-node"><div class="p lose">Sofía</div><div class="p win">Luis</div></div>
+            <div class="match-node"><div class="p win">Elena</div><div class="p lose">Iker</div></div>
+          </div>
+          <div class="bracket-col" style="justify-content:space-around">
+            <div class="match-node"><div class="p">Carlos</div><div class="p">Miguel</div></div>
+            <div class="match-node"><div class="p">Luis</div><div class="p">Elena</div></div>
+          </div>
+          <div class="bracket-col" style="justify-content:center">
+            <div class="match-node"><div class="p">Final</div><div class="p">TBD</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="btn solid">Confirmar check-in de mesa</div>
+    </div></div>
+  </div>
+
+  <!-- SCREEN 3: REPORTE DE RESULTADO -->
+  <div class="screen">
+    <div class="screen-label"><span class="name">03 · Reporte de resultado</span><span class="tag">M4 · M5</span></div>
+    <div class="frame"><div class="frame-inner">
+      <div class="notch"></div>
+
+      <div class="block">
+        <span class="ann">match · estado</span>
+        <div class="vs-row">
+          <div class="row"><div class="avatar sm">A</div><span class="fill">Carlos<br>1300 ELO</span></div>
+          <span class="vs-mid">VS</span>
+          <div class="row"><span class="fill" style="text-align:right">Miguel<br>1100 ELO</span><div class="avatar sm">B</div></div>
+        </div>
+        <div style="text-align:center;margin-top:.4rem">
+          <span class="pill pending">Pendiente confirmación</span>
+        </div>
+      </div>
+
+      <div class="block" style="flex:1">
+        <span class="ann">rounds · finish type</span>
+        <div class="round-row"><span class="fill">Round 1</span><div class="dot-select"><div class="dot on"></div><div class="dot"></div></div><span class="pill">Burst</span></div>
+        <div class="round-row"><span class="fill">Round 2</span><div class="dot-select"><div class="dot"></div><div class="dot on"></div></div><span class="pill">Over</span></div>
+        <div class="round-row"><span class="fill">Round 3</span><div class="dot-select"><div class="dot on"></div><div class="dot"></div></div><span class="pill">Spin</span></div>
+        <div class="list-item" style="margin-top:.5rem">
+          <span class="fill">Marcador interno</span>
+          <span class="pill accent">3 – 0</span>
+        </div>
+      </div>
+
+      <div class="block">
+        <span class="ann">preview ELO · docs/elo-rules.md</span>
+        <div class="list-item"><span class="fill">Carlos</span><span class="pill ok">+7.36</span></div>
+        <div class="list-item"><span class="fill">Miguel</span><span class="pill pending">-7.36</span></div>
+      </div>
+
+      <div class="btn">Rival: confirmar resultado</div>
+    </div></div>
+  </div>
+
+</div>
+
+<div class="legend">
+  <span class="k"><span class="swatch" style="border-color:var(--accent)"></span>anotación / dato dinámico</span>
+  <span class="k"><span class="swatch"></span>bloque de estructura (sin contenido final)</span>
+  <span class="k"><span class="swatch" style="border-radius:50%"></span>imagen / avatar</span>
+</div>

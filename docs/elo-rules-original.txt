@@ -1,0 +1,104 @@
+
+
+Sistema ELO — Liga de Beyblade
+Reglamento técnico de rating global
+Este documento define un sistema ELO global para una liga presencial de Beyblade. El objetivo del rating es estimar la fuerza relativa de cada jugador a partir de sus resultados, dando mayor recompensa a las victorias inesperadas y menor variación a las victorias que ya eran estadísticamente esperadas.
+1. Principios del sistema
+Cada jugador tiene un único ELO global.
+Todos los jugadores comienzan con 1,000 ELO.
+El ELO se actualiza después de cada match oficial.
+Un match cuenta como una sola unidad de resultado: victoria o derrota.
+El marcador interno del match puede utilizarse como margen de victoria para ajustar ligeramente el cambio de ELO.
+Los puntos ganados por un jugador son exactamente los puntos perdidos por su oponente.
+2. Rating inicial
+Todo jugador nuevo comienza con:
+R₀ = 1,000 ELO
+3. Probabilidad esperada de victoria
+Antes de cada match se calcula la probabilidad esperada de victoria de cada jugador. Para el jugador A, con rating Rₐ, frente al jugador B, con rating Rᵦ:
+Eₐ = 1 / (1 + 10^((Rᵦ − Rₐ) / 400))
+La probabilidad del jugador B es Eᵦ = 1 − Eₐ. El parámetro 400 es el factor estándar de la escala Elo: una diferencia de 400 puntos representa aproximadamente una probabilidad de 91% para el jugador con mayor rating.
+4. Resultado real
+Resultado
+S
+Victoria
+1
+Derrota
+0
+5. K-Factor
+El K-Factor determina qué tan rápido puede cambiar el rating. Un K alto hace que el sistema reaccione rápidamente; un K bajo produce un rating más estable. Esta lógica es consistente con la formulación clásica de Elo y con sistemas deportivos que ajustan K para equilibrar estabilidad y capacidad de reacción.
+Etapa
+K
+Aplicación
+Jugador nuevo
+40
+Primeras 10 partidas oficiales
+Jugador establecido
+24
+Desde la partida 11
+El K=40 para jugadores nuevos permite que el rating encuentre rápidamente el nivel real del jugador. Una vez superadas las primeras 10 partidas, K=24 reduce la volatilidad y estabiliza el ranking.
+6. Margen de victoria
+El resultado principal sigue siendo únicamente victoria o derrota. Sin embargo, si el match tiene un marcador interno (por ejemplo, 3–0, 3–1 o 3–2), la diferencia puede utilizarse como un ajuste moderado. Se recomienda limitar este efecto para que una paliza no domine el resultado estadístico.
+D = diferencia absoluta entre las victorias internas de ambos jugadores.
+D = |Pₐ − Pᵦ|
+Multiplicador de margen:
+M = min(1.30, 1 + 0.20 × ln(D + 1))
+El multiplicador queda limitado a 1.30. Esto introduce rendimientos decrecientes: pasar de una victoria estrecha a una victoria clara tiene más impacto que aumentar todavía más una diferencia ya grande.
+Marcador
+D
+M aproximado
+3–2
+1
+1.139
+3–1
+2
+1.220
+3–0
+3
+1.277
+4–0
+4
+1.322 → 1.300 (límite)
+7. Fórmula final de actualización
+El cambio de ELO del jugador A se calcula mediante:
+R'ₐ = Rₐ + K × M × (Sₐ − Eₐ)
+Para el jugador B, el cambio es exactamente el opuesto. Por lo tanto, el sistema conserva el total de ELO de la liga: si un jugador gana 8 puntos, su oponente pierde 8 puntos.
+8. Ejemplo: favorito gana
+Carlos: 1,300 ELOMiguel: 1,100 ELOResultado: Carlos gana 3–0K: 24
+1) Probabilidad esperada de Carlos:
+Eₐ ≈ 0.760
+2) Diferencia del marcador: D = 3
+3) Multiplicador: M ≈ 1.277
+4) Cambio:
+ΔR ≈ 24 × 1.277 × (1 − 0.760) ≈ +7.36
+Resultado aproximado: Carlos 1,307 ELO; Miguel 1,093 ELO.
+9. Ejemplo: sorpresa
+Carlos: 1,300 ELOMiguel: 1,100 ELOResultado: Miguel gana 3–0K: 24
+Miguel tenía una probabilidad esperada de victoria de aproximadamente 24%.
+ΔR ≈ 24 × 1.277 × (1 − 0.240) ≈ +23.3
+Resultado aproximado: Miguel 1,123 ELO; Carlos 1,277 ELO.
+La lógica es importante: derrotar a un rival mucho mejor valorado produce una ganancia considerablemente mayor que vencer a un rival contra el que ya se era favorito.
+10. Reglas operativas
+Solo se utiliza un ELO global por jugador.
+El rating se actualiza después de cada match oficial.
+No se actualiza el ELO por cada battle individual dentro del mismo match.
+El marcador interno sirve únicamente para el multiplicador de margen, cuando exista.
+Si un jugador abandona después de comenzar el match, se registra una victoria para el oponente y una derrota para el jugador que abandona.
+En un abandono no se recomienda utilizar el marcador parcial como margen de victoria; usar M = 1.00.
+No se recomienda reiniciar el ELO al comenzar una nueva temporada.
+El ELO histórico puede mantenerse como rating global permanente.
+11. Qué representa el ELO
+El ELO no representa directamente el número de victorias ni el porcentaje de victorias. Representa una estimación de la fuerza relativa del jugador dentro del conjunto de participantes de la liga.
+Métrica
+Qué responde
+ELO
+¿Qué tan fuerte es el jugador respecto a los demás?
+Victorias
+¿Cuántos matches ha ganado?
+Win Rate
+¿Qué porcentaje de sus matches gana?
+Head-to-Head
+¿Cómo le va específicamente contra otro jugador?
+12. Fundamentación del modelo
+La fórmula base ΔR = K(S − E) es la estructura clásica de actualización Elo. La función logística utilizada para E también es la formulación estándar del sistema Elo.
+El ajuste de margen utilizado en este reglamento es una adaptación específica para la liga. La idea de incorporar margen de victoria y aplicar rendimientos decrecientes está documentada en sistemas Elo deportivos como los desarrollados por FiveThirtyEight; la presente fórmula es deliberadamente más simple para que pueda implementarse y explicarse fácilmente en una liga de Beyblade.
+Fuentes de referencia: Elo clásico y formulación de rating; FiveThirtyEight, metodología de Elo con margen de victoria.

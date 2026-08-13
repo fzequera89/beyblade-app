@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, Alert } from 'react-native';
+import { Text, TextInput, Pressable, StyleSheet, Alert } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
+import Screen from '../components/Screen';
 
 export default function CreateLeagueScreen({ navigation }: any) {
   const { playerId } = useAuth();
@@ -29,7 +30,7 @@ export default function CreateLeagueScreen({ navigation }: any) {
   }
 
   return (
-    <View style={styles.container}>
+    <Screen style={styles.container}>
       <Text style={styles.title}>Nueva liga</Text>
       <TextInput
         style={styles.input}
@@ -51,7 +52,7 @@ export default function CreateLeagueScreen({ navigation }: any) {
       <Pressable onPress={() => navigation.goBack()}>
         <Text style={styles.link}>Cancelar</Text>
       </Pressable>
-    </View>
+    </Screen>
   );
 }
 

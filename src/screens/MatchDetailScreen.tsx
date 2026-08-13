@@ -1,8 +1,9 @@
 import { useCallback, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Alert, ScrollView } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
+import Screen from '../components/Screen';
 
 type Match = {
   id: string;
@@ -134,14 +135,15 @@ export default function MatchDetailScreen({ route, navigation }: any) {
 
   if (loading || !match) {
     return (
-      <View style={styles.container}>
+      <Screen style={styles.container}>
         <Text>Cargando…</Text>
-      </View>
+      </Screen>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <Screen>
+    <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.vsRow}>
         <Text style={styles.playerName}>{match.player_a?.display_name}</Text>
         <Text style={styles.vs}>vs</Text>
@@ -240,12 +242,13 @@ export default function MatchDetailScreen({ route, navigation }: any) {
       <Pressable style={styles.back} onPress={() => navigation.goBack()}>
         <Text style={styles.backText}>‹ Volver al bracket</Text>
       </Pressable>
-    </View>
+    </ScrollView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: '#fff' },
+  container: { flexGrow: 1, padding: 20, backgroundColor: '#fff' },
   vsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 20 },
   playerName: { fontSize: 18, fontWeight: '700' },
   vs: { color: '#6b6b64' },

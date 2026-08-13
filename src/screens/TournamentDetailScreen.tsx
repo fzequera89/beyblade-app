@@ -4,6 +4,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { generateRound1Bracket } from '../lib/bracket';
+import Screen from '../components/Screen';
 
 type Registration = {
   player_id: string;
@@ -103,58 +104,62 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>{name}</Text>
-      <Text style={styles.meta}>
-        {registrations.length} registrado{registrations.length === 1 ? '' : 's'} · {checkedInCount} con check-in
-      </Text>
-
-      <View style={styles.actionsRow}>
-        {!myRegistration ? (
-          <Pressable style={styles.button} onPress={register}>
-            <Text style={styles.buttonText}>Registrarme</Text>
-          </Pressable>
-        ) : myRegistration.checked_in_at ? (
-          <Text style={styles.checkedIn}>✓ Check-in hecho</Text>
-        ) : (
-          <Pressable style={styles.button} onPress={checkIn}>
-            <Text style={styles.buttonText}>Hacer check-in</Text>
-          </Pressable>
-        )}
-      </View>
-
-      {isOrganizer && (
-        hasBracket ? (
-          <Pressable
-            style={[styles.button, styles.secondaryButton]}
-            onPress={() => navigation.navigate('Bracket', { tournamentId, leagueId, isOrganizer })}
-          >
-            <Text style={styles.buttonText}>Ver bracket</Text>
-          </Pressable>
-        ) : (
-          <Pressable
-            style={[styles.button, styles.secondaryButton]}
-            onPress={generateBracket}
-            disabled={busy || checkedInCount < 2}
-          >
-            <Text style={styles.buttonText}>Generar bracket ({checkedInCount} con check-in)</Text>
-          </Pressable>
-        )
-      )}
-      {hasBracket && !isOrganizer && (
-        <Pressable
-          style={[styles.button, styles.secondaryButton]}
-          onPress={() => navigation.navigate('Bracket', { tournamentId, leagueId, isOrganizer })}
-        >
-          <Text style={styles.buttonText}>Ver bracket</Text>
-        </Pressable>
-      )}
-
-      <Text style={styles.sectionTitle}>Jugadores{isOrganizer ? ' (toca para check-in)' : ''}</Text>
+    <Screen style={styles.container}>
       <FlatList
+        style={{ flex: 1 }}
         data={registrations}
         keyExtractor={(r) => r.player_id}
-        contentContainerStyle={{ gap: 6 }}
+        contentContainerStyle={{ gap: 6, paddingBottom: 24 }}
+        ListHeaderComponent={
+          <View style={{ marginBottom: 12 }}>
+            <Text style={styles.title}>{name}</Text>
+            <Text style={styles.meta}>
+              {registrations.length} registrado{registrations.length === 1 ? '' : 's'} · {checkedInCount} con check-in
+            </Text>
+
+            <View style={styles.actionsRow}>
+              {!myRegistration ? (
+                <Pressable style={styles.button} onPress={register}>
+                  <Text style={styles.buttonText}>Registrarme</Text>
+                </Pressable>
+              ) : myRegistration.checked_in_at ? (
+                <Text style={styles.checkedIn}>✓ Check-in hecho</Text>
+              ) : (
+                <Pressable style={styles.button} onPress={checkIn}>
+                  <Text style={styles.buttonText}>Hacer check-in</Text>
+                </Pressable>
+              )}
+            </View>
+
+            {isOrganizer &&
+              (hasBracket ? (
+                <Pressable
+                  style={[styles.button, styles.secondaryButton]}
+                  onPress={() => navigation.navigate('Bracket', { tournamentId, leagueId, isOrganizer })}
+                >
+                  <Text style={styles.buttonText}>Ver bracket</Text>
+                </Pressable>
+              ) : (
+                <Pressable
+                  style={[styles.button, styles.secondaryButton]}
+                  onPress={generateBracket}
+                  disabled={busy || checkedInCount < 2}
+                >
+                  <Text style={styles.buttonText}>Generar bracket ({checkedInCount} con check-in)</Text>
+                </Pressable>
+              ))}
+            {hasBracket && !isOrganizer && (
+              <Pressable
+                style={[styles.button, styles.secondaryButton]}
+                onPress={() => navigation.navigate('Bracket', { tournamentId, leagueId, isOrganizer })}
+              >
+                <Text style={styles.buttonText}>Ver bracket</Text>
+              </Pressable>
+            )}
+
+            <Text style={styles.sectionTitle}>Jugadores{isOrganizer ? ' (toca para check-in)' : ''}</Text>
+          </View>
+        }
         renderItem={({ item }) => {
           const row = (
             <View style={styles.playerRow}>
@@ -169,12 +174,13 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
           );
         }}
         ListEmptyComponent={!loading ? <Text style={styles.empty}>Nadie registrado todavía.</Text> : null}
+        ListFooterComponent={
+          <Pressable style={styles.back} onPress={() => navigation.goBack()}>
+            <Text style={styles.backText}>‹ Volver a torneos</Text>
+          </Pressable>
+        }
       />
-
-      <Pressable style={styles.back} onPress={() => navigation.goBack()}>
-        <Text style={styles.backText}>‹ Volver a torneos</Text>
-      </Pressable>
-    </View>
+    </Screen>
   );
 }
 

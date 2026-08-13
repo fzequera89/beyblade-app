@@ -3,6 +3,7 @@ import { View, Text, FlatList, Pressable, StyleSheet, Alert } from 'react-native
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { generateNextRound } from '../lib/bracket';
+import Screen from '../components/Screen';
 
 type MatchRow = {
   id: string;
@@ -71,14 +72,15 @@ export default function BracketScreen({ route, navigation }: any) {
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Bracket</Text>
+    <Screen style={styles.container}>
       <FlatList
+        style={{ flex: 1 }}
         data={rounds}
         keyExtractor={(r) => String(r)}
         refreshing={loading}
         onRefresh={load}
-        contentContainerStyle={{ gap: 16 }}
+        contentContainerStyle={{ gap: 16, paddingBottom: 24 }}
+        ListHeaderComponent={<Text style={styles.title}>Bracket</Text>}
         renderItem={({ item: round }) => (
           <View>
             <Text style={styles.roundTitle}>Ronda {round}</Text>
@@ -111,18 +113,20 @@ export default function BracketScreen({ route, navigation }: any) {
           </View>
         )}
         ListEmptyComponent={!loading ? <Text style={styles.empty}>El bracket aún no tiene enfrentamientos.</Text> : null}
+        ListFooterComponent={
+          <View>
+            {isOrganizer && lastRoundDone && (
+              <Pressable style={styles.button} onPress={advance} disabled={busy}>
+                <Text style={styles.buttonText}>Avanzar ronda</Text>
+              </Pressable>
+            )}
+            <Pressable style={styles.back} onPress={() => navigation.goBack()}>
+              <Text style={styles.backText}>‹ Volver</Text>
+            </Pressable>
+          </View>
+        }
       />
-
-      {isOrganizer && lastRoundDone && (
-        <Pressable style={styles.button} onPress={advance} disabled={busy}>
-          <Text style={styles.buttonText}>Avanzar ronda</Text>
-        </Pressable>
-      )}
-
-      <Pressable style={styles.back} onPress={() => navigation.goBack()}>
-        <Text style={styles.backText}>‹ Volver</Text>
-      </Pressable>
-    </View>
+    </Screen>
   );
 }
 

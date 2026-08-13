@@ -3,6 +3,7 @@ import { View, Text, FlatList, Pressable, StyleSheet, Alert } from 'react-native
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
+import Screen from '../components/Screen';
 
 type LeagueRow = {
   id: string;
@@ -51,7 +52,7 @@ export default function LeaguesScreen({ navigation }: any) {
   }
 
   return (
-    <View style={styles.container}>
+    <Screen style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Ligas</Text>
         {isAdmin && (
@@ -92,7 +93,7 @@ export default function LeaguesScreen({ navigation }: any) {
       <Pressable style={styles.back} onPress={() => navigation.navigate('Profile')}>
         <Text style={styles.backText}>‹ Volver a mi perfil</Text>
       </Pressable>
-    </View>
+    </Screen>
   );
 }
 

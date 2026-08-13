@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, Alert } from 'react-native';
+import { Text, TextInput, Pressable, StyleSheet, Alert } from 'react-native';
 import { supabase } from '../lib/supabase';
+import Screen from '../components/Screen';
 
 export default function SignUpScreen({ navigation }: any) {
   const [email, setEmail] = useState('');
@@ -22,7 +23,7 @@ export default function SignUpScreen({ navigation }: any) {
   }
 
   return (
-    <View style={styles.container}>
+    <Screen style={styles.container}>
       <Text style={styles.title}>Crear cuenta</Text>
       <TextInput
         style={styles.input}
@@ -47,7 +48,7 @@ export default function SignUpScreen({ navigation }: any) {
       <Pressable onPress={() => navigation.navigate('SignIn')}>
         <Text style={styles.link}>Ya tengo cuenta</Text>
       </Pressable>
-    </View>
+    </Screen>
   );
 }
 

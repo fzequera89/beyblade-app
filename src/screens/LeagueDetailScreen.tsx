@@ -3,6 +3,7 @@ import { View, Text, TextInput, FlatList, Pressable, StyleSheet, Alert } from 'r
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
+import Screen from '../components/Screen';
 
 type Season = { id: string; name: string; start_date: string | null; end_date: string | null };
 type League = { id: string; name: string; description: string | null };
@@ -75,82 +76,93 @@ export default function LeagueDetailScreen({ route, navigation }: any) {
 
   if (loading || !league) {
     return (
-      <View style={styles.container}>
+      <Screen style={styles.container}>
         <Text>Cargando…</Text>
-      </View>
+      </Screen>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>{league.name}</Text>
-      {league.description ? <Text style={styles.sub}>{league.description}</Text> : null}
-      <Text style={styles.meta}>{memberCount} miembro{memberCount === 1 ? '' : 's'}</Text>
-
-      {!role ? (
-        <Pressable style={styles.button} onPress={join}>
-          <Text style={styles.buttonText}>Unirme a esta liga</Text>
-        </Pressable>
-      ) : (
-        <Text style={styles.roleTag}>{role === 'organizer' ? 'Eres moderador de esta liga' : 'Eres miembro'}</Text>
-      )}
-
-      {role && (
-        <Pressable
-          style={styles.button}
-          onPress={() => navigation.navigate('Tournaments', { leagueId, isOrganizer: role === 'organizer' })}
-        >
-          <Text style={styles.buttonText}>Torneos</Text>
-        </Pressable>
-      )}
-
-      {role && (
-        <Pressable
-          style={[styles.button, styles.secondaryButton]}
-          onPress={() => navigation.navigate('LeagueStandings', { leagueId })}
-        >
-          <Text style={styles.buttonText}>Ranking / Reporte</Text>
-        </Pressable>
-      )}
-
-      <Text style={styles.sectionTitle}>Temporadas</Text>
+    <Screen style={styles.container}>
       <FlatList
+        style={{ flex: 1 }}
         data={seasons}
         keyExtractor={(s) => s.id}
-        contentContainerStyle={{ gap: 8 }}
+        contentContainerStyle={{ gap: 8, paddingBottom: 24 }}
+        ListHeaderComponent={
+          <View style={{ marginBottom: 16 }}>
+            <Text style={styles.title}>{league.name}</Text>
+            {league.description ? <Text style={styles.sub}>{league.description}</Text> : null}
+            <Text style={styles.meta}>
+              {memberCount} miembro{memberCount === 1 ? '' : 's'}
+            </Text>
+
+            {!role ? (
+              <Pressable style={styles.button} onPress={join}>
+                <Text style={styles.buttonText}>Unirme a esta liga</Text>
+              </Pressable>
+            ) : (
+              <Text style={styles.roleTag}>
+                {role === 'organizer' ? 'Eres moderador de esta liga' : 'Eres miembro'}
+              </Text>
+            )}
+
+            {role && (
+              <Pressable
+                style={styles.button}
+                onPress={() => navigation.navigate('Tournaments', { leagueId, isOrganizer: role === 'organizer' })}
+              >
+                <Text style={styles.buttonText}>Torneos</Text>
+              </Pressable>
+            )}
+
+            {role && (
+              <Pressable
+                style={[styles.button, styles.secondaryButton]}
+                onPress={() => navigation.navigate('LeagueStandings', { leagueId })}
+              >
+                <Text style={styles.buttonText}>Ranking / Reporte</Text>
+              </Pressable>
+            )}
+
+            <Text style={styles.sectionTitle}>Temporadas</Text>
+          </View>
+        }
         renderItem={({ item }) => (
           <View style={styles.seasonCard}>
             <Text style={styles.seasonName}>{item.name}</Text>
           </View>
         )}
         ListEmptyComponent={<Text style={styles.empty}>Sin temporadas todavía.</Text>}
-      />
+        ListFooterComponent={
+          <View>
+            {role === 'organizer' &&
+              (showNewSeason ? (
+                <View style={styles.newSeasonRow}>
+                  <TextInput
+                    style={[styles.input, { flex: 1 }]}
+                    placeholder="Nombre de la temporada"
+                    placeholderTextColor="#8a8a8a"
+                    value={newSeasonName}
+                    onChangeText={setNewSeasonName}
+                  />
+                  <Pressable style={styles.button} onPress={createSeason}>
+                    <Text style={styles.buttonText}>Crear</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <Pressable style={styles.linkButton} onPress={() => setShowNewSeason(true)}>
+                  <Text style={styles.link}>+ Nueva temporada</Text>
+                </Pressable>
+              ))}
 
-      {role === 'organizer' && (
-        showNewSeason ? (
-          <View style={styles.newSeasonRow}>
-            <TextInput
-              style={[styles.input, { flex: 1 }]}
-              placeholder="Nombre de la temporada"
-              placeholderTextColor="#8a8a8a"
-              value={newSeasonName}
-              onChangeText={setNewSeasonName}
-            />
-            <Pressable style={styles.button} onPress={createSeason}>
-              <Text style={styles.buttonText}>Crear</Text>
+            <Pressable style={styles.back} onPress={() => navigation.navigate('Leagues')}>
+              <Text style={styles.backText}>‹ Volver a ligas</Text>
             </Pressable>
           </View>
-        ) : (
-          <Pressable style={styles.linkButton} onPress={() => setShowNewSeason(true)}>
-            <Text style={styles.link}>+ Nueva temporada</Text>
-          </Pressable>
-        )
-      )}
-
-      <Pressable style={styles.back} onPress={() => navigation.navigate('Leagues')}>
-        <Text style={styles.backText}>‹ Volver a ligas</Text>
-      </Pressable>
-    </View>
+        }
+      />
+    </Screen>
   );
 }
 

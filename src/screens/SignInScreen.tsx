@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, Alert } from 'react-native';
+import { Text, TextInput, Pressable, StyleSheet, Alert } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import { supabase } from '../lib/supabase';
+import Screen from '../components/Screen';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -39,7 +40,7 @@ export default function SignInScreen({ navigation }: any) {
   }
 
   return (
-    <View style={styles.container}>
+    <Screen style={styles.container}>
       <Text style={styles.title}>Beyblade League</Text>
       <TextInput
         style={styles.input}
@@ -67,7 +68,7 @@ export default function SignInScreen({ navigation }: any) {
       <Pressable onPress={() => navigation.navigate('SignUp')}>
         <Text style={styles.link}>¿No tienes cuenta? Regístrate</Text>
       </Pressable>
-    </View>
+    </Screen>
   );
 }
 

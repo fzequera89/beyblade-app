@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { View, Text, TextInput, FlatList, Pressable, StyleSheet, Alert } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
+import Screen from '../components/Screen';
 
 type Tournament = { id: string; name: string; status: string };
 
@@ -46,14 +47,15 @@ export default function TournamentsScreen({ route, navigation }: any) {
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Torneos</Text>
+    <Screen style={styles.container}>
       <FlatList
+        style={{ flex: 1 }}
         data={tournaments}
         keyExtractor={(t) => t.id}
         refreshing={loading}
         onRefresh={load}
-        contentContainerStyle={{ gap: 8 }}
+        contentContainerStyle={{ gap: 8, paddingBottom: 24 }}
+        ListHeaderComponent={<Text style={styles.title}>Torneos</Text>}
         renderItem={({ item }) => (
           <Pressable
             style={styles.card}
@@ -64,30 +66,34 @@ export default function TournamentsScreen({ route, navigation }: any) {
           </Pressable>
         )}
         ListEmptyComponent={!loading ? <Text style={styles.empty}>Sin torneos todavía.</Text> : null}
-      />
-      {isOrganizer &&
-        (showNew ? (
-          <View style={styles.newRow}>
-            <TextInput
-              style={[styles.input, { flex: 1 }]}
-              placeholder="Nombre del torneo"
-              placeholderTextColor="#8a8a8a"
-              value={name}
-              onChangeText={setName}
-            />
-            <Pressable style={styles.button} onPress={create}>
-              <Text style={styles.buttonText}>Crear</Text>
+        ListFooterComponent={
+          <View>
+            {isOrganizer &&
+              (showNew ? (
+                <View style={styles.newRow}>
+                  <TextInput
+                    style={[styles.input, { flex: 1 }]}
+                    placeholder="Nombre del torneo"
+                    placeholderTextColor="#8a8a8a"
+                    value={name}
+                    onChangeText={setName}
+                  />
+                  <Pressable style={styles.button} onPress={create}>
+                    <Text style={styles.buttonText}>Crear</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <Pressable style={styles.linkButton} onPress={() => setShowNew(true)}>
+                  <Text style={styles.link}>+ Nuevo torneo</Text>
+                </Pressable>
+              ))}
+            <Pressable style={styles.back} onPress={() => navigation.goBack()}>
+              <Text style={styles.backText}>‹ Volver a la liga</Text>
             </Pressable>
           </View>
-        ) : (
-          <Pressable style={styles.linkButton} onPress={() => setShowNew(true)}>
-            <Text style={styles.link}>+ Nuevo torneo</Text>
-          </Pressable>
-        ))}
-      <Pressable style={styles.back} onPress={() => navigation.goBack()}>
-        <Text style={styles.backText}>‹ Volver a la liga</Text>
-      </Pressable>
-    </View>
+        }
+      />
+    </Screen>
   );
 }
 

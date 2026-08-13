@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, Alert } from 'react-native';
+import { Text, TextInput, Pressable, StyleSheet, Alert } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
+import Screen from '../components/Screen';
 
 export default function CompleteProfileScreen() {
   const { session, refreshPlayer } = useAuth();
@@ -33,7 +34,7 @@ export default function CompleteProfileScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <Screen style={styles.container}>
       <Text style={styles.title}>Completa tu perfil</Text>
       <TextInput
         style={styles.input}
@@ -59,7 +60,7 @@ export default function CompleteProfileScreen() {
       <Pressable style={styles.button} onPress={save} disabled={loading}>
         <Text style={styles.buttonText}>Guardar y continuar</Text>
       </Pressable>
-    </View>
+    </Screen>
   );
 }
 

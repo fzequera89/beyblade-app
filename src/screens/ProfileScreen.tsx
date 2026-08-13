@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, Alert, ScrollView } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
+import Screen from '../components/Screen';
 
 type Player = {
   id: string;
@@ -92,13 +93,14 @@ export default function ProfileScreen({ navigation }: any) {
 
   if (loading || !player) {
     return (
-      <View style={styles.container}>
+      <Screen style={styles.container}>
         <Text>Cargando…</Text>
-      </View>
+      </Screen>
     );
   }
 
   return (
+    <Screen>
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.avatar} />
       {editing ? (
@@ -190,6 +192,7 @@ export default function ProfileScreen({ navigation }: any) {
         <Text style={styles.signOutText}>Cerrar sesión</Text>
       </Pressable>
     </ScrollView>
+    </Screen>
   );
 }
 

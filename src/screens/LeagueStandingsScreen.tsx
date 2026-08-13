@@ -3,6 +3,7 @@ import { View, Text, FlatList, Pressable, StyleSheet, Alert } from 'react-native
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
+import Screen from '../components/Screen';
 
 type Row = {
   player_id: string;
@@ -55,18 +56,24 @@ export default function LeagueStandingsScreen({ route, navigation }: any) {
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Ranking de la liga</Text>
-      <Text style={styles.meta}>
-        {rows.length} miembro{rows.length === 1 ? '' : 's'} · {tournamentCount} torneo{tournamentCount === 1 ? '' : 's'}
-        {isAdmin ? ' · toca un jugador para nombrar/quitar moderador' : ''}
-      </Text>
+    <Screen style={styles.container}>
       <FlatList
+        style={{ flex: 1 }}
         data={rows}
         keyExtractor={(r) => r.player_id}
         refreshing={loading}
         onRefresh={load}
-        contentContainerStyle={{ gap: 6 }}
+        contentContainerStyle={{ gap: 6, paddingBottom: 24 }}
+        ListHeaderComponent={
+          <View style={{ marginBottom: 16 }}>
+            <Text style={styles.title}>Ranking de la liga</Text>
+            <Text style={styles.meta}>
+              {rows.length} miembro{rows.length === 1 ? '' : 's'} · {tournamentCount} torneo
+              {tournamentCount === 1 ? '' : 's'}
+              {isAdmin ? ' · toca un jugador para nombrar/quitar moderador' : ''}
+            </Text>
+          </View>
+        }
         renderItem={({ item, index }) => (
           <View style={styles.row}>
             <Text style={styles.rank}>#{index + 1}</Text>
@@ -82,11 +89,13 @@ export default function LeagueStandingsScreen({ route, navigation }: any) {
           </View>
         )}
         ListEmptyComponent={!loading ? <Text style={styles.empty}>Sin miembros todavía.</Text> : null}
+        ListFooterComponent={
+          <Pressable style={styles.back} onPress={() => navigation.goBack()}>
+            <Text style={styles.backText}>‹ Volver a la liga</Text>
+          </Pressable>
+        }
       />
-      <Pressable style={styles.back} onPress={() => navigation.goBack()}>
-        <Text style={styles.backText}>‹ Volver a la liga</Text>
-      </Pressable>
-    </View>
+    </Screen>
   );
 }
 

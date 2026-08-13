@@ -93,6 +93,26 @@ App de gestión de liga de Beyblade: torneos, brackets, ELO real, descubrimiento
 4. `npm install`, luego `npm run web` para verificar rápido en el preview del navegador (no requiere emulador Android).
 5. Para un build real: `npx eas-cli build --platform android --profile preview --non-interactive` (requiere `eas login` ya hecho en la máquina).
 
+## Datos de demostración
+
+`supabase/seed/demo_data.sql` llena la liga para enseñarle la app al cliente: 16 jugadores, 2 ligas, 2 clubes, 3 venues, un torneo terminado con bracket de 8, otro con inscripciones abiertas, 5 eventos, ~67 matches confirmados con sus rounds, y de ahí salen solos el ranking, las estadísticas, las rivalidades y los logros.
+
+**Vive fuera de `supabase/migrations/` a propósito** — es dato, no esquema, y no debe correr en la cadena de migraciones.
+
+```sql
+-- 1. Pegar el archivo en el SQL Editor y ejecutarlo (solo crea las funciones)
+-- 2. Sembrar:
+select seed_demo_data();
+-- 3. Borrar todo antes de ir a producción:
+select remove_demo_data();
+```
+
+Notas de diseño:
+- Todo lo de demo usa UUIDs que empiezan con `dddddddd`, y el borrado toca exactamente esos ids. **No afecta cuentas ni partidas reales.**
+- Los jugadores de demo tienen `auth_user_id` nulo (el mismo caso de "registrar jugador a mano" del panel de admin), así que nadie puede iniciar sesión como ellos.
+- **No usa `confirm_match_result`**: esa función exige `auth.uid()` y un seed no tiene sesión. Replica su misma matemática de ELO, así que el rating de cada jugador cuadra con la suma de sus cambios, con `ranking_snapshots` y con `rivalries`. `award_badges` sí se reutiliza tal cual.
+- Semilla fija (`setseed(0.42)`) y limpieza previa: correrlo dos veces da el mismo resultado y no duplica nada.
+
 ## Qué falta para el 100% (QA, pulido y publicación — 11%)
 
 Es la única línea del roadmap que queda, y buena parte **no la puede cerrar un agente**: necesita builds reales, cuentas de pago y decisiones del cliente.

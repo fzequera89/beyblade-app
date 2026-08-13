@@ -2,6 +2,11 @@
 
 > Última actualización: 2026-08-13. Este archivo es la fuente de verdad para retomar el proyecto desde cualquier máquina/sesión — está versionado en git, a diferencia de las notas de memoria de Claude Code (que solo viven localmente en la PC donde se desarrolló).
 
+**Este documento cubre el ESTADO del proyecto.** Para lo demás:
+> - [`README.md`](README.md) — qué es, cómo correrlo, arquitectura y modelo de seguridad
+> - [`docs/database.md`](docs/database.md) — esquema, políticas RLS y funciones, consolidado
+> - [`docs/elo-rules.md`](docs/elo-rules.md) — fórmulas de ELO y reglas de implementación
+
 ## Resumen
 
 App de gestión de liga de Beyblade: torneos, brackets, ELO real, descubrimiento físico de jugadores/venues. React Native + Expo, backend Supabase.
@@ -99,6 +104,8 @@ App de gestión de liga de Beyblade: torneos, brackets, ELO real, descubrimiento
 
 **Vive fuera de `supabase/migrations/` a propósito** — es dato, no esquema, y no debe correr en la cadena de migraciones.
 
+**✅ Ya sembrado en Supabase (2026-08-13).** La liga está llena y la app se puede enseñar tal cual.
+
 ```sql
 -- 1. Pegar el archivo en el SQL Editor y ejecutarlo (solo crea las funciones)
 -- 2. Sembrar:
@@ -106,6 +113,8 @@ select seed_demo_data();
 -- 3. Borrar todo antes de ir a producción:
 select remove_demo_data();
 ```
+
+> ⚠️ **Acordarse de correr `remove_demo_data()` antes de que la liga sea real.** Si no, los 16 jugadores falsos van a aparecer en el ranking oficial junto a los de verdad.
 
 Notas de diseño:
 - Todo lo de demo usa UUIDs que empiezan con `dddddddd`, y el borrado toca exactamente esos ids. **No afecta cuentas ni partidas reales.**
@@ -118,7 +127,7 @@ Notas de diseño:
 Es la única línea del roadmap que queda, y buena parte **no la puede cerrar un agente**: necesita builds reales, cuentas de pago y decisiones del cliente.
 
 **QA con datos reales (lo que sigue de inmediato):**
-- Ninguna fase se ha probado con una sesión iniciada y datos de verdad. Todo lo verificado hasta hoy es: compila, las pantallas montan y renderizan sus estados vacíos, y las funciones de base responden. El flujo completo (crear combo → reportar round a round → confirmar con la segunda cuenta → ver moverse ELO, stats, rivalidad y logros) está **sin probar**.
+- Ninguna fase se ha probado **desde la app con una sesión iniciada**. Lo verificado hasta hoy es: typecheck limpio, el bundle compila, las pantallas montan y renderizan, las funciones de base responden, y los datos de demo ya están sembrados. El flujo completo hecho a mano desde la UI (crear combo → reportar round a round → confirmar con la segunda cuenta → ver moverse ELO, stats, rivalidad y logros) está **sin probar**.
 - **Se necesitan dos cuentas** para cerrar el ciclo: `confirm_match_result` rechaza a propósito que quien reporta confirme su propio resultado.
 - Probar el QR de check-in (2.2) y la cámara, que solo funcionan en build real, nunca en el preview web.
 

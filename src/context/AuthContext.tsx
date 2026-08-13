@@ -6,6 +6,7 @@ type AuthContextValue = {
   session: Session | null;
   hasPlayer: boolean | null;
   playerId: string | null;
+  isAdmin: boolean;
   loading: boolean;
   refreshPlayer: () => Promise<void>;
 };
@@ -16,6 +17,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [hasPlayer, setHasPlayer] = useState<boolean | null>(null);
   const [playerId, setPlayerId] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
   async function refreshPlayer() {
@@ -24,15 +26,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!current) {
       setHasPlayer(null);
       setPlayerId(null);
+      setIsAdmin(false);
       return;
     }
     const { data: player } = await supabase
       .from('players')
-      .select('id')
+      .select('id, is_admin')
       .eq('auth_user_id', current.user.id)
       .maybeSingle();
     setHasPlayer(!!player);
     setPlayerId(player?.id ?? null);
+    setIsAdmin(!!player?.is_admin);
   }
 
   useEffect(() => {
@@ -52,11 +56,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } else {
       setHasPlayer(null);
       setPlayerId(null);
+      setIsAdmin(false);
     }
   }, [session]);
 
   return (
-    <AuthContext.Provider value={{ session, hasPlayer, playerId, loading, refreshPlayer }}>
+    <AuthContext.Provider value={{ session, hasPlayer, playerId, isAdmin, loading, refreshPlayer }}>
       {children}
     </AuthContext.Provider>
   );

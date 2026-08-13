@@ -12,7 +12,7 @@ type LeagueRow = {
 };
 
 export default function LeaguesScreen({ navigation }: any) {
-  const { playerId } = useAuth();
+  const { playerId, isAdmin } = useAuth();
   const [leagues, setLeagues] = useState<LeagueRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -54,9 +54,11 @@ export default function LeaguesScreen({ navigation }: any) {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Ligas</Text>
-        <Pressable style={styles.createButton} onPress={() => navigation.navigate('CreateLeague')}>
-          <Text style={styles.createButtonText}>+ Crear liga</Text>
-        </Pressable>
+        {isAdmin && (
+          <Pressable style={styles.createButton} onPress={() => navigation.navigate('CreateLeague')}>
+            <Text style={styles.createButtonText}>+ Crear liga</Text>
+          </Pressable>
+        )}
       </View>
       <FlatList
         data={leagues}
@@ -71,7 +73,7 @@ export default function LeaguesScreen({ navigation }: any) {
               {item.description ? <Text style={styles.cardSub}>{item.description}</Text> : null}
             </View>
             {item.role ? (
-              <Text style={styles.badge}>{item.role === 'organizer' ? 'Organizador' : 'Miembro'}</Text>
+              <Text style={styles.badge}>{item.role === 'organizer' ? 'Moderador' : 'Miembro'}</Text>
             ) : (
               <Pressable style={styles.joinButton} onPress={() => join(item.id)}>
                 <Text style={styles.joinButtonText}>Unirme</Text>
@@ -79,7 +81,13 @@ export default function LeaguesScreen({ navigation }: any) {
             )}
           </Pressable>
         )}
-        ListEmptyComponent={!loading ? <Text style={styles.empty}>Todavía no hay ligas. Crea la primera.</Text> : null}
+        ListEmptyComponent={
+          !loading ? (
+            <Text style={styles.empty}>
+              {isAdmin ? 'Todavía no hay ligas. Crea la primera.' : 'Todavía no hay ligas activas.'}
+            </Text>
+          ) : null
+        }
       />
       <Pressable style={styles.back} onPress={() => navigation.navigate('Profile')}>
         <Text style={styles.backText}>‹ Volver a mi perfil</Text>

@@ -92,7 +92,7 @@ export default function LeagueDetailScreen({ route, navigation }: any) {
           <Text style={styles.buttonText}>Unirme a esta liga</Text>
         </Pressable>
       ) : (
-        <Text style={styles.roleTag}>{role === 'organizer' ? 'Eres organizador' : 'Eres miembro'}</Text>
+        <Text style={styles.roleTag}>{role === 'organizer' ? 'Eres moderador de esta liga' : 'Eres miembro'}</Text>
       )}
 
       {role && (

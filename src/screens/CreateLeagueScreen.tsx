@@ -31,10 +31,17 @@ export default function CreateLeagueScreen({ navigation }: any) {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Nueva liga</Text>
-      <TextInput style={styles.input} placeholder="Nombre de la liga" value={name} onChangeText={setName} />
+      <TextInput
+        style={styles.input}
+        placeholder="Nombre de la liga"
+        placeholderTextColor="#8a8a8a"
+        value={name}
+        onChangeText={setName}
+      />
       <TextInput
         style={styles.input}
         placeholder="Descripción (opcional)"
+        placeholderTextColor="#8a8a8a"
         value={description}
         onChangeText={setDescription}
       />

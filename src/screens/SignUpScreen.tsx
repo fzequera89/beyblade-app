@@ -27,6 +27,7 @@ export default function SignUpScreen({ navigation }: any) {
       <TextInput
         style={styles.input}
         placeholder="Correo"
+        placeholderTextColor="#8a8a8a"
         autoCapitalize="none"
         keyboardType="email-address"
         value={email}
@@ -35,6 +36,7 @@ export default function SignUpScreen({ navigation }: any) {
       <TextInput
         style={styles.input}
         placeholder="Contraseña"
+        placeholderTextColor="#8a8a8a"
         secureTextEntry
         value={password}
         onChangeText={setPassword}

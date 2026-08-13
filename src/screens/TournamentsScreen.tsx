@@ -68,7 +68,13 @@ export default function TournamentsScreen({ route, navigation }: any) {
       {isOrganizer &&
         (showNew ? (
           <View style={styles.newRow}>
-            <TextInput style={[styles.input, { flex: 1 }]} placeholder="Nombre del torneo" value={name} onChangeText={setName} />
+            <TextInput
+              style={[styles.input, { flex: 1 }]}
+              placeholder="Nombre del torneo"
+              placeholderTextColor="#8a8a8a"
+              value={name}
+              onChangeText={setName}
+            />
             <Pressable style={styles.button} onPress={create}>
               <Text style={styles.buttonText}>Crear</Text>
             </Pressable>

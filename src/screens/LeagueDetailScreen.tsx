@@ -132,6 +132,7 @@ export default function LeagueDetailScreen({ route, navigation }: any) {
             <TextInput
               style={[styles.input, { flex: 1 }]}
               placeholder="Nombre de la temporada"
+              placeholderTextColor="#8a8a8a"
               value={newSeasonName}
               onChangeText={setNewSeasonName}
             />

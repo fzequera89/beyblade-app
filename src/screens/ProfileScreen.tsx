@@ -108,24 +108,28 @@ export default function ProfileScreen({ navigation }: any) {
             value={form.display_name}
             onChangeText={(v) => setForm({ ...form, display_name: v })}
             placeholder="Nombre"
+            placeholderTextColor="#8a8a8a"
           />
           <TextInput
             style={styles.input}
             value={form.city}
             onChangeText={(v) => setForm({ ...form, city: v })}
             placeholder="Ciudad"
+            placeholderTextColor="#8a8a8a"
           />
           <TextInput
             style={styles.input}
             value={form.main_beyblade}
             onChangeText={(v) => setForm({ ...form, main_beyblade: v })}
             placeholder="Main Beyblade"
+            placeholderTextColor="#8a8a8a"
           />
           <TextInput
             style={styles.input}
             value={form.play_style}
             onChangeText={(v) => setForm({ ...form, play_style: v })}
             placeholder="Estilo de juego"
+            placeholderTextColor="#8a8a8a"
           />
           <Pressable style={styles.button} onPress={save}>
             <Text style={styles.buttonText}>Guardar</Text>

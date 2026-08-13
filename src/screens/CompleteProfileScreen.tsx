@@ -38,13 +38,21 @@ export default function CompleteProfileScreen() {
       <TextInput
         style={styles.input}
         placeholder="Nombre de jugador"
+        placeholderTextColor="#8a8a8a"
         value={displayName}
         onChangeText={setDisplayName}
       />
-      <TextInput style={styles.input} placeholder="Ciudad (opcional)" value={city} onChangeText={setCity} />
+      <TextInput
+        style={styles.input}
+        placeholder="Ciudad (opcional)"
+        placeholderTextColor="#8a8a8a"
+        value={city}
+        onChangeText={setCity}
+      />
       <TextInput
         style={styles.input}
         placeholder="Main Beyblade (opcional)"
+        placeholderTextColor="#8a8a8a"
         value={mainBeyblade}
         onChangeText={setMainBeyblade}
       />

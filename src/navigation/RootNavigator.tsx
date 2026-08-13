@@ -21,6 +21,7 @@ import CreateVenueScreen from '../screens/CreateVenueScreen';
 import VenueDetailScreen from '../screens/VenueDetailScreen';
 import ScanCheckInScreen from '../screens/ScanCheckInScreen';
 import NearMeScreen from '../screens/NearMeScreen';
+import ChallengesScreen from '../screens/ChallengesScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -60,6 +61,7 @@ export default function RootNavigator() {
             <Stack.Screen name="VenueDetail" component={VenueDetailScreen} />
             <Stack.Screen name="ScanCheckIn" component={ScanCheckInScreen} />
             <Stack.Screen name="NearMe" component={NearMeScreen} />
+            <Stack.Screen name="Challenges" component={ChallengesScreen} />
           </>
         )}
       </Stack.Navigator>

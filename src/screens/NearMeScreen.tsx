@@ -96,6 +96,17 @@ export default function NearMeScreen({ navigation }: any) {
     load();
   }
 
+  async function challenge(targetPlayerId: string, targetName: string) {
+    const { error } = await supabase
+      .from('challenges')
+      .insert({ challenger_id: playerId, challenged_id: targetPlayerId });
+    if (error) {
+      Alert.alert('Error', error.message);
+      return;
+    }
+    Alert.alert('Reto enviado', `Le mandaste un reto a ${targetName}.`);
+  }
+
   const activeUntil = myExpiresAt ? new Date(myExpiresAt) : null;
 
   return (
@@ -109,7 +120,12 @@ export default function NearMeScreen({ navigation }: any) {
         contentContainerStyle={{ gap: 8, paddingBottom: 24 }}
         ListHeaderComponent={
           <View style={{ marginBottom: 16 }}>
-            <Text style={styles.title}>Bladers Near Me</Text>
+            <View style={styles.headerRow}>
+              <Text style={styles.title}>Bladers Near Me</Text>
+              <Pressable onPress={() => navigation.navigate('Challenges')}>
+                <Text style={styles.link}>Mis retos ›</Text>
+              </Pressable>
+            </View>
             <Text style={styles.sub}>{myCity ? `Ciudad: ${myCity}` : 'Define tu ciudad en tu perfil para filtrar mejor.'}</Text>
 
             {activeUntil ? (
@@ -142,6 +158,12 @@ export default function NearMeScreen({ navigation }: any) {
               <Text style={styles.playerSub}>{item.players?.city ?? 'Sin ciudad'}</Text>
             </View>
             <Text style={styles.playerElo}>{item.players?.elo_rating ?? 1000}</Text>
+            <Pressable
+              style={styles.challengeButton}
+              onPress={() => item.players && challenge(item.players.id, item.players.display_name)}
+            >
+              <Text style={styles.challengeButtonText}>Retar</Text>
+            </Pressable>
           </View>
         )}
         ListEmptyComponent={
@@ -159,7 +181,9 @@ export default function NearMeScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 20, backgroundColor: '#fff' },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   title: { fontSize: 22, fontWeight: '700' },
+  link: { color: '#2f5ad6', fontWeight: '600' },
   sub: { color: '#6b6b64', fontSize: 12, marginTop: 4, marginBottom: 12 },
   activeBox: {
     backgroundColor: '#e8edfd',
@@ -185,7 +209,9 @@ const styles = StyleSheet.create({
   },
   playerName: { fontSize: 14, fontWeight: '600' },
   playerSub: { fontSize: 11, color: '#6b6b64', marginTop: 2 },
-  playerElo: { fontWeight: '700', color: '#2f5ad6' },
+  playerElo: { fontWeight: '700', color: '#2f5ad6', marginRight: 8 },
+  challengeButton: { backgroundColor: '#2f5ad6', borderRadius: 6, paddingVertical: 6, paddingHorizontal: 10 },
+  challengeButtonText: { color: '#fff', fontSize: 12, fontWeight: '600' },
   empty: { textAlign: 'center', color: '#6b6b64', marginTop: 20 },
   back: { marginTop: 16 },
   backText: { color: '#6b6b64' },

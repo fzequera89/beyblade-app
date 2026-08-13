@@ -29,7 +29,7 @@ type HistoryMatch = {
 };
 
 export default function ProfileScreen({ navigation }: any) {
-  const { session } = useAuth();
+  const { session, isAdmin } = useAuth();
   const [player, setPlayer] = useState<Player | null>(null);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ display_name: '', city: '', main_beyblade: '', play_style: '' });
@@ -161,6 +161,11 @@ export default function ProfileScreen({ navigation }: any) {
           <Pressable style={[styles.button, styles.secondaryButton]} onPress={() => navigation.navigate('Leagues')}>
             <Text style={styles.buttonText}>Mis ligas</Text>
           </Pressable>
+          {isAdmin && (
+            <Pressable style={[styles.button, styles.secondaryButton]} onPress={() => navigation.navigate('Admin')}>
+              <Text style={styles.buttonText}>Panel de administrador</Text>
+            </Pressable>
+          )}
 
           {history.length > 0 && (
             <View style={{ width: '100%', marginTop: 20 }}>

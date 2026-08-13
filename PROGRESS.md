@@ -78,8 +78,7 @@ App de gestión de liga de Beyblade: torneos, brackets, ELO real, descubrimiento
 
 ## Pendientes conocidos
 
-- **✅ Migraciones 0014 y 0015 ya corridas** (2026-08-13, verificado: las funciones `report_match_result` y `award_badges` responden, y las tablas de Fase 3 rechazan lectura anónima).
-- **⚠️ Migraciones 0016, 0017 y 0018 SIN CORRER en Supabase** (al 2026-08-13). Hasta que se corran en el SQL Editor, en ese orden, toda la Fase 4 se ve vacía: las pantallas de eventos, follows, feed y clubes cargan pero las tablas siguen cerradas, así que **no se puede crear ningún evento, seguir a nadie ni fundar un club**. La Fase 5 (passport y posición por liga) sí funciona sin ellas, salvo las secciones de clubes.
+- **✅ Las 18 migraciones ya corrieron en Supabase** (2026-08-13). Verificado desde fuera: `report_match_result` y `award_badges` responden, las columnas nuevas de `events` y `clubs` existen, y todas las tablas rechazan lectura anónima. El esquema está completo y al día con el repo.
 - **Build de EAS pendiente de generar** desde la sub-etapa 1.1 (fix de placeholders) — el usuario pidió explícitamente esperar y acumular cambios de varias fases antes de generar el próximo build real, para no gastar builds en cada cambio chico.
 - Configurar el cliente OAuth de Google en Supabase (para que el botón "Continuar con Google" funcione en producción).
 - Cambiar `is_admin` del correo de prueba de Farid al correo real del cliente cuando se decida.
@@ -90,7 +89,7 @@ App de gestión de liga de Beyblade: torneos, brackets, ELO real, descubrimiento
 
 1. `git clone` / `git pull` del repo.
 2. Copiar `.env.example` a `.env` y llenar `EXPO_PUBLIC_SUPABASE_URL` y `EXPO_PUBLIC_SUPABASE_ANON_KEY` (Supabase → Settings → API del proyecto "CML Beyblade").
-3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-13 faltan 0016, 0017 y 0018.**
+3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-13 las 18 ya están corridas** — si se agrega una nueva, actualizar esta línea.
 4. `npm install`, luego `npm run web` para verificar rápido en el preview del navegador (no requiere emulador Android).
 5. Para un build real: `npx eas-cli build --platform android --profile preview --non-interactive` (requiere `eas login` ya hecho en la máquina).
 

@@ -343,8 +343,12 @@ begin
   -- así que aquí solo se agregan los demás.
   for v_i in 1..16 loop
     v_pid := ('dddddddd-0000-4000-8000-0000000000' || lpad(v_i::text, 2, '0'))::uuid;
+    -- El cast a member_role es obligatorio: un literal suelto sí se convierte
+    -- solo al tipo de la columna, pero una expresión CASE se resuelve como text
+    -- antes de asignarse, y Postgres no la castea sola a un enum.
     insert into league_members (league_id, player_id, role, joined_at)
-    values (v_league_central, v_pid, case when v_i = 2 then 'organizer' else 'member' end,
+    values (v_league_central, v_pid,
+            (case when v_i = 2 then 'organizer' else 'member' end)::member_role,
             now() - (interval '1 day' * (100 - v_i * 2)))
     on conflict do nothing;
 

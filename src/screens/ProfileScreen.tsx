@@ -181,6 +181,18 @@ export default function ProfileScreen({ navigation }: any) {
           <Pressable style={styles.button} onPress={() => navigation.navigate('Stats')}>
             <Text style={styles.buttonText}>Mis estadísticas</Text>
           </Pressable>
+          <Pressable style={styles.button} onPress={() => navigation.navigate('Passport')}>
+            <Text style={styles.buttonText}>Mi League Passport</Text>
+          </Pressable>
+          <Pressable style={[styles.button, styles.secondaryButton]} onPress={() => navigation.navigate('Feed')}>
+            <Text style={styles.buttonText}>Actividad</Text>
+          </Pressable>
+          <Pressable style={[styles.button, styles.secondaryButton]} onPress={() => navigation.navigate('Events')}>
+            <Text style={styles.buttonText}>Eventos</Text>
+          </Pressable>
+          <Pressable style={[styles.button, styles.secondaryButton]} onPress={() => navigation.navigate('Clubs')}>
+            <Text style={styles.buttonText}>Clubes</Text>
+          </Pressable>
           <Pressable style={[styles.button, styles.secondaryButton]} onPress={() => setEditing(true)}>
             <Text style={styles.buttonText}>Editar perfil</Text>
           </Pressable>

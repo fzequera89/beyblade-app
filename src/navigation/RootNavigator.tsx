@@ -26,6 +26,15 @@ import StatsScreen from '../screens/StatsScreen';
 import CombosScreen from '../screens/CombosScreen';
 import RivalriesScreen from '../screens/RivalriesScreen';
 import BadgesScreen from '../screens/BadgesScreen';
+import EventsScreen from '../screens/EventsScreen';
+import CreateEventScreen from '../screens/CreateEventScreen';
+import EventDetailScreen from '../screens/EventDetailScreen';
+import PlayerProfileScreen from '../screens/PlayerProfileScreen';
+import FollowsScreen from '../screens/FollowsScreen';
+import FeedScreen from '../screens/FeedScreen';
+import ClubsScreen from '../screens/ClubsScreen';
+import ClubDetailScreen from '../screens/ClubDetailScreen';
+import PassportScreen from '../screens/PassportScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -70,6 +79,15 @@ export default function RootNavigator() {
             <Stack.Screen name="Combos" component={CombosScreen} />
             <Stack.Screen name="Rivalries" component={RivalriesScreen} />
             <Stack.Screen name="Badges" component={BadgesScreen} />
+            <Stack.Screen name="Events" component={EventsScreen} />
+            <Stack.Screen name="CreateEvent" component={CreateEventScreen} />
+            <Stack.Screen name="EventDetail" component={EventDetailScreen} />
+            <Stack.Screen name="PlayerProfile" component={PlayerProfileScreen} />
+            <Stack.Screen name="Follows" component={FollowsScreen} />
+            <Stack.Screen name="Feed" component={FeedScreen} />
+            <Stack.Screen name="Clubs" component={ClubsScreen} />
+            <Stack.Screen name="ClubDetail" component={ClubDetailScreen} />
+            <Stack.Screen name="Passport" component={PassportScreen} />
           </>
         )}
       </Stack.Navigator>

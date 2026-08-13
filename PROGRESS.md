@@ -11,7 +11,7 @@ App de gestión de liga de Beyblade: torneos, brackets, ELO real, descubrimiento
 - EAS/Expo: cuenta `fzequera89` (login con email+contraseña, no con Google — esa cuenta no tiene password)
 - Documento fuente de la propuesta original: `docs/elo-rules.md` (reglas de ELO, con correcciones) y la propuesta de producto (fuera del repo, en el escritorio de Farid)
 
-## Progreso: ~67% del roadmap total
+## Progreso: ~89% del roadmap total
 
 | Fase | % | Estado |
 |---|---|---|
@@ -19,9 +19,11 @@ App de gestión de liga de Beyblade: torneos, brackets, ELO real, descubrimiento
 | Fase 1 — MVP liga digitalizada (M1-M5, M12) | 30% | ✅ Completa |
 | Fase 2 — Descubrimiento físico (M6, M7) | 18% | ✅ Completa |
 | Fase 3 — Estadísticas y gamificación (M9, M10) | 14% | ✅ Completa |
-| Fase 4 — Eventos y capa social (M8, M11) | 13% | ⬜ Pendiente |
-| Fase 5 — Multi-liga y League Passport | 9% | ⬜ Pendiente |
+| Fase 4 — Eventos y capa social (M8, M11) | 13% | ✅ Completa |
+| Fase 5 — Multi-liga y League Passport | 9% | ✅ Completa |
 | QA, pulido y publicación en tiendas | 11% | ⬜ Pendiente |
+
+**Todas las fases de producto están construidas.** Lo único que falta es la última línea: QA con datos reales, pulido y publicación en tiendas — ver "Qué falta para el 100%" al final.
 
 ## Qué existe hoy (funcional)
 
@@ -50,6 +52,18 @@ App de gestión de liga de Beyblade: torneos, brackets, ELO real, descubrimiento
 - **Rivalidades (`RivalriesScreen`):** récord head-to-head contra cada jugador, leyendo la tabla `rivalries` que ya se llenaba sola desde 1.4. Toca un rival y muestra los últimos matches contra él.
 - **Logros (`BadgesScreen`):** catálogo de 14 badges (volumen de partidas, hitos de ELO, rachas, mata gigantes, impecable, finishes, némesis). Se otorgan solos: `confirm_match_result` llama a `award_badges` al final. Los íconos son emoji del lado del cliente (`src/lib/badges.ts`) para no depender de Storage; el nombre y la descripción sí viven en la base y se pueden editar sin tocar código.
 
+**Eventos y capa social (4.1, 4.2, 4.3, 4.4):**
+
+- **Eventos y asistencia (`EventsScreen`, `CreateEventScreen`, `EventDetailScreen`):** agenda de lo que viene, con tipo (torneo, noche de liga, juego libre, práctica, quedada, batalla de clubes, día de novatos), venue y confirmación de asistencia. **Quién puede crear:** los eventos DE LIGA solo el admin o un moderador de esa liga; los eventos ABIERTOS (sin liga) cualquier jugador — si las quedadas casuales se cerraran a moderadores, la mitad de M8 perdería sentido.
+- **Seguir jugadores y perfil público (`PlayerProfileScreen`, `FollowsScreen`):** perfil consultable de cualquier jugador con seguir/dejar de seguir, retar directo, y el récord head-to-head contra uno mismo.
+- **Feed de actividad (`FeedScreen`):** mezcla matches confirmados, logros desbloqueados y check-ins de la gente que sigues. **Sin tabla de feed denormalizada a propósito:** para el tamaño de una liga regional no se justifica mantenerla al día, y se desincroniza en cuanto algo se borra o se disputa.
+- **Clubes (`ClubsScreen`, `ClubDetailScreen`):** el equipo con el que un jugador se identifica. A diferencia de una liga, **cualquiera puede fundar un club** — la escena se organiza sola. El roster se ordena por ELO (ranking interno) y el fundador entra automático por trigger, igual que el dueño de una liga en 0004.
+
+**Multi-liga y League Passport (5.1, 5.2):**
+
+- **Posición por liga (5.1):** la pantalla de ligas muestra "Vas #N de M" en cada liga donde el jugador es miembro. Se calcula ordenando a los miembros de esa liga por el rating **global** — no hay un ELO por liga (ver decisión 7).
+- **League Passport (`PassportScreen`, 5.2):** la trayectoria completa en una sola vista consultable de cualquier jugador — ligas con su posición, torneos, clubes, logros, venues visitados, récord y rivales enfrentados. Es la vista que le da sentido al multi-liga: un mismo rating global con la historia de por dónde pasó.
+
 ## Decisiones de diseño / simplificaciones importantes
 
 1. **Bracket sin seeding fijo:** cada ronda se re-calcula por ELO actual, no por posiciones de bracket predefinidas. Más simple, menos "oficial".
@@ -60,10 +74,12 @@ App de gestión de liga de Beyblade: torneos, brackets, ELO real, descubrimiento
 6. **Escrituras sensibles solo por función `SECURITY DEFINER`:** `report_match_result`, `confirm_match_result`, `accept_challenge` y `award_badges` no tienen política de INSERT/UPDATE equivalente. Es a propósito: nadie puede auto-asignarse un logro, inventar rounds ni mover su ELO con un insert directo, aunque tenga la anon key.
 7. **ELO por categoría = filtro de lectura:** se resolvió el punto 4 de `docs/elo-rules.md` en la dirección recomendada. Existe **un solo rating global** por jugador; las vistas por liga/temporada/categoría son filtros sobre `ranking_snapshots`, no ratings independientes. **Pendiente de confirmar con el cliente**, pero cambiarlo después no toca el cálculo del ELO.
 8. **Match al mejor de 5:** el primero que llega a 3 rounds gana, que es lo que ya asumía el marcador 3-0/3-1/3-2 de 1.4. Está en una constante (`ROUNDS_TO_WIN`) por si la liga cambia de formato.
+9. **Fecha y hora de eventos como texto (AAAA-MM-DD / HH:MM):** un date picker nativo exigiría `@react-native-community/datetimepicker`, que obliga a dev client. Todo el proyecto viene evitando dependencias nativas nuevas (misma razón que la decisión 2). Es el punto más obvio a pulir en la fase de QA si el cliente lo pide.
 
 ## Pendientes conocidos
 
-- **⚠️ Migraciones 0014 y 0015 SIN CORRER en Supabase** (al 2026-08-13). Hasta que se corran en el SQL Editor, en ese orden, toda la Fase 3 se ve vacía: las pantallas cargan pero las tablas siguen cerradas y `report_match_result` no existe, así que **no se puede reportar ningún match**. Es el primer paso de la próxima sesión.
+- **✅ Migraciones 0014 y 0015 ya corridas** (2026-08-13, verificado: las funciones `report_match_result` y `award_badges` responden, y las tablas de Fase 3 rechazan lectura anónima).
+- **⚠️ Migraciones 0016, 0017 y 0018 SIN CORRER en Supabase** (al 2026-08-13). Hasta que se corran en el SQL Editor, en ese orden, toda la Fase 4 se ve vacía: las pantallas de eventos, follows, feed y clubes cargan pero las tablas siguen cerradas, así que **no se puede crear ningún evento, seguir a nadie ni fundar un club**. La Fase 5 (passport y posición por liga) sí funciona sin ellas, salvo las secciones de clubes.
 - **Build de EAS pendiente de generar** desde la sub-etapa 1.1 (fix de placeholders) — el usuario pidió explícitamente esperar y acumular cambios de varias fases antes de generar el próximo build real, para no gastar builds en cada cambio chico.
 - Configurar el cliente OAuth de Google en Supabase (para que el botón "Continuar con Google" funcione en producción).
 - Cambiar `is_admin` del correo de prueba de Farid al correo real del cliente cuando se decida.
@@ -74,6 +90,27 @@ App de gestión de liga de Beyblade: torneos, brackets, ELO real, descubrimiento
 
 1. `git clone` / `git pull` del repo.
 2. Copiar `.env.example` a `.env` y llenar `EXPO_PUBLIC_SUPABASE_URL` y `EXPO_PUBLIC_SUPABASE_ANON_KEY` (Supabase → Settings → API del proyecto "CML Beyblade").
-3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-13 faltan 0014 y 0015.**
+3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-13 faltan 0016, 0017 y 0018.**
 4. `npm install`, luego `npm run web` para verificar rápido en el preview del navegador (no requiere emulador Android).
 5. Para un build real: `npx eas-cli build --platform android --profile preview --non-interactive` (requiere `eas login` ya hecho en la máquina).
+
+## Qué falta para el 100% (QA, pulido y publicación — 11%)
+
+Es la única línea del roadmap que queda, y buena parte **no la puede cerrar un agente**: necesita builds reales, cuentas de pago y decisiones del cliente.
+
+**QA con datos reales (lo que sigue de inmediato):**
+- Ninguna fase se ha probado con una sesión iniciada y datos de verdad. Todo lo verificado hasta hoy es: compila, las pantallas montan y renderizan sus estados vacíos, y las funciones de base responden. El flujo completo (crear combo → reportar round a round → confirmar con la segunda cuenta → ver moverse ELO, stats, rivalidad y logros) está **sin probar**.
+- **Se necesitan dos cuentas** para cerrar el ciclo: `confirm_match_result` rechaza a propósito que quien reporta confirme su propio resultado.
+- Probar el QR de check-in (2.2) y la cámara, que solo funcionan en build real, nunca en el preview web.
+
+**Pulido pendiente:**
+- Fecha/hora de eventos como texto (decisión 9) — cambiar a date picker exige dev client.
+- Avatar de perfil (pospuesto desde Fase 1).
+- Sin notificaciones push todavía (estaban en el stack acordado: FCM/Expo Push).
+- Sin paginación en listas: hoy todo carga completo. A escala de liga regional aguanta; con miles de matches habría que paginar.
+
+**Publicación (requiere al cliente, no al desarrollador):**
+- Cuenta de Google Play (~$25 único) y de Apple (~$99/año).
+- Configurar el cliente OAuth de Google en Supabase para que "Continuar con Google" funcione en producción.
+- Cambiar `is_admin` del correo de prueba de Farid al correo real del cliente.
+- Íconos, splash, capturas, textos de ficha y política de privacidad.

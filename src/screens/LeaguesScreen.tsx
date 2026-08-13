@@ -10,6 +10,8 @@ type LeagueRow = {
   name: string;
   description: string | null;
   role: 'member' | 'organizer' | null;
+  myRank: number | null;
+  memberCount: number;
 };
 
 export default function LeaguesScreen({ navigation }: any) {
@@ -29,8 +31,41 @@ export default function LeaguesScreen({ navigation }: any) {
       return;
     }
     const roleByLeague = new Map((memberships ?? []).map((m) => [m.league_id, m.role]));
+
+    // Multi-liga (5.1): la posición en cada liga se calcula ordenando a sus
+    // miembros por el rating GLOBAL. No hay un ELO por liga — la vista por liga
+    // es un filtro de lectura sobre el mismo rating (decisión 7 de PROGRESS.md).
+    const myLeagueIds = [...roleByLeague.keys()];
+    const rankByLeague = new Map<string, number>();
+    const countByLeague = new Map<string, number>();
+
+    if (myLeagueIds.length > 0) {
+      const { data: rosters } = await supabase
+        .from('league_members')
+        .select('league_id, player_id, players(elo_rating)')
+        .in('league_id', myLeagueIds);
+
+      const byLeague = new Map<string, { player_id: string; elo: number }[]>();
+      for (const row of ((rosters as any[]) ?? [])) {
+        const list = byLeague.get(row.league_id) ?? [];
+        list.push({ player_id: row.player_id, elo: row.players?.elo_rating ?? 1000 });
+        byLeague.set(row.league_id, list);
+      }
+      for (const [leagueId, list] of byLeague) {
+        list.sort((a, b) => b.elo - a.elo);
+        countByLeague.set(leagueId, list.length);
+        const index = list.findIndex((p) => p.player_id === playerId);
+        if (index >= 0) rankByLeague.set(leagueId, index + 1);
+      }
+    }
+
     setLeagues(
-      (allLeagues ?? []).map((l) => ({ ...l, role: roleByLeague.get(l.id) ?? null }))
+      (allLeagues ?? []).map((l) => ({
+        ...l,
+        role: roleByLeague.get(l.id) ?? null,
+        myRank: rankByLeague.get(l.id) ?? null,
+        memberCount: countByLeague.get(l.id) ?? 0,
+      }))
     );
   }, [playerId]);
 
@@ -72,6 +107,11 @@ export default function LeaguesScreen({ navigation }: any) {
             <View style={{ flex: 1 }}>
               <Text style={styles.cardTitle}>{item.name}</Text>
               {item.description ? <Text style={styles.cardSub}>{item.description}</Text> : null}
+              {item.myRank ? (
+                <Text style={styles.rankLine}>
+                  Vas #{item.myRank} de {item.memberCount}
+                </Text>
+              ) : null}
             </View>
             {item.role ? (
               <Text style={styles.badge}>{item.role === 'organizer' ? 'Moderador' : 'Miembro'}</Text>
@@ -114,6 +154,7 @@ const styles = StyleSheet.create({
   },
   cardTitle: { fontSize: 16, fontWeight: '600' },
   cardSub: { color: '#6b6b64', fontSize: 13, marginTop: 2 },
+  rankLine: { color: '#2f5ad6', fontSize: 12, fontWeight: '600', marginTop: 4 },
   badge: { fontSize: 12, color: '#2f5ad6', fontWeight: '600' },
   joinButton: { backgroundColor: '#2f5ad6', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 10 },
   joinButtonText: { color: '#fff', fontWeight: '600', fontSize: 12 },

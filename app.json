@@ -3,6 +3,7 @@
     "name": "beyblade-app",
     "slug": "beyblade-app",
     "version": "1.0.0",
+    "scheme": "beybladeapp",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -20,6 +21,9 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-web-browser"
+    ]
   }
 }

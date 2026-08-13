@@ -16,6 +16,9 @@ import LeagueStandingsScreen from '../screens/LeagueStandingsScreen';
 import AdminScreen from '../screens/AdminScreen';
 import AdminPlayersScreen from '../screens/AdminPlayersScreen';
 import AdminGlobalRankingScreen from '../screens/AdminGlobalRankingScreen';
+import VenuesScreen from '../screens/VenuesScreen';
+import CreateVenueScreen from '../screens/CreateVenueScreen';
+import VenueDetailScreen from '../screens/VenueDetailScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -50,6 +53,9 @@ export default function RootNavigator() {
             <Stack.Screen name="Admin" component={AdminScreen} />
             <Stack.Screen name="AdminPlayers" component={AdminPlayersScreen} />
             <Stack.Screen name="AdminGlobalRanking" component={AdminGlobalRankingScreen} />
+            <Stack.Screen name="Venues" component={VenuesScreen} />
+            <Stack.Screen name="CreateVenue" component={CreateVenueScreen} />
+            <Stack.Screen name="VenueDetail" component={VenueDetailScreen} />
           </>
         )}
       </Stack.Navigator>

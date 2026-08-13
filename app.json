@@ -24,7 +24,13 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Beyblade League usa la cámara para escanear códigos QR de check-in."
+        }
+      ]
     ],
     "extra": {
       "eas": {

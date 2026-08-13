@@ -19,6 +19,7 @@ import AdminGlobalRankingScreen from '../screens/AdminGlobalRankingScreen';
 import VenuesScreen from '../screens/VenuesScreen';
 import CreateVenueScreen from '../screens/CreateVenueScreen';
 import VenueDetailScreen from '../screens/VenueDetailScreen';
+import ScanCheckInScreen from '../screens/ScanCheckInScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -56,6 +57,7 @@ export default function RootNavigator() {
             <Stack.Screen name="Venues" component={VenuesScreen} />
             <Stack.Screen name="CreateVenue" component={CreateVenueScreen} />
             <Stack.Screen name="VenueDetail" component={VenueDetailScreen} />
+            <Stack.Screen name="ScanCheckIn" component={ScanCheckInScreen} />
           </>
         )}
       </Stack.Navigator>

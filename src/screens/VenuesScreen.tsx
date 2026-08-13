@@ -48,6 +48,9 @@ export default function VenuesScreen({ navigation }: any) {
           </Pressable>
         )}
       </View>
+      <Pressable style={styles.scanButton} onPress={() => navigation.navigate('ScanCheckIn')}>
+        <Text style={styles.scanButtonText}>📷 Escanear QR de check-in</Text>
+      </Pressable>
       <FlatList
         style={{ flex: 1 }}
         data={venues}
@@ -78,6 +81,8 @@ const styles = StyleSheet.create({
   title: { fontSize: 22, fontWeight: '700' },
   createButton: { backgroundColor: '#2f5ad6', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12 },
   createButtonText: { color: '#fff', fontWeight: '600', fontSize: 13 },
+  scanButton: { backgroundColor: '#444', borderRadius: 8, padding: 12, alignItems: 'center', marginBottom: 12 },
+  scanButtonText: { color: '#fff', fontWeight: '600' },
   card: { borderWidth: 1, borderColor: '#eee', borderRadius: 10, padding: 14 },
   cardTitle: { fontSize: 16, fontWeight: '600' },
   cardSub: { color: '#6b6b64', fontSize: 13, marginTop: 2 },

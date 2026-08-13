@@ -5,6 +5,9 @@ import SignInScreen from '../screens/SignInScreen';
 import SignUpScreen from '../screens/SignUpScreen';
 import CompleteProfileScreen from '../screens/CompleteProfileScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import LeaguesScreen from '../screens/LeaguesScreen';
+import CreateLeagueScreen from '../screens/CreateLeagueScreen';
+import LeagueDetailScreen from '../screens/LeagueDetailScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -26,7 +29,12 @@ export default function RootNavigator() {
         ) : !hasPlayer ? (
           <Stack.Screen name="CompleteProfile" component={CompleteProfileScreen} />
         ) : (
-          <Stack.Screen name="Profile" component={ProfileScreen} />
+          <>
+            <Stack.Screen name="Profile" component={ProfileScreen} />
+            <Stack.Screen name="Leagues" component={LeaguesScreen} />
+            <Stack.Screen name="CreateLeague" component={CreateLeagueScreen} />
+            <Stack.Screen name="LeagueDetail" component={LeagueDetailScreen} />
+          </>
         )}
       </Stack.Navigator>
     </NavigationContainer>

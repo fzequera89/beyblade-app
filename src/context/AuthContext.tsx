@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 type AuthContextValue = {
   session: Session | null;
   hasPlayer: boolean | null;
+  playerId: string | null;
   loading: boolean;
   refreshPlayer: () => Promise<void>;
 };
@@ -14,6 +15,7 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [hasPlayer, setHasPlayer] = useState<boolean | null>(null);
+  const [playerId, setPlayerId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   async function refreshPlayer() {
@@ -21,6 +23,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const current = data.session;
     if (!current) {
       setHasPlayer(null);
+      setPlayerId(null);
       return;
     }
     const { data: player } = await supabase
@@ -29,6 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .eq('auth_user_id', current.user.id)
       .maybeSingle();
     setHasPlayer(!!player);
+    setPlayerId(player?.id ?? null);
   }
 
   useEffect(() => {
@@ -47,11 +51,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refreshPlayer();
     } else {
       setHasPlayer(null);
+      setPlayerId(null);
     }
   }, [session]);
 
   return (
-    <AuthContext.Provider value={{ session, hasPlayer, loading, refreshPlayer }}>
+    <AuthContext.Provider value={{ session, hasPlayer, playerId, loading, refreshPlayer }}>
       {children}
     </AuthContext.Provider>
   );

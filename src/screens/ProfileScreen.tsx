@@ -14,7 +14,7 @@ type Player = {
   matches_played: number;
 };
 
-export default function ProfileScreen() {
+export default function ProfileScreen({ navigation }: any) {
   const { session } = useAuth();
   const [player, setPlayer] = useState<Player | null>(null);
   const [editing, setEditing] = useState(false);
@@ -127,6 +127,9 @@ export default function ProfileScreen() {
           <Pressable style={styles.button} onPress={() => setEditing(true)}>
             <Text style={styles.buttonText}>Editar perfil</Text>
           </Pressable>
+          <Pressable style={[styles.button, styles.secondaryButton]} onPress={() => navigation.navigate('Leagues')}>
+            <Text style={styles.buttonText}>Mis ligas</Text>
+          </Pressable>
         </>
       )}
       <Pressable style={styles.signOut} onPress={() => supabase.auth.signOut()}>
@@ -148,6 +151,7 @@ const styles = StyleSheet.create({
   field: { fontSize: 14, color: '#333' },
   input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12, width: '100%' },
   button: { backgroundColor: '#2f5ad6', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 12, width: '100%' },
+  secondaryButton: { backgroundColor: '#444' },
   buttonText: { color: '#fff', fontWeight: '600' },
   signOut: { marginTop: 24 },
   signOutText: { color: '#b00020' },

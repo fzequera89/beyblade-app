@@ -8,6 +8,9 @@ import ProfileScreen from '../screens/ProfileScreen';
 import LeaguesScreen from '../screens/LeaguesScreen';
 import CreateLeagueScreen from '../screens/CreateLeagueScreen';
 import LeagueDetailScreen from '../screens/LeagueDetailScreen';
+import TournamentsScreen from '../screens/TournamentsScreen';
+import TournamentDetailScreen from '../screens/TournamentDetailScreen';
+import BracketScreen from '../screens/BracketScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -34,6 +37,9 @@ export default function RootNavigator() {
             <Stack.Screen name="Leagues" component={LeaguesScreen} />
             <Stack.Screen name="CreateLeague" component={CreateLeagueScreen} />
             <Stack.Screen name="LeagueDetail" component={LeagueDetailScreen} />
+            <Stack.Screen name="Tournaments" component={TournamentsScreen} />
+            <Stack.Screen name="TournamentDetail" component={TournamentDetailScreen} />
+            <Stack.Screen name="Bracket" component={BracketScreen} />
           </>
         )}
       </Stack.Navigator>

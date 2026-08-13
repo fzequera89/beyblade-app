@@ -95,6 +95,15 @@ export default function LeagueDetailScreen({ route, navigation }: any) {
         <Text style={styles.roleTag}>{role === 'organizer' ? 'Eres organizador' : 'Eres miembro'}</Text>
       )}
 
+      {role && (
+        <Pressable
+          style={styles.button}
+          onPress={() => navigation.navigate('Tournaments', { leagueId, isOrganizer: role === 'organizer' })}
+        >
+          <Text style={styles.buttonText}>Torneos</Text>
+        </Pressable>
+      )}
+
       <Text style={styles.sectionTitle}>Temporadas</Text>
       <FlatList
         data={seasons}

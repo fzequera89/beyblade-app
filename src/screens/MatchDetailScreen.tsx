@@ -4,6 +4,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import Screen from '../components/Screen';
+import { FINISH_TYPES, FinishCode, finishLabel } from '../lib/finishTypes';
 
 type Match = {
   id: string;
@@ -22,19 +23,26 @@ type Match = {
   player_b: { display_name: string } | null;
 };
 
-const MARGIN_OPTIONS = [
-  { winnerScore: 3, loserScore: 0, label: '3 – 0' },
-  { winnerScore: 3, loserScore: 1, label: '3 – 1' },
-  { winnerScore: 3, loserScore: 2, label: '3 – 2' },
-];
+type Round = { winner_id: string; finish_type: FinishCode };
+
+type SavedRound = { id: string; round_number: number; winner_id: string | null; finish_type: string | null };
+
+type Combo = { id: string; name: string };
+
+// Al mejor de 5: el primero que llega a 3 rounds gana el match.
+const ROUNDS_TO_WIN = 3;
 
 export default function MatchDetailScreen({ route, navigation }: any) {
   const { matchId } = route.params;
   const { playerId } = useAuth();
   const [match, setMatch] = useState<Match | null>(null);
+  const [savedRounds, setSavedRounds] = useState<SavedRound[]>([]);
+  const [combos, setCombos] = useState<Combo[]>([]);
   const [isOrganizer, setIsOrganizer] = useState(false);
+  const [rounds, setRounds] = useState<Round[]>([]);
   const [pickedWinner, setPickedWinner] = useState<'a' | 'b' | null>(null);
-  const [pickedMargin, setPickedMargin] = useState<number | null>(null);
+  const [pickedFinish, setPickedFinish] = useState<FinishCode | null>(null);
+  const [pickedCombo, setPickedCombo] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
@@ -53,13 +61,24 @@ export default function MatchDetailScreen({ route, navigation }: any) {
       return;
     }
     setMatch(data as any);
-    const { data: membership } = await supabase
-      .from('league_members')
-      .select('role')
-      .eq('league_id', data.league_id)
-      .eq('player_id', playerId)
-      .maybeSingle();
+
+    const [{ data: membership }, { data: roundRows }, { data: comboRows }] = await Promise.all([
+      supabase
+        .from('league_members')
+        .select('role')
+        .eq('league_id', data.league_id)
+        .eq('player_id', playerId)
+        .maybeSingle(),
+      supabase
+        .from('match_rounds')
+        .select('id, round_number, winner_id, finish_type')
+        .eq('match_id', matchId)
+        .order('round_number'),
+      supabase.from('combos').select('id, name').eq('player_id', playerId).order('created_at'),
+    ]);
     setIsOrganizer(membership?.role === 'organizer');
+    setSavedRounds((roundRows as any) ?? []);
+    setCombos((comboRows as any) ?? []);
     setLoading(false);
   }, [matchId, playerId]);
 
@@ -72,28 +91,37 @@ export default function MatchDetailScreen({ route, navigation }: any) {
   const isParticipant = match && (match.player_a_id === playerId || match.player_b_id === playerId);
   const isReporter = match && match.reported_by === playerId;
 
-  async function submitReport() {
-    if (!match || pickedWinner === null || pickedMargin === null) return;
+  const tallyA = match ? rounds.filter((r) => r.winner_id === match.player_a_id).length : 0;
+  const tallyB = match ? rounds.filter((r) => r.winner_id === match.player_b_id).length : 0;
+  const matchDecided = tallyA >= ROUNDS_TO_WIN || tallyB >= ROUNDS_TO_WIN;
+
+  function addRound() {
+    if (!match || pickedWinner === null || pickedFinish === null) return;
     const winnerId = pickedWinner === 'a' ? match.player_a_id : match.player_b_id;
-    const scoreA = pickedWinner === 'a' ? pickedMargin : MARGIN_OPTIONS.find((o) => o.winnerScore === pickedMargin)!.loserScore;
-    const scoreB = pickedWinner === 'a' ? MARGIN_OPTIONS.find((o) => o.winnerScore === pickedMargin)!.loserScore : pickedMargin;
+    setRounds([...rounds, { winner_id: winnerId, finish_type: pickedFinish }]);
+    setPickedWinner(null);
+    setPickedFinish(null);
+  }
+
+  function undoRound() {
+    setRounds(rounds.slice(0, -1));
+  }
+
+  async function submitReport() {
+    if (!match || !matchDecided) return;
     setBusy(true);
-    const { error } = await supabase
-      .from('matches')
-      .update({
-        score_a: scoreA,
-        score_b: scoreB,
-        winner_id: winnerId,
-        status: 'reported',
-        reported_by: playerId,
-        reported_at: new Date().toISOString(),
-      })
-      .eq('id', match.id);
+    const { error } = await supabase.rpc('report_match_result', {
+      p_match_id: match.id,
+      p_rounds: rounds,
+      p_combo_id: pickedCombo,
+    });
     setBusy(false);
     if (error) {
       Alert.alert('Error', error.message);
       return;
     }
+    setRounds([]);
+    setPickedCombo(null);
     load();
   }
 
@@ -133,6 +161,11 @@ export default function MatchDetailScreen({ route, navigation }: any) {
     load();
   }
 
+  function nameFor(id: string | null) {
+    if (!match || !id) return '—';
+    return id === match.player_a_id ? match.player_a?.display_name : match.player_b?.display_name;
+  }
+
   if (loading || !match) {
     return (
       <Screen style={styles.container}>
@@ -153,37 +186,97 @@ export default function MatchDetailScreen({ route, navigation }: any) {
       {match.status === 'pending' && isParticipant && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Reportar resultado</Text>
-          <View style={styles.rowGap}>
-            <Pressable
-              style={[styles.choice, pickedWinner === 'a' && styles.choiceSelected]}
-              onPress={() => setPickedWinner('a')}
-            >
-              <Text>Ganó {match.player_a?.display_name}</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.choice, pickedWinner === 'b' && styles.choiceSelected]}
-              onPress={() => setPickedWinner('b')}
-            >
-              <Text>Ganó {match.player_b?.display_name}</Text>
-            </Pressable>
+          <Text style={styles.meta}>
+            Registra los rounds uno por uno. El match se cierra cuando alguien llega a {ROUNDS_TO_WIN}.
+          </Text>
+
+          <View style={styles.tallyRow}>
+            <Text style={styles.tally}>{tallyA}</Text>
+            <Text style={styles.vs}>–</Text>
+            <Text style={styles.tally}>{tallyB}</Text>
           </View>
-          <View style={styles.rowGap}>
-            {MARGIN_OPTIONS.map((o) => (
-              <Pressable
-                key={o.label}
-                style={[styles.choice, pickedMargin === o.winnerScore && styles.choiceSelected]}
-                onPress={() => setPickedMargin(o.winnerScore)}
-              >
-                <Text>{o.label}</Text>
+
+          {rounds.length > 0 && (
+            <View style={styles.roundList}>
+              {rounds.map((r, i) => (
+                <Text key={i} style={styles.roundLine}>
+                  Round {i + 1}: ganó {nameFor(r.winner_id)} · {finishLabel(r.finish_type)}
+                </Text>
+              ))}
+              <Pressable onPress={undoRound}>
+                <Text style={styles.undo}>Deshacer último round</Text>
               </Pressable>
-            ))}
-          </View>
-          <Pressable
-            style={styles.button}
-            onPress={submitReport}
-            disabled={busy || pickedWinner === null || pickedMargin === null}
-          >
-            <Text style={styles.buttonText}>Enviar resultado</Text>
+            </View>
+          )}
+
+          {!matchDecided && (
+            <>
+              <Text style={styles.label}>¿Quién ganó el round?</Text>
+              <View style={styles.rowGap}>
+                <Pressable
+                  style={[styles.choice, pickedWinner === 'a' && styles.choiceSelected]}
+                  onPress={() => setPickedWinner('a')}
+                >
+                  <Text>{match.player_a?.display_name}</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.choice, pickedWinner === 'b' && styles.choiceSelected]}
+                  onPress={() => setPickedWinner('b')}
+                >
+                  <Text>{match.player_b?.display_name}</Text>
+                </Pressable>
+              </View>
+
+              <Text style={styles.label}>¿Cómo terminó?</Text>
+              <View style={styles.rowGap}>
+                {FINISH_TYPES.map((f) => (
+                  <Pressable
+                    key={f.code}
+                    style={[styles.choice, pickedFinish === f.code && styles.choiceSelected]}
+                    onPress={() => setPickedFinish(f.code)}
+                  >
+                    <Text>{f.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              <Pressable
+                style={styles.button}
+                onPress={addRound}
+                disabled={pickedWinner === null || pickedFinish === null}
+              >
+                <Text style={styles.buttonText}>Agregar round</Text>
+              </Pressable>
+            </>
+          )}
+
+          {combos.length > 0 && (
+            <>
+              <Text style={styles.label}>¿Con qué combo jugaste? (opcional)</Text>
+              <View style={styles.rowGap}>
+                {combos.map((c) => (
+                  <Pressable
+                    key={c.id}
+                    style={[styles.choice, pickedCombo === c.id && styles.choiceSelected]}
+                    onPress={() => setPickedCombo(pickedCombo === c.id ? null : c.id)}
+                  >
+                    <Text>{c.name}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </>
+          )}
+
+          {combos.length === 0 && (
+            <Pressable onPress={() => navigation.navigate('Combos')}>
+              <Text style={styles.link}>Registra tus combos para medir cuál te funciona mejor →</Text>
+            </Pressable>
+          )}
+
+          <Pressable style={styles.button} onPress={submitReport} disabled={busy || !matchDecided}>
+            <Text style={styles.buttonText}>
+              {matchDecided ? 'Enviar resultado' : `Faltan rounds para llegar a ${ROUNDS_TO_WIN}`}
+            </Text>
           </Pressable>
         </View>
       )}
@@ -193,8 +286,7 @@ export default function MatchDetailScreen({ route, navigation }: any) {
       {match.status === 'reported' && (
         <View style={styles.section}>
           <Text style={styles.meta}>
-            Reportado: {match.score_a} – {match.score_b}, ganó{' '}
-            {match.winner_id === match.player_a_id ? match.player_a?.display_name : match.player_b?.display_name}
+            Reportado: {match.score_a} – {match.score_b}, ganó {nameFor(match.winner_id)}
           </Text>
           {(isOrganizer || (isParticipant && !isReporter)) && (
             <View style={styles.rowGap}>
@@ -239,6 +331,17 @@ export default function MatchDetailScreen({ route, navigation }: any) {
         </View>
       )}
 
+      {savedRounds.length > 0 && match.status !== 'pending' && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Rounds</Text>
+          {savedRounds.map((r) => (
+            <Text key={r.id} style={styles.roundLine}>
+              Round {r.round_number}: ganó {nameFor(r.winner_id)} · {finishLabel(r.finish_type)}
+            </Text>
+          ))}
+        </View>
+      )}
+
       <Pressable style={styles.back} onPress={() => navigation.goBack()}>
         <Text style={styles.backText}>‹ Volver al bracket</Text>
       </Pressable>
@@ -254,6 +357,13 @@ const styles = StyleSheet.create({
   vs: { color: '#6b6b64' },
   section: { gap: 10, marginBottom: 10 },
   sectionTitle: { fontSize: 15, fontWeight: '700' },
+  label: { fontSize: 13, fontWeight: '600', marginTop: 4 },
+  tallyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12 },
+  tally: { fontSize: 32, fontWeight: '700', color: '#2f5ad6' },
+  roundList: { gap: 4, backgroundColor: '#f6f7fb', borderRadius: 8, padding: 10 },
+  roundLine: { fontSize: 12, color: '#333' },
+  undo: { fontSize: 12, color: '#b00020', marginTop: 4 },
+  link: { fontSize: 12, color: '#2f5ad6', fontWeight: '600' },
   rowGap: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   choice: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 10 },
   choiceSelected: { borderColor: '#2f5ad6', backgroundColor: '#e8edfd' },

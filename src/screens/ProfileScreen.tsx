@@ -3,6 +3,9 @@ import { View, Text, TextInput, Pressable, StyleSheet, Alert, ScrollView } from 
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import Screen from '../components/Screen';
+import { badgeIcon } from '../lib/badges';
+
+type EarnedBadge = { code: string; name: string };
 
 type Player = {
   id: string;
@@ -34,6 +37,7 @@ export default function ProfileScreen({ navigation }: any) {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ display_name: '', city: '', main_beyblade: '', play_style: '' });
   const [history, setHistory] = useState<HistoryMatch[]>([]);
+  const [earnedBadges, setEarnedBadges] = useState<EarnedBadge[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -70,6 +74,13 @@ export default function ProfileScreen({ navigation }: any) {
       .order('confirmed_at', { ascending: false })
       .limit(20);
     setHistory((matches as any) ?? []);
+
+    const { data: earned } = await supabase
+      .from('player_badges')
+      .select('badges(code, name)')
+      .eq('player_id', data.id)
+      .order('earned_at', { ascending: false });
+    setEarnedBadges(((earned as any[]) ?? []).map((row) => row.badges).filter(Boolean));
   }
 
   async function save() {
@@ -155,7 +166,22 @@ export default function ProfileScreen({ navigation }: any) {
           </View>
           {player.main_beyblade ? <Text style={styles.field}>Main: {player.main_beyblade}</Text> : null}
           {player.play_style ? <Text style={styles.field}>Estilo: {player.play_style}</Text> : null}
-          <Pressable style={styles.button} onPress={() => setEditing(true)}>
+
+          {earnedBadges.length > 0 && (
+            <Pressable style={styles.badgeStrip} onPress={() => navigation.navigate('Badges')}>
+              {earnedBadges.slice(0, 8).map((b) => (
+                <Text key={b.code} style={styles.badgeIcon}>
+                  {badgeIcon(b.code)}
+                </Text>
+              ))}
+              {earnedBadges.length > 8 && <Text style={styles.badgeMore}>+{earnedBadges.length - 8}</Text>}
+            </Pressable>
+          )}
+
+          <Pressable style={styles.button} onPress={() => navigation.navigate('Stats')}>
+            <Text style={styles.buttonText}>Mis estadísticas</Text>
+          </Pressable>
+          <Pressable style={[styles.button, styles.secondaryButton]} onPress={() => setEditing(true)}>
             <Text style={styles.buttonText}>Editar perfil</Text>
           </Pressable>
           <Pressable style={[styles.button, styles.secondaryButton]} onPress={() => navigation.navigate('Leagues')}>
@@ -217,6 +243,9 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 20, fontWeight: '700' },
   statLabel: { fontSize: 12, color: '#6b6b64' },
   field: { fontSize: 14, color: '#333' },
+  badgeStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
+  badgeIcon: { fontSize: 22 },
+  badgeMore: { fontSize: 12, color: '#6b6b64', fontWeight: '600' },
   sectionTitle: { fontSize: 16, fontWeight: '700', marginBottom: 8 },
   historyRow: {
     flexDirection: 'row',

@@ -22,6 +22,10 @@ import VenueDetailScreen from '../screens/VenueDetailScreen';
 import ScanCheckInScreen from '../screens/ScanCheckInScreen';
 import NearMeScreen from '../screens/NearMeScreen';
 import ChallengesScreen from '../screens/ChallengesScreen';
+import StatsScreen from '../screens/StatsScreen';
+import CombosScreen from '../screens/CombosScreen';
+import RivalriesScreen from '../screens/RivalriesScreen';
+import BadgesScreen from '../screens/BadgesScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -62,6 +66,10 @@ export default function RootNavigator() {
             <Stack.Screen name="ScanCheckIn" component={ScanCheckInScreen} />
             <Stack.Screen name="NearMe" component={NearMeScreen} />
             <Stack.Screen name="Challenges" component={ChallengesScreen} />
+            <Stack.Screen name="Stats" component={StatsScreen} />
+            <Stack.Screen name="Combos" component={CombosScreen} />
+            <Stack.Screen name="Rivalries" component={RivalriesScreen} />
+            <Stack.Screen name="Badges" component={BadgesScreen} />
           </>
         )}
       </Stack.Navigator>

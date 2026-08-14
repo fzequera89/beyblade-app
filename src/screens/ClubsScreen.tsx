@@ -1,9 +1,14 @@
 import { useCallback, useState } from 'react';
-import { View, Text, TextInput, FlatList, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, FlatList, Pressable, StyleSheet, Alert } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import Screen from '../components/Screen';
+import Screen from '../ui/Screen';
+import Button from '../ui/Button';
+import { Field } from '../ui/Field';
+import { Card, Hex, Pill } from '../ui/primitives';
+import { IconChevron } from '../ui/icons';
+import { colors, space, type, radius } from '../theme';
 
 type Club = {
   id: string;
@@ -25,16 +30,24 @@ export default function ClubsScreen({ navigation }: any) {
   const load = useCallback(async () => {
     setLoading(true);
     const [{ data, error }, { data: mine }] = await Promise.all([
-      supabase.from('clubs').select('id, name, city, description, club_members(count)').order('name'),
+      supabase.from('clubs').select('id, name, city, description, club_members(count)'),
       supabase.from('club_members').select('club_id').eq('player_id', playerId),
     ]);
     setLoading(false);
-    if (error) {
-      Alert.alert('Error', error.message);
-      return;
-    }
-    setClubs((data as any) ?? []);
-    setMyClubIds(((mine as any[]) ?? []).map((m) => m.club_id));
+    if (error) return Alert.alert('Error', error.message);
+
+    const ids = ((mine as any[]) ?? []).map((m) => m.club_id);
+    setMyClubIds(ids);
+
+    // Tus clubes primero, luego por tamaño: el club al que perteneces es el que
+    // te importa, y entre los demás pesa más el que tiene comunidad.
+    const list = ((data as any as Club[]) ?? []).sort((a, b) => {
+      const mineA = ids.includes(a.id) ? 1 : 0;
+      const mineB = ids.includes(b.id) ? 1 : 0;
+      if (mineA !== mineB) return mineB - mineA;
+      return (b.club_members?.[0]?.count ?? 0) - (a.club_members?.[0]?.count ?? 0);
+    });
+    setClubs(list);
   }, [playerId]);
 
   useFocusEffect(
@@ -45,10 +58,8 @@ export default function ClubsScreen({ navigation }: any) {
 
   async function create() {
     const name = form.name.trim();
-    if (!name) {
-      Alert.alert('Falta el nombre', 'Ponle nombre al club.');
-      return;
-    }
+    if (!name) return Alert.alert('Falta el nombre', 'Ponle nombre al club.');
+
     setBusy(true);
     const { error } = await supabase.from('clubs').insert({
       name,
@@ -57,88 +68,125 @@ export default function ClubsScreen({ navigation }: any) {
       owner_player_id: playerId,
     });
     setBusy(false);
-    if (error) {
-      Alert.alert('Error', error.message);
-      return;
-    }
+    if (error) return Alert.alert('No se pudo fundar', error.message);
     setForm({ name: '', city: '', description: '' });
     setCreating(false);
     load();
   }
 
   return (
-    <Screen style={styles.container}>
+    <Screen padded={false}>
       <FlatList
-        style={{ flex: 1 }}
         data={clubs}
         keyExtractor={(c) => c.id}
         refreshing={loading}
         onRefresh={load}
-        contentContainerStyle={{ gap: 6, paddingBottom: 24 }}
+        contentContainerStyle={styles.list}
         ListHeaderComponent={
-          <View style={{ marginBottom: 16 }}>
-            <Text style={styles.title}>Clubes</Text>
-            <Text style={styles.meta}>El equipo con el que compites. Cualquiera puede fundar uno.</Text>
+          <View style={styles.header}>
+            <View style={styles.headRow}>
+              <Pressable onPress={() => navigation.goBack()} hitSlop={8}>
+                <Text style={styles.back}>‹</Text>
+              </Pressable>
+              <Text style={styles.title}>Clubes</Text>
+            </View>
+            <Text style={styles.sub}>El equipo con el que compites. Cualquiera puede fundar uno.</Text>
 
             {creating ? (
-              <View style={styles.form}>
-                <TextInput
-                  style={styles.input}
+              <Card style={{ gap: space.lg }}>
+                <Text style={type.label}>Fundar un club</Text>
+                <Field
+                  label="Nombre"
+                  placeholder="Dragones de Acero"
                   value={form.name}
                   onChangeText={(v) => setForm({ ...form, name: v })}
-                  placeholder="Nombre del club"
-                  placeholderTextColor="#8a8a8a"
                 />
-                <TextInput
-                  style={styles.input}
+                <Field
+                  label="Ciudad"
+                  placeholder="Monterrey"
                   value={form.city}
                   onChangeText={(v) => setForm({ ...form, city: v })}
-                  placeholder="Ciudad"
-                  placeholderTextColor="#8a8a8a"
                 />
-                <TextInput
-                  style={[styles.input, styles.textarea]}
+                <Field
+                  label="Descripción"
+                  placeholder="Club de ataque puro. Entrenamos los martes."
                   value={form.description}
                   onChangeText={(v) => setForm({ ...form, description: v })}
-                  placeholder="Descripción (opcional)"
-                  placeholderTextColor="#8a8a8a"
                   multiline
+                  style={styles.textarea}
                 />
-                <View style={styles.rowGap}>
-                  <Pressable style={styles.button} onPress={create} disabled={busy}>
-                    <Text style={styles.buttonText}>Fundar club</Text>
-                  </Pressable>
-                  <Pressable style={[styles.button, styles.secondaryButton]} onPress={() => setCreating(false)}>
-                    <Text style={styles.buttonText}>Cancelar</Text>
-                  </Pressable>
-                </View>
-              </View>
+                <Button label="FUNDAR CLUB" onPress={create} loading={busy} />
+                <Button label="Cancelar" variant="ghost" onPress={() => setCreating(false)} />
+              </Card>
             ) : (
-              <Pressable style={styles.button} onPress={() => setCreating(true)}>
-                <Text style={styles.buttonText}>Fundar un club</Text>
-              </Pressable>
+              <Button label="＋  FUNDAR UN CLUB" variant="ghost" onPress={() => setCreating(true)} />
             )}
           </View>
         }
-        renderItem={({ item }) => (
-          <Pressable style={styles.row} onPress={() => navigation.navigate('ClubDetail', { clubId: item.id })}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.name}>{item.name}</Text>
-              <Text style={styles.sub}>
-                {item.city ?? 'Sin ciudad'} · {item.club_members?.[0]?.count ?? 0} miembro
-                {(item.club_members?.[0]?.count ?? 0) === 1 ? '' : 's'}
-              </Text>
-            </View>
-            {myClubIds.includes(item.id) && <Text style={styles.badge}>Miembro</Text>}
-          </Pressable>
-        )}
+        renderItem={({ item, index }) => {
+          const count = item.club_members?.[0]?.count ?? 0;
+          const isMine = myClubIds.includes(item.id);
+          // Solo se destaca si es TU club: en una lista de clubes ajenos, el
+          // primero no es más importante que el resto.
+          const hero = index === 0 && isMine;
+
+          if (hero) {
+            return (
+              <Card
+                style={styles.hero}
+                onPress={() => navigation.navigate('ClubDetail', { clubId: item.id })}
+              >
+                <Text style={styles.heroTag}>TU CLUB</Text>
+                <View style={styles.heroTop}>
+                  <Hex size={62} color={colors.elite}>
+                    <Text style={{ fontSize: 24 }}>🛡️</Text>
+                  </Hex>
+                  <View style={{ flex: 1, gap: 3 }}>
+                    <Text style={styles.heroName} numberOfLines={1}>
+                      {item.name}
+                    </Text>
+                    <Text style={styles.meta}>
+                      {item.city ?? 'Sin ciudad'} · {count} miembro{count === 1 ? '' : 's'}
+                    </Text>
+                  </View>
+                </View>
+                {item.description ? (
+                  <Text style={styles.heroDesc} numberOfLines={2}>
+                    {item.description}
+                  </Text>
+                ) : null}
+                <Text style={styles.heroCta}>Ver el roster ›</Text>
+              </Card>
+            );
+          }
+
+          return (
+            <Card style={styles.row} onPress={() => navigation.navigate('ClubDetail', { clubId: item.id })}>
+              <Hex size={44} color={isMine ? colors.elite : colors.inkDim}>
+                <Text style={{ fontSize: 17 }}>🛡️</Text>
+              </Hex>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.name} numberOfLines={1}>
+                  {item.name}
+                </Text>
+                <Text style={styles.meta} numberOfLines={1}>
+                  {item.city ?? 'Sin ciudad'} · {count} miembro{count === 1 ? '' : 's'}
+                </Text>
+              </View>
+              {isMine ? <Pill label="Miembro" color={colors.elite} /> : <IconChevron />}
+            </Card>
+          );
+        }}
         ListEmptyComponent={
-          !loading ? <Text style={styles.empty}>Todavía no hay clubes. Funda el primero.</Text> : null
-        }
-        ListFooterComponent={
-          <Pressable style={styles.back} onPress={() => navigation.goBack()}>
-            <Text style={styles.backText}>‹ Volver</Text>
-          </Pressable>
+          !loading ? (
+            <Card style={styles.empty}>
+              <Hex size={54} color={colors.inkDim}>
+                <Text style={{ fontSize: 20 }}>🛡️</Text>
+              </Hex>
+              <Text style={styles.emptyTitle}>Todavía no hay clubes</Text>
+              <Text style={styles.meta}>Funda el primero y arma tu equipo.</Text>
+            </Card>
+          ) : null
         }
       />
     </Screen>
@@ -146,28 +194,25 @@ export default function ClubsScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: '#fff' },
-  title: { fontSize: 22, fontWeight: '700' },
-  meta: { color: '#6b6b64', fontSize: 12, marginTop: 6 },
-  form: { gap: 8, marginTop: 12 },
-  input: { color: '#1a1a20', borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12 },
+  list: { paddingHorizontal: space.xl, paddingBottom: space.xxxl, gap: space.sm },
+  header: { gap: space.md, paddingTop: space.md, marginBottom: space.sm },
+  headRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  back: { color: colors.ink, fontSize: 30, lineHeight: 32, width: 22 },
+  title: { ...type.title, fontSize: 20 },
+  sub: { ...type.soft, fontSize: 12.5 },
   textarea: { minHeight: 70, textAlignVertical: 'top' },
-  rowGap: { flexDirection: 'row', gap: 8 },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    paddingVertical: 12,
-  },
-  name: { fontSize: 15, fontWeight: '600' },
-  sub: { fontSize: 12, color: '#6b6b64', marginTop: 2 },
-  badge: { fontSize: 11, color: '#2f5ad6', fontWeight: '700' },
-  button: { backgroundColor: '#2f5ad6', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 12, flex: 1 },
-  secondaryButton: { backgroundColor: '#444' },
-  buttonText: { color: '#fff', fontWeight: '600' },
-  empty: { textAlign: 'center', color: '#6b6b64', marginTop: 40 },
-  back: { marginTop: 16 },
-  backText: { color: '#6b6b64' },
+
+  hero: { gap: space.md, borderColor: colors.elite },
+  heroTag: { fontSize: 9, fontWeight: '800', letterSpacing: 1, color: colors.elite },
+  heroTop: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  heroName: { ...type.display, fontSize: 20 },
+  heroDesc: { fontSize: 12.5, color: colors.inkSoft, lineHeight: 18 },
+  heroCta: { fontSize: 12, fontWeight: '800', color: colors.elite },
+
+  row: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  name: { fontSize: 14.5, fontWeight: '700', color: colors.ink },
+  meta: { fontSize: 11.5, color: colors.inkSoft, marginTop: 2 },
+
+  empty: { alignItems: 'center', gap: space.md, paddingVertical: space.xl },
+  emptyTitle: { fontSize: 15, fontWeight: '700', color: colors.ink },
 });

@@ -1,10 +1,15 @@
 import { useCallback, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Alert, ScrollView } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import Screen from '../components/Screen';
-import { eventLabel, formatWhen } from '../lib/eventTypes';
+import Screen from '../ui/Screen';
+import Button from '../ui/Button';
+import Avatar from '../ui/Avatar';
+import { Card, Hex, Pill, SectionTitle } from '../ui/primitives';
+import { IconCalendar, IconPin } from '../ui/icons';
+import { eventLabel } from '../lib/eventTypes';
+import { colors, space, type, radius, glow } from '../theme';
 
 type EventDetail = {
   id: string;
@@ -12,12 +17,22 @@ type EventDetail = {
   description: string | null;
   type: string;
   starts_at: string;
+  ends_at: string | null;
   created_by: string | null;
+  league_id: string | null;
   venues: { id: string; name: string; city: string | null; address: string | null } | null;
   leagues: { name: string } | null;
 };
 
-type Attendee = { player_id: string; players: { display_name: string; elo_rating: number } | null };
+type Attendee = {
+  player_id: string;
+  players: {
+    display_name: string;
+    elo_rating: number;
+    avatar_key: string | null;
+    avatar_url: string | null;
+  } | null;
+};
 
 export default function EventDetailScreen({ route, navigation }: any) {
   const { eventId } = route.params;
@@ -33,20 +48,17 @@ export default function EventDetailScreen({ route, navigation }: any) {
       supabase
         .from('events')
         .select(
-          'id, title, description, type, starts_at, created_by, venues(id, name, city, address), leagues(name)'
+          'id, title, description, type, starts_at, ends_at, created_by, league_id, venues(id, name, city, address), leagues(name)'
         )
         .eq('id', eventId)
         .single(),
       supabase
         .from('event_rsvps')
-        .select('player_id, players(display_name, elo_rating)')
+        .select('player_id, players(display_name, elo_rating, avatar_key, avatar_url)')
         .eq('event_id', eventId),
     ]);
     setLoading(false);
-    if (error) {
-      Alert.alert('Error', error.message);
-      return;
-    }
+    if (error) return Alert.alert('Error', error.message);
     setEvent(data as any);
     setAttendees((rsvps as any) ?? []);
   }, [eventId]);
@@ -57,132 +69,180 @@ export default function EventDetailScreen({ route, navigation }: any) {
     }, [load])
   );
 
-  const isGoing = attendees.some((a) => a.player_id === playerId);
-  const canDelete = event && (event.created_by === playerId || isAdmin);
+  if (loading || !event) {
+    return (
+      <Screen>
+        <View style={styles.center}>
+          <Text style={type.soft}>Cargando…</Text>
+        </View>
+      </Screen>
+    );
+  }
+
+  const going = attendees.some((a) => a.player_id === playerId);
+  const canDelete = event.created_by === playerId || isAdmin;
+  const official = !!event.league_id;
+  const start = new Date(event.starts_at);
 
   async function toggleRsvp() {
     setBusy(true);
-    const { error } = isGoing
+    const { error } = going
       ? await supabase.from('event_rsvps').delete().eq('event_id', eventId).eq('player_id', playerId)
       : await supabase.from('event_rsvps').insert({ event_id: eventId, player_id: playerId });
     setBusy(false);
-    if (error) {
-      Alert.alert('Error', error.message);
-      return;
-    }
+    if (error) return Alert.alert('Error', error.message);
     load();
   }
 
   function remove() {
-    Alert.alert('Cancelar evento', '¿Seguro que quieres borrarlo?', [
+    Alert.alert('Cancelar evento', '¿Seguro que quieres borrarlo? Los asistentes lo perderán de su lista.', [
       { text: 'No', style: 'cancel' },
       {
         text: 'Sí, borrar',
         style: 'destructive',
         onPress: async () => {
           const { error } = await supabase.from('events').delete().eq('id', eventId);
-          if (error) {
-            Alert.alert('Error', error.message);
-            return;
-          }
+          if (error) return Alert.alert('Error', error.message);
           navigation.goBack();
         },
       },
     ]);
   }
 
-  if (loading || !event) {
-    return (
-      <Screen style={styles.container}>
-        <Text>Cargando…</Text>
-      </Screen>
-    );
-  }
-
   return (
-    <Screen>
-      <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.title}>{event.title}</Text>
-        <Text style={styles.meta}>
-          {eventLabel(event.type)} · {formatWhen(event.starts_at)}
-        </Text>
-        {event.leagues ? <Text style={styles.meta}>Liga: {event.leagues.name}</Text> : (
-          <Text style={styles.openBadge}>Evento abierto</Text>
-        )}
-
-        {event.venues && (
-          <Pressable
-            style={styles.venueBox}
-            onPress={() => navigation.navigate('VenueDetail', { venueId: event.venues!.id })}
-          >
-            <Text style={styles.venueName}>{event.venues.name}</Text>
-            <Text style={styles.meta}>
-              {[event.venues.address, event.venues.city].filter(Boolean).join(', ') || 'Sin dirección'}
-            </Text>
-          </Pressable>
-        )}
-
-        {event.description ? <Text style={styles.description}>{event.description}</Text> : null}
-
-        <Pressable style={[styles.button, isGoing && styles.secondaryButton]} onPress={toggleRsvp} disabled={busy}>
-          <Text style={styles.buttonText}>{isGoing ? 'Ya no voy' : 'Voy a ir'}</Text>
+    <Screen scroll padded={false}>
+      <View style={styles.headRow}>
+        <Pressable onPress={() => navigation.goBack()} hitSlop={8}>
+          <Text style={styles.back}>‹</Text>
         </Pressable>
+      </View>
 
-        <Text style={styles.sectionTitle}>
-          Quién va ({attendees.length})
-        </Text>
-        {attendees.length === 0 ? (
-          <Text style={styles.empty}>Todavía nadie confirma. Sé el primero.</Text>
-        ) : (
-          attendees.map((a) => (
+      <View style={styles.pad}>
+        <View style={styles.hero}>
+          <Hex size={76} color={official ? colors.streak : colors.blue}>
+            <Text style={{ fontSize: 28 }}>{official ? '🏆' : '🌀'}</Text>
+          </Hex>
+          <Pill
+            label={official ? `Oficial · ${event.leagues?.name ?? 'Liga'}` : 'Evento abierto'}
+            color={official ? colors.streak : colors.win}
+            align="center"
+          />
+          <Text style={styles.title}>{event.title}</Text>
+          <Text style={styles.typeText}>{eventLabel(event.type)}</Text>
+        </View>
+
+        <Card style={{ gap: space.md }}>
+          <View style={styles.line}>
+            <IconCalendar size={17} color={colors.blue} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.lineMain}>
+                {start.toLocaleDateString('es-MX', {
+                  weekday: 'long',
+                  day: 'numeric',
+                  month: 'long',
+                })}
+              </Text>
+              <Text style={styles.lineSub}>
+                {start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                {event.ends_at
+                  ? ` – ${new Date(event.ends_at).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}`
+                  : ''}
+              </Text>
+            </View>
+          </View>
+
+          {event.venues && (
             <Pressable
-              key={a.player_id}
-              style={styles.row}
-              onPress={() => navigation.navigate('PlayerProfile', { playerId: a.player_id })}
+              style={styles.line}
+              onPress={() => navigation.navigate('VenueDetail', { venueId: event.venues!.id })}
             >
-              <Text style={styles.name}>{a.players?.display_name ?? '—'}</Text>
-              <Text style={styles.elo}>{Math.round(a.players?.elo_rating ?? 1000)}</Text>
+              <IconPin size={17} color={colors.blue} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.lineMain}>{event.venues.name}</Text>
+                <Text style={styles.lineSub}>
+                  {[event.venues.address, event.venues.city].filter(Boolean).join(', ') || 'Sin dirección'}
+                </Text>
+              </View>
+              <Text style={styles.linkSmall}>Ver ›</Text>
             </Pressable>
-          ))
-        )}
+          )}
+        </Card>
+
+        {event.description ? (
+          <Card style={{ marginTop: space.sm }}>
+            <Text style={styles.description}>{event.description}</Text>
+          </Card>
+        ) : null}
+
+        <View style={{ marginTop: space.lg }}>
+          <Button
+            label={going ? 'YA NO VOY' : 'VOY A IR'}
+            variant={going ? 'ghost' : 'primary'}
+            onPress={toggleRsvp}
+            loading={busy}
+          />
+        </View>
+
+        <View style={styles.block}>
+          <SectionTitle>{`Quién va (${attendees.length})`}</SectionTitle>
+          {attendees.length === 0 ? (
+            <Card>
+              <Text style={type.soft}>Todavía nadie confirma. Sé el primero.</Text>
+            </Card>
+          ) : (
+            <Card style={styles.attendeeGrid}>
+              {attendees.map((a) => (
+                <Pressable
+                  key={a.player_id}
+                  style={styles.attendee}
+                  onPress={() => navigation.navigate('PlayerProfile', { playerId: a.player_id })}
+                >
+                  <Avatar
+                    uri={a.players?.avatar_url}
+                    avatarKey={a.players?.avatar_key}
+                    size={46}
+                    ring={a.player_id === playerId ? colors.blue : undefined}
+                  />
+                  <Text style={styles.attendeeName} numberOfLines={1}>
+                    {a.player_id === playerId ? 'Tú' : a.players?.display_name ?? '—'}
+                  </Text>
+                </Pressable>
+              ))}
+            </Card>
+          )}
+        </View>
 
         {canDelete && (
-          <Pressable style={[styles.button, styles.dangerButton]} onPress={remove}>
-            <Text style={styles.buttonText}>Cancelar evento</Text>
-          </Pressable>
+          <View style={{ marginTop: space.xxl }}>
+            <Button label="Cancelar evento" variant="danger" onPress={remove} />
+          </View>
         )}
-
-        <Pressable style={styles.back} onPress={() => navigation.goBack()}>
-          <Text style={styles.backText}>‹ Volver a eventos</Text>
-        </Pressable>
-      </ScrollView>
+      </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, padding: 20, backgroundColor: '#fff' },
-  title: { fontSize: 22, fontWeight: '700' },
-  meta: { color: '#6b6b64', fontSize: 12, marginTop: 4 },
-  openBadge: { fontSize: 11, color: '#2f5ad6', fontWeight: '700', marginTop: 4 },
-  venueBox: { backgroundColor: '#f6f7fb', borderRadius: 8, padding: 12, marginTop: 12 },
-  venueName: { fontSize: 14, fontWeight: '600' },
-  description: { fontSize: 14, color: '#333', marginTop: 12, lineHeight: 20 },
-  sectionTitle: { fontSize: 16, fontWeight: '700', marginTop: 24, marginBottom: 8 },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    paddingVertical: 10,
-  },
-  name: { flex: 1, fontSize: 14, fontWeight: '600' },
-  elo: { fontWeight: '700', color: '#2f5ad6' },
-  button: { backgroundColor: '#2f5ad6', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 16 },
-  secondaryButton: { backgroundColor: '#444' },
-  dangerButton: { backgroundColor: '#b00020' },
-  buttonText: { color: '#fff', fontWeight: '600' },
-  empty: { color: '#6b6b64', fontSize: 12 },
-  back: { marginTop: 24 },
-  backText: { color: '#6b6b64' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  headRow: { paddingHorizontal: space.xl, paddingTop: space.md },
+  back: { color: colors.ink, fontSize: 30, lineHeight: 32, width: 22 },
+  pad: { paddingHorizontal: space.xl },
+
+  hero: { alignItems: 'center', gap: space.sm, paddingVertical: space.lg },
+  title: { ...type.display, fontSize: 24, textAlign: 'center', marginTop: 4 },
+  typeText: { fontSize: 12.5, color: colors.inkSoft },
+
+  line: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  lineMain: { fontSize: 13.5, fontWeight: '700', color: colors.ink, textTransform: 'capitalize' },
+  lineSub: { fontSize: 11.5, color: colors.inkSoft, marginTop: 2 },
+  linkSmall: { fontSize: 12, color: colors.blue, fontWeight: '700' },
+  description: { fontSize: 13.5, color: colors.ink, lineHeight: 20 },
+
+  block: { marginTop: space.xxl, gap: space.sm },
+  attendeeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.lg },
+  attendee: { alignItems: 'center', gap: 5, width: 62 },
+  attendeeName: { fontSize: 10.5, color: colors.inkSoft, textAlign: 'center' },
 });

@@ -2,18 +2,45 @@ import { useCallback, useState } from 'react';
 import { View, Text, FlatList, Pressable, StyleSheet, Alert } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
-import Screen from '../components/Screen';
-import { eventLabel, formatWhen } from '../lib/eventTypes';
+import Screen from '../ui/Screen';
+import Button from '../ui/Button';
+import { Card, Hex, Pill } from '../ui/primitives';
+import { IconChevron, IconCalendar, IconPin } from '../ui/icons';
+import { eventLabel } from '../lib/eventTypes';
+import { colors, space, type, radius, glow } from '../theme';
 
 type EventRow = {
   id: string;
   title: string;
+  description: string | null;
   type: string;
   starts_at: string;
   league_id: string | null;
   venues: { name: string; city: string | null } | null;
+  leagues: { name: string } | null;
   event_rsvps: { count: number }[];
 };
+
+// Cuánto falta, en palabras. "En 3 días" se entiende de inmediato; una fecha
+// hay que compararla mentalmente con hoy.
+function countdown(iso: string) {
+  const ms = new Date(iso).getTime() - Date.now();
+  if (ms < 0) return 'En curso';
+  const h = Math.floor(ms / 3600000);
+  if (h < 1) return `En ${Math.max(1, Math.floor(ms / 60000))} min`;
+  if (h < 24) return `En ${h} h`;
+  const d = Math.floor(h / 24);
+  return d === 1 ? 'Mañana' : `En ${d} días`;
+}
+
+function whenText(iso: string) {
+  const d = new Date(iso);
+  return (
+    d.toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' }) +
+    ' · ' +
+    d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  );
+}
 
 export default function EventsScreen({ navigation }: any) {
   const [events, setEvents] = useState<EventRow[]>([]);
@@ -21,19 +48,17 @@ export default function EventsScreen({ navigation }: any) {
 
   const load = useCallback(async () => {
     setLoading(true);
-    // Solo lo que viene: un evento pasado ya no sirve para descubrir dónde jugar.
-    // Se deja una hora de margen para que no desaparezca mientras está ocurriendo.
+    // Una hora de margen para que un evento no desaparezca mientras ocurre.
     const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
     const { data, error } = await supabase
       .from('events')
-      .select('id, title, type, starts_at, league_id, venues(name, city), event_rsvps(count)')
+      .select(
+        'id, title, description, type, starts_at, league_id, venues(name, city), leagues(name), event_rsvps(count)'
+      )
       .gte('starts_at', since)
       .order('starts_at', { ascending: true });
     setLoading(false);
-    if (error) {
-      Alert.alert('Error', error.message);
-      return;
-    }
+    if (error) return Alert.alert('Error', error.message);
     setEvents((data as any) ?? []);
   }, []);
 
@@ -44,53 +69,118 @@ export default function EventsScreen({ navigation }: any) {
   );
 
   return (
-    <Screen style={styles.container}>
+    <Screen padded={false}>
       <FlatList
-        style={{ flex: 1 }}
         data={events}
         keyExtractor={(e) => e.id}
         refreshing={loading}
         onRefresh={load}
-        contentContainerStyle={{ gap: 6, paddingBottom: 24 }}
+        contentContainerStyle={styles.list}
         ListHeaderComponent={
-          <View style={{ marginBottom: 16 }}>
-            <Text style={styles.title}>Eventos</Text>
-            <Text style={styles.meta}>Lo que viene en la escena. Toca uno para confirmar asistencia.</Text>
-            <Pressable style={styles.button} onPress={() => navigation.navigate('CreateEvent')}>
-              <Text style={styles.buttonText}>Crear evento</Text>
-            </Pressable>
+          <View style={styles.header}>
+            <View style={styles.headRow}>
+              <Pressable onPress={() => navigation.goBack()} hitSlop={8}>
+                <Text style={styles.back}>‹</Text>
+              </Pressable>
+              <Text style={styles.title}>Eventos</Text>
+            </View>
+            <Text style={styles.sub}>Lo que viene en la escena. Toca uno para confirmar asistencia.</Text>
+            <Button label="＋  CREAR EVENTO" variant="ghost" onPress={() => navigation.navigate('CreateEvent')} />
           </View>
         }
-        renderItem={({ item }) => {
+        renderItem={({ item, index }) => {
           const going = item.event_rsvps?.[0]?.count ?? 0;
+          const official = !!item.league_id;
+
+          // El próximo evento es el que importa: va en grande. Aquí el orden
+          // es cronológico, así que el primero sí es el más relevante.
+          if (index === 0) {
+            return (
+              <Card
+                style={[styles.hero, glow(colors.blue, 10)]}
+                onPress={() => navigation.navigate('EventDetail', { eventId: item.id })}
+              >
+                <View style={styles.heroTop}>
+                  <Pill label={countdown(item.starts_at)} color={colors.blue} />
+                  <Pill
+                    label={official ? 'Oficial' : 'Abierto'}
+                    color={official ? colors.streak : colors.win}
+                  />
+                </View>
+
+                <Text style={styles.heroTitle} numberOfLines={2}>
+                  {item.title}
+                </Text>
+                <Text style={styles.heroType}>{eventLabel(item.type)}</Text>
+
+                {item.description ? (
+                  <Text style={styles.heroDesc} numberOfLines={2}>
+                    {item.description}
+                  </Text>
+                ) : null}
+
+                <View style={styles.heroLines}>
+                  <View style={styles.line}>
+                    <IconCalendar size={15} color={colors.inkSoft} />
+                    <Text style={styles.lineText}>{whenText(item.starts_at)}</Text>
+                  </View>
+                  {item.venues ? (
+                    <View style={styles.line}>
+                      <IconPin size={15} color={colors.inkSoft} />
+                      <Text style={styles.lineText} numberOfLines={1}>
+                        {item.venues.name}
+                        {item.venues.city ? ` · ${item.venues.city}` : ''}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+
+                <View style={styles.heroFoot}>
+                  <Text style={styles.goingBig}>
+                    {going} <Text style={styles.goingLabel}>van a ir</Text>
+                  </Text>
+                  <Text style={styles.heroCta}>Ver detalle ›</Text>
+                </View>
+              </Card>
+            );
+          }
+
           return (
-            <Pressable style={styles.row} onPress={() => navigation.navigate('EventDetail', { eventId: item.id })}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.name}>{item.title}</Text>
-                <Text style={styles.sub}>
-                  {eventLabel(item.type)} · {formatWhen(item.starts_at)}
+            <Card style={styles.row} onPress={() => navigation.navigate('EventDetail', { eventId: item.id })}>
+              <Hex size={46} color={official ? colors.streak : colors.blue}>
+                <Text style={{ fontSize: 16 }}>{official ? '🏆' : '🌀'}</Text>
+              </Hex>
+              <View style={{ flex: 1, gap: 3 }}>
+                <Text style={styles.name} numberOfLines={1}>
+                  {item.title}
+                </Text>
+                <Text style={styles.meta} numberOfLines={1}>
+                  {eventLabel(item.type)} · {whenText(item.starts_at)}
                 </Text>
                 {item.venues ? (
-                  <Text style={styles.sub}>
+                  <Text style={styles.metaDim} numberOfLines={1}>
                     {item.venues.name}
-                    {item.venues.city ? ` · ${item.venues.city}` : ''}
                   </Text>
                 ) : null}
               </View>
               <View style={styles.goingBox}>
-                <Text style={styles.goingCount}>{going}</Text>
-                <Text style={styles.goingLabel}>van</Text>
+                <Text style={styles.going}>{going}</Text>
+                <Text style={styles.goingSmall}>van</Text>
               </View>
-            </Pressable>
+              <IconChevron />
+            </Card>
           );
         }}
         ListEmptyComponent={
-          !loading ? <Text style={styles.empty}>No hay eventos próximos. Crea el primero.</Text> : null
-        }
-        ListFooterComponent={
-          <Pressable style={styles.back} onPress={() => navigation.goBack()}>
-            <Text style={styles.backText}>‹ Volver</Text>
-          </Pressable>
+          !loading ? (
+            <Card style={styles.empty}>
+              <Hex size={54} color={colors.inkDim}>
+                <IconCalendar size={20} color={colors.inkDim} />
+              </Hex>
+              <Text style={styles.emptyTitle}>No hay eventos próximos</Text>
+              <Text style={styles.meta}>Crea el primero y avísale a la comunidad.</Text>
+            </Card>
+          ) : null
         }
       />
     </Screen>
@@ -98,25 +188,42 @@ export default function EventsScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: '#fff' },
-  title: { fontSize: 22, fontWeight: '700' },
-  meta: { color: '#6b6b64', fontSize: 12, marginTop: 6 },
-  row: {
+  list: { paddingHorizontal: space.xl, paddingBottom: space.xxxl, gap: space.sm },
+  header: { gap: space.md, paddingTop: space.md, marginBottom: space.sm },
+  headRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  back: { color: colors.ink, fontSize: 30, lineHeight: 32, width: 22 },
+  title: { ...type.title, fontSize: 20 },
+  sub: { ...type.soft, fontSize: 12.5 },
+
+  hero: { gap: space.sm, borderColor: colors.blue },
+  heroTop: { flexDirection: 'row', gap: space.sm },
+  heroTitle: { ...type.display, fontSize: 21, marginTop: 4 },
+  heroType: { fontSize: 11.5, color: colors.blue, fontWeight: '700' },
+  heroDesc: { fontSize: 12.5, color: colors.inkSoft, lineHeight: 18, marginTop: 2 },
+  heroLines: { gap: 6, marginTop: space.sm },
+  line: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  lineText: { fontSize: 12.5, color: colors.inkSoft, flex: 1 },
+  heroFoot: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    paddingVertical: 12,
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
+    paddingTop: space.md,
+    marginTop: space.sm,
   },
-  name: { fontSize: 15, fontWeight: '600' },
-  sub: { fontSize: 12, color: '#6b6b64', marginTop: 2 },
-  goingBox: { alignItems: 'center', minWidth: 40 },
-  goingCount: { fontSize: 18, fontWeight: '700', color: '#2f5ad6' },
-  goingLabel: { fontSize: 10, color: '#6b6b64' },
-  button: { backgroundColor: '#2f5ad6', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 12 },
-  buttonText: { color: '#fff', fontWeight: '600' },
-  empty: { textAlign: 'center', color: '#6b6b64', marginTop: 40 },
-  back: { marginTop: 16 },
-  backText: { color: '#6b6b64' },
+  goingBig: { fontSize: 18, fontWeight: '800', color: colors.ink },
+  goingLabel: { fontSize: 11.5, fontWeight: '400', color: colors.inkSoft },
+  heroCta: { fontSize: 12, fontWeight: '800', color: colors.blue },
+
+  row: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  name: { fontSize: 14.5, fontWeight: '700', color: colors.ink },
+  meta: { fontSize: 11.5, color: colors.inkSoft },
+  metaDim: { fontSize: 11, color: colors.inkDim },
+  goingBox: { alignItems: 'center', minWidth: 32 },
+  going: { fontSize: 16, fontWeight: '800', color: colors.blue },
+  goingSmall: { fontSize: 9, color: colors.inkDim },
+
+  empty: { alignItems: 'center', gap: space.md, paddingVertical: space.xl },
+  emptyTitle: { fontSize: 15, fontWeight: '700', color: colors.ink },
 });

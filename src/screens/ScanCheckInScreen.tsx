@@ -106,7 +106,7 @@ export default function ScanCheckInScreen({ navigation }: any) {
         onBarcodeScanned={scanned ? undefined : ({ data }) => handleScan(data)}
       />
 
-      <View style={styles.frame} pointerEvents="none">
+      <View style={[StyleSheet.absoluteFill, styles.frame]} pointerEvents="none">
         <Reticle />
       </View>
 
@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
   help: { ...type.soft, fontSize: 13, textAlign: 'center', lineHeight: 19 },
   cancel: { color: colors.inkSoft, fontSize: 13 },
 
-  frame: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  frame: { alignItems: 'center', justifyContent: 'center' },
   top: {
     position: 'absolute',
     top: 60,

@@ -1,9 +1,13 @@
 import { useCallback, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Alert, ScrollView } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import Screen from '../components/Screen';
+import Screen from '../ui/Screen';
+import Button from '../ui/Button';
+import Avatar from '../ui/Avatar';
+import { Card, Hex, Pill, SectionTitle } from '../ui/primitives';
+import { colors, space, type } from '../theme';
 
 type Club = {
   id: string;
@@ -13,7 +17,16 @@ type Club = {
   owner_player_id: string | null;
 };
 
-type Member = { player_id: string; players: { display_name: string; elo_rating: number } | null };
+type Member = {
+  player_id: string;
+  players: {
+    display_name: string;
+    elo_rating: number;
+    matches_played: number;
+    avatar_key: string | null;
+    avatar_url: string | null;
+  } | null;
+};
 
 export default function ClubDetailScreen({ route, navigation }: any) {
   const { clubId } = route.params;
@@ -27,19 +40,20 @@ export default function ClubDetailScreen({ route, navigation }: any) {
     setLoading(true);
     const [{ data, error }, { data: roster }] = await Promise.all([
       supabase.from('clubs').select('id, name, city, description, owner_player_id').eq('id', clubId).single(),
-      supabase.from('club_members').select('player_id, players(display_name, elo_rating)').eq('club_id', clubId),
+      supabase
+        .from('club_members')
+        .select('player_id, players(display_name, elo_rating, matches_played, avatar_key, avatar_url)')
+        .eq('club_id', clubId),
     ]);
     setLoading(false);
-    if (error) {
-      Alert.alert('Error', error.message);
-      return;
-    }
+    if (error) return Alert.alert('Error', error.message);
     setClub(data as any);
     // El roster se ordena por ELO: es el ranking interno del club.
-    const sorted = ((roster as any as Member[]) ?? []).sort(
-      (a, b) => (b.players?.elo_rating ?? 0) - (a.players?.elo_rating ?? 0)
+    setMembers(
+      ((roster as any as Member[]) ?? []).sort(
+        (a, b) => (b.players?.elo_rating ?? 0) - (a.players?.elo_rating ?? 0)
+      )
     );
-    setMembers(sorted);
   }, [clubId]);
 
   useFocusEffect(
@@ -48,10 +62,25 @@ export default function ClubDetailScreen({ route, navigation }: any) {
     }, [load])
   );
 
-  const isMember = members.some((m) => m.player_id === playerId);
-  const isOwner = club?.owner_player_id === playerId;
+  if (loading || !club) {
+    return (
+      <Screen>
+        <View style={styles.center}>
+          <Text style={type.soft}>Cargando…</Text>
+        </View>
+      </Screen>
+    );
+  }
 
-  async function toggleMembership() {
+  const isMember = members.some((m) => m.player_id === playerId);
+  const isOwner = club.owner_player_id === playerId;
+  const avgElo =
+    members.length > 0
+      ? Math.round(members.reduce((s, m) => s + (m.players?.elo_rating ?? 1000), 0) / members.length)
+      : 1000;
+  const totalMatches = members.reduce((s, m) => s + (m.players?.matches_played ?? 0), 0);
+
+  async function toggle() {
     if (isOwner) {
       Alert.alert('Eres el fundador', 'Para salir tendrías que borrar el club o pasarlo a otra persona.');
       return;
@@ -61,10 +90,7 @@ export default function ClubDetailScreen({ route, navigation }: any) {
       ? await supabase.from('club_members').delete().eq('club_id', clubId).eq('player_id', playerId)
       : await supabase.from('club_members').insert({ club_id: clubId, player_id: playerId });
     setBusy(false);
-    if (error) {
-      Alert.alert('Error', error.message);
-      return;
-    }
+    if (error) return Alert.alert('Error', error.message);
     load();
   }
 
@@ -76,109 +102,128 @@ export default function ClubDetailScreen({ route, navigation }: any) {
         style: 'destructive',
         onPress: async () => {
           const { error } = await supabase.from('clubs').delete().eq('id', clubId);
-          if (error) {
-            Alert.alert('Error', error.message);
-            return;
-          }
+          if (error) return Alert.alert('Error', error.message);
           navigation.goBack();
         },
       },
     ]);
   }
 
-  if (loading || !club) {
-    return (
-      <Screen style={styles.container}>
-        <Text>Cargando…</Text>
-      </Screen>
-    );
-  }
-
-  const avgElo =
-    members.length > 0
-      ? Math.round(members.reduce((sum, m) => sum + (m.players?.elo_rating ?? 1000), 0) / members.length)
-      : 1000;
-
   return (
-    <Screen>
-      <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.title}>{club.name}</Text>
-        <Text style={styles.meta}>{club.city ?? 'Sin ciudad'}</Text>
-        {club.description ? <Text style={styles.description}>{club.description}</Text> : null}
+    <Screen scroll padded={false}>
+      <View style={styles.headRow}>
+        <Pressable onPress={() => navigation.goBack()} hitSlop={8}>
+          <Text style={styles.back}>‹</Text>
+        </Pressable>
+      </View>
 
-        <View style={styles.statsRow}>
-          <View style={styles.stat}>
-            <Text style={styles.statValue}>{members.length}</Text>
-            <Text style={styles.statLabel}>Miembros</Text>
-          </View>
-          <View style={styles.stat}>
-            <Text style={styles.statValue}>{avgElo}</Text>
-            <Text style={styles.statLabel}>ELO promedio</Text>
-          </View>
+      <View style={styles.pad}>
+        <View style={styles.hero}>
+          <Hex size={84} color={colors.elite}>
+            <Text style={{ fontSize: 32 }}>🛡️</Text>
+          </Hex>
+          <Text style={styles.title}>{club.name}</Text>
+          <Text style={styles.city}>{club.city ?? 'Sin ciudad'}</Text>
+          {isMember && <Pill label="Eres miembro" color={colors.elite} align="center" />}
         </View>
 
-        <Pressable
-          style={[styles.button, isMember && styles.secondaryButton]}
-          onPress={toggleMembership}
-          disabled={busy}
-        >
-          <Text style={styles.buttonText}>{isMember ? 'Salir del club' : 'Unirme al club'}</Text>
-        </Pressable>
+        {club.description ? (
+          <Card>
+            <Text style={styles.description}>{club.description}</Text>
+          </Card>
+        ) : null}
 
-        <Text style={styles.sectionTitle}>Roster</Text>
-        {members.map((m, i) => (
-          <Pressable
-            key={m.player_id}
-            style={styles.row}
-            onPress={() => navigation.navigate('PlayerProfile', { playerId: m.player_id })}
-          >
-            <Text style={styles.rank}>#{i + 1}</Text>
-            <Text style={styles.name}>{m.players?.display_name ?? '—'}</Text>
-            {m.player_id === club.owner_player_id && <Text style={styles.ownerBadge}>Fundador</Text>}
-            <Text style={styles.elo}>{Math.round(m.players?.elo_rating ?? 1000)}</Text>
-          </Pressable>
-        ))}
+        <Card style={styles.stats}>
+          <Stat label="Miembros" value={String(members.length)} />
+          <View style={styles.vDiv} />
+          <Stat label="ELO promedio" value={String(avgElo)} tint={colors.elite} />
+          <View style={styles.vDiv} />
+          <Stat label="Batallas" value={String(totalMatches)} />
+        </Card>
+
+        <View style={{ marginTop: space.lg }}>
+          <Button
+            label={isMember ? 'SALIR DEL CLUB' : 'UNIRME AL CLUB'}
+            variant={isMember ? 'ghost' : 'primary'}
+            onPress={toggle}
+            loading={busy}
+          />
+        </View>
+
+        <View style={styles.block}>
+          <SectionTitle>Roster</SectionTitle>
+          <Text style={styles.note}>Ordenado por ELO — es el ranking interno del club.</Text>
+
+          {members.map((m, i) => {
+            const me = m.player_id === playerId;
+            const owner = m.player_id === club.owner_player_id;
+            return (
+              <Card
+                key={m.player_id}
+                style={[styles.row, me && { borderColor: colors.blue }]}
+                onPress={() => navigation.navigate('PlayerProfile', { playerId: m.player_id })}
+              >
+                <Text style={styles.pos}>{i + 1}</Text>
+                <Avatar
+                  uri={m.players?.avatar_url}
+                  avatarKey={m.players?.avatar_key}
+                  size={42}
+                  ring={owner ? colors.elite : undefined}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.name} numberOfLines={1}>
+                    {me ? 'Tú' : m.players?.display_name ?? '—'}
+                  </Text>
+                  <Text style={styles.meta}>{m.players?.matches_played ?? 0} batallas</Text>
+                </View>
+                {owner && <Pill label="Fundador" color={colors.elite} />}
+                <Text style={styles.elo}>{Math.round(m.players?.elo_rating ?? 1000)}</Text>
+              </Card>
+            );
+          })}
+        </View>
 
         {(isOwner || isAdmin) && (
-          <Pressable style={[styles.button, styles.dangerButton]} onPress={remove}>
-            <Text style={styles.buttonText}>Borrar club</Text>
-          </Pressable>
+          <View style={{ marginTop: space.xxl }}>
+            <Button label="Borrar club" variant="danger" onPress={remove} />
+          </View>
         )}
-
-        <Pressable style={styles.back} onPress={() => navigation.goBack()}>
-          <Text style={styles.backText}>‹ Volver a clubes</Text>
-        </Pressable>
-      </ScrollView>
+      </View>
     </Screen>
   );
 }
 
+function Stat({ label, value, tint }: { label: string; value: string; tint?: string }) {
+  return (
+    <View style={styles.stat}>
+      <Text style={styles.statLabel}>{label.toUpperCase()}</Text>
+      <Text style={[styles.statVal, tint ? { color: tint } : null]}>{value}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, padding: 20, backgroundColor: '#fff' },
-  title: { fontSize: 22, fontWeight: '700' },
-  meta: { color: '#6b6b64', fontSize: 12, marginTop: 4 },
-  description: { fontSize: 14, color: '#333', marginTop: 12, lineHeight: 20 },
-  statsRow: { flexDirection: 'row', gap: 32, marginVertical: 16, justifyContent: 'center' },
-  stat: { alignItems: 'center' },
-  statValue: { fontSize: 20, fontWeight: '700' },
-  statLabel: { fontSize: 11, color: '#6b6b64' },
-  sectionTitle: { fontSize: 16, fontWeight: '700', marginTop: 24, marginBottom: 8 },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    paddingVertical: 10,
-  },
-  rank: { width: 32, fontWeight: '700', color: '#6b6b64' },
-  name: { flex: 1, fontSize: 14, fontWeight: '600' },
-  ownerBadge: { fontSize: 10, color: '#2f5ad6', fontWeight: '700' },
-  elo: { fontWeight: '700', color: '#2f5ad6' },
-  button: { backgroundColor: '#2f5ad6', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 16 },
-  secondaryButton: { backgroundColor: '#444' },
-  dangerButton: { backgroundColor: '#b00020' },
-  buttonText: { color: '#fff', fontWeight: '600' },
-  back: { marginTop: 24 },
-  backText: { color: '#6b6b64' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  headRow: { paddingHorizontal: space.xl, paddingTop: space.md },
+  back: { color: colors.ink, fontSize: 30, lineHeight: 32, width: 22 },
+  pad: { paddingHorizontal: space.xl },
+
+  hero: { alignItems: 'center', gap: space.sm, paddingVertical: space.lg },
+  title: { ...type.display, fontSize: 24, textAlign: 'center' },
+  city: { fontSize: 12.5, color: colors.inkSoft },
+  description: { fontSize: 13.5, color: colors.ink, lineHeight: 20 },
+
+  stats: { flexDirection: 'row', alignItems: 'center', marginTop: space.sm },
+  stat: { flex: 1, alignItems: 'center', gap: 2 },
+  statLabel: { fontSize: 8.5, fontWeight: '800', letterSpacing: 0.8, color: colors.inkDim },
+  statVal: { fontSize: 17, fontWeight: '800', color: colors.ink },
+  vDiv: { width: 1, height: 28, backgroundColor: colors.line },
+
+  block: { marginTop: space.xxl, gap: space.sm },
+  note: { fontSize: 11.5, color: colors.inkDim },
+  row: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  pos: { width: 20, fontSize: 13, fontWeight: '800', color: colors.inkDim, textAlign: 'center' },
+  name: { fontSize: 14, fontWeight: '700', color: colors.ink },
+  meta: { fontSize: 11, color: colors.inkSoft, marginTop: 2 },
+  elo: { fontSize: 14.5, fontWeight: '800', color: colors.elite },
 });

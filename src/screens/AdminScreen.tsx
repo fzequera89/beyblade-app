@@ -90,7 +90,10 @@ export default function AdminScreen({ navigation }: any) {
             glyph="🏅"
             title="Ligas"
             sub="Crear ligas y nombrar moderadores"
-            onPress={() => navigation.navigate('Leagues')}
+            // Las ligas viven en la pestaña Batallas, no en Perfil. Hay que
+            // saltar de pestaña: un navigate('Leagues') a secas no encuentra
+            // la ruta dentro de esta pila y el toque no hace nada.
+            onPress={() => navigation.navigate('Batallas', { screen: 'Leagues' })}
           />
           <Link
             glyph="📊"

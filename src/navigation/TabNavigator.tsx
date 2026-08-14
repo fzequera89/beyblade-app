@@ -69,7 +69,11 @@ function Inicio() {
       <InicioStack.Screen name="Bracket" component={BracketScreen} />
       <InicioStack.Screen name="Challenges" component={ChallengesScreen} />
       <InicioStack.Screen name="Venues" component={VenuesScreen} />
+      <InicioStack.Screen name="CreateVenue" component={CreateVenueScreen} />
       <InicioStack.Screen name="VenueDetail" component={VenueDetailScreen} />
+      <InicioStack.Screen name="ScanCheckIn" component={ScanCheckInScreen} />
+      <InicioStack.Screen name="ClubDetail" component={ClubDetailScreen} />
+      <InicioStack.Screen name="LeagueStandings" component={LeagueStandingsScreen} />
     </InicioStack.Navigator>
   );
 }
@@ -93,6 +97,7 @@ function Batallas() {
       <BatallasStack.Screen name="Tournaments" component={TournamentsScreen} />
       <BatallasStack.Screen name="TournamentDetail" component={TournamentDetailScreen} />
       <BatallasStack.Screen name="Bracket" component={BracketScreen} />
+      <BatallasStack.Screen name="ClubDetail" component={ClubDetailScreen} />
     </BatallasStack.Navigator>
   );
 }
@@ -115,6 +120,7 @@ function Play() {
       <PlayStack.Screen name="EventDetail" component={EventDetailScreen} />
       <PlayStack.Screen name="Clubs" component={ClubsScreen} />
       <PlayStack.Screen name="ClubDetail" component={ClubDetailScreen} />
+      <PlayStack.Screen name="LeagueStandings" component={LeagueStandingsScreen} />
     </PlayStack.Navigator>
   );
 }
@@ -129,6 +135,7 @@ function Rankings() {
       <RankingsStack.Screen name="LeagueStandings" component={LeagueStandingsScreen} />
       <RankingsStack.Screen name="PlayerProfile" component={PlayerProfileScreen} />
       <RankingsStack.Screen name="Passport" component={PassportScreen} />
+      <RankingsStack.Screen name="ClubDetail" component={ClubDetailScreen} />
     </RankingsStack.Navigator>
   );
 }
@@ -151,6 +158,7 @@ function Perfil() {
       <PerfilStack.Screen name="Admin" component={AdminScreen} />
       <PerfilStack.Screen name="AdminPlayers" component={AdminPlayersScreen} />
       <PerfilStack.Screen name="AdminGlobalRanking" component={AdminGlobalRankingScreen} />
+      <PerfilStack.Screen name="LeagueStandings" component={LeagueStandingsScreen} />
     </PerfilStack.Navigator>
   );
 }

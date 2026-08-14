@@ -43,7 +43,33 @@ export const FINISH_TYPES = [
 export type FinishCode = (typeof FINISH_TYPES)[number]['code'];
 export type MatchMode = 'ranking' | 'casual';
 
-// Un color por finish, compartido entre el ranking y las estadísticas. Si cada
+// Resultados de ronda SIN contacto válido (reglamento, "Puntuación SIN contacto
+// válido"). No son finishes: no hubo combate. Valen en las dos modalidades.
+export const NO_CONTACT_OUTCOMES = [
+  {
+    code: 'launch_fail',
+    label: 'Falla de lanzamiento',
+    points: 1,
+    // El rival salió o se detuvo sin tocarte por 2ª vez seguida (o su Bey se
+    // auto-expulsó sin contacto siendo reincidente): +1 para ti.
+    description: 'El rival falló el lanzamiento otra vez: +1 para ti',
+    awardsWinner: true,
+  },
+  {
+    code: 'void',
+    label: 'Empate / lanzamiento nulo',
+    points: 0,
+    // Ambos se detienen o salen a la vez, o el 1er lanzamiento sin contacto.
+    description: 'Nadie puntúa: la ronda se repite',
+    awardsWinner: false,
+  },
+] as const;
+
+export type OutcomeCode = FinishCode | (typeof NO_CONTACT_OUTCOMES)[number]['code'];
+
+const ALL_OUTCOMES = [...FINISH_TYPES, ...NO_CONTACT_OUTCOMES];
+
+// Un color por resultado, compartido entre el ranking y las estadísticas. Si cada
 // pantalla eligiera el suyo, el mismo dato se leería distinto en cada lugar.
 export const FINISH_COLORS: Record<string, string> = {
   spin: '#5BA8FF',
@@ -51,6 +77,8 @@ export const FINISH_COLORS: Record<string, string> = {
   burst: '#F5A524',
   xtreme: '#9B6BFF',
   aerial: '#FF7AC8',
+  launch_fail: '#8A97AC',
+  void: '#556076',
 };
 
 export function finishesFor(mode: MatchMode) {
@@ -58,9 +86,9 @@ export function finishesFor(mode: MatchMode) {
 }
 
 export function finishLabel(code: string | null): string {
-  return FINISH_TYPES.find((f) => f.code === code)?.label ?? '—';
+  return ALL_OUTCOMES.find((f) => f.code === code)?.label ?? '—';
 }
 
 export function finishPoints(code: string | null): number {
-  return FINISH_TYPES.find((f) => f.code === code)?.points ?? 0;
+  return ALL_OUTCOMES.find((f) => f.code === code)?.points ?? 0;
 }

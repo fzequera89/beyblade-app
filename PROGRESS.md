@@ -108,7 +108,8 @@ Lo que quedó:
 
 ## Pendientes conocidos
 
-- **✅ Las migraciones 0001–0027 ya corrieron en Supabase** (verificado el 2026-08-14: `tournaments.mode` responde y filtra por `casual` → 0026; `accept_challenge` contiene la lógica `casual` → 0027; `judge_assignments` y `arbitrable_match_ids` existen → 0024/0025; `penalty_codes`/`penalties` → 0022; las funciones internas devuelven 42501 → 0023 sigue firme; `photo_url`/bucket `venues` → 0021; y todas las tablas rechazan lectura anónima). El esquema está completo y al día con el repo. La 0027 se corrió vía Management API (`/database/query`); las anteriores, a mano en el SQL Editor.
+- **✅ Las migraciones 0001–0027 ya corrieron en Supabase** (verificado el 2026-08-14: `tournaments.mode` responde y filtra por `casual` → 0026; `accept_challenge` contiene la lógica `casual` → 0027; `judge_assignments` y `arbitrable_match_ids` existen → 0024/0025; `penalty_codes`/`penalties` → 0022; las funciones internas devuelven 42501 → 0023 sigue firme; `photo_url`/bucket `venues` → 0021; y todas las tablas rechazan lectura anónima). El esquema hasta 0027 está al día con el repo. La 0027 se corrió vía Management API (`/database/query`); las anteriores, a mano en el SQL Editor.
+- **⬜ 0028 (reglas de ronda) — CONSTRUIDA, SIN CORRER.** Agrega los resultados de ronda `launch_fail` (1 punto por falla de lanzamiento) y `void` (empate / lanzamiento nulo, se repite) a `finish_points` y `report_match_result`. Ver sección "0028" abajo.
 - **Build de EAS pendiente de generar** desde la sub-etapa 1.1 (fix de placeholders) — el usuario pidió explícitamente esperar y acumular cambios de varias fases antes de generar el próximo build real, para no gastar builds en cada cambio chico.
 - Configurar el cliente OAuth de Google en Supabase (para que el botón "Continuar con Google" funcione en producción).
 - Cambiar `is_admin` del correo de prueba de Farid al correo real del cliente cuando se decida.
@@ -131,7 +132,7 @@ Medido el 2026-08-14 cruzando `Reglamento DML Beyblade actualizado pro.docx` con
 | Arbitraje | 12 | Rol de juez (Principal / Apoyo), resolución de disputa, un Challenger/Diamante nunca arbitra su categoría |
 | Penalizaciones | 12 | Tabla leves/graves/críticas; 2 leves iguales = 1 punto al rival, graves = pierde el combate, críticas = expulsión |
 | Temporadas | 10 | Reseteo a los 3 meses, torneo inicial G3, asistencia (sin ella no hay eliminación por inasistencia ni reingreso) |
-| Reglas de ronda | 8 | Lanzamiento nulo (advertencia → 1 punto al rival), empate = repetir ronda, self-over sin contacto |
+| ~~Reglas de ronda~~ ✅ 0028 | 8 | ~~Lanzamiento nulo (advertencia → 1 punto al rival), empate = repetir ronda, self-over sin contacto~~ — hecho en 0028 |
 | Sueltos | 8 | Elegir modalidad casual, torneos a 5/7/10, temática por votación, premios, checklist de desgaste |
 
 **Tres hallazgos verificados en el código, importantes:**
@@ -185,7 +186,7 @@ funciones que la app sí usa siguen respondiendo igual.
 **Regla para lo que venga:** toda función nueva necesita su `grant execute ...
 to authenticated` explícito, o la app no la va a poder llamar.
 
-**Lo que sigue de este bloque:** faltan las reglas de ronda — lanzamiento nulo, empate y self-over (8x) — y las notificaciones push. La doble marca ya está hecha, ver abajo.
+**Lo que sigue de este bloque:** las reglas de ronda ya están hechas (0028, ver abajo); falta solo las notificaciones push. La doble marca ya está hecha, ver abajo.
 
 ### ✅ 0024 — doble marca a ciegas y bandeja del juez filtrada (2026-08-14)
 
@@ -333,11 +334,44 @@ reto se registra entero (incluido `matches_played`) pero deja el rating quieto,
 y de paso admite Aerial. Es la misma función de 0013 con ese único cambio. No
 toca la UI: `MatchDetailScreen` ya lee `match.mode` y se adapta solo.
 
+### ⬜ 0028 — reglas de ronda: puntuación SIN contacto válido (construida, SIN CORRER)
+
+El reglamento (sección "Puntuación") dice que no toda salida da puntos: hace
+falta **contacto válido** (ambos Beys tocaron el suelo y hubo colisión). Sin él:
+lanzamiento nulo → advertencia y se repite; 2ª falla consecutiva → 1 punto al
+rival; self-over/xtreme sin tocar al rival → NO valen 2/3, se tratan como error
+de lanzamiento; empate → se repite la ronda.
+
+El modelo anterior no podía representar nada de esto: toda ronda era un finish
+con ganador y 1-3 puntos. Se agregan **dos resultados de ronda** en
+`match_rounds.finish_type` (la columna `winner_id` ya era nullable desde 0001,
+no cambia el esquema):
+
+- **`launch_fail`** → 1 punto al jugador anotado (el rival del que falló). Cubre
+  la 2ª falla consecutiva y el self-over reincidente.
+- **`void`** → 0 puntos, sin ganador; la ronda se repite. Cubre el empate y el
+  1er lanzamiento nulo. Se guarda como constancia; no cuenta para el objetivo.
+
+`finish_points` y `report_match_result` (migración 0028) los reconocen; una ronda
+`void` se inserta sin ganador y no suma. En la UI (`MatchDetailScreen`) hay una
+sección nueva "Sin contacto válido" con los dos resultados, y el picker de
+ganador se desactiva cuando eliges empate. `finishTypes.ts` expone
+`NO_CONTACT_OUTCOMES` y un tipo `OutcomeCode`.
+
+**Decisión de alcance:** la app registra el resultado (void o punto), NO lleva el
+conteo de reincidencia "1ª vs 2ª falla" — eso lo decide el juez/los jugadores en
+la mesa, igual que el resto del reporte round a round. Y las advertencias/empates
+que se repiten se pueden registrar (`void`) o simplemente no anotarse; la ronda
+que resuelve es la que cuenta.
+
+**Sin probar con datos reales.** Verificado: typecheck limpio con el código de
+salida real, el bundle compila (756 módulos) y la app monta sin errores de consola.
+
 ## Cómo retomar el proyecto (checklist para una sesión nueva)
 
 1. `git clone` / `git pull` del repo.
 2. Copiar `.env.example` a `.env` y llenar `EXPO_PUBLIC_SUPABASE_URL` y `EXPO_PUBLIC_SUPABASE_ANON_KEY` (Supabase → Settings → API del proyecto "CML Beyblade").
-3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-14 las 0001–0027 están corridas** — si se agrega una nueva, actualizar esta línea.
+3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-14 las 0001–0027 están corridas; la 0028 (reglas de ronda) está SIN CORRER** — si se agrega una nueva, actualizar esta línea.
 4. `npm install`, luego `npm run web` para verificar rápido en el preview del navegador (no requiere emulador Android).
 5. Para un build real: `npx eas-cli build --platform android --profile preview --non-interactive` (requiere `eas login` ya hecho en la máquina).
 

@@ -13,7 +13,8 @@ import {
   finishesFor,
   finishLabel,
   finishPoints,
-  FinishCode,
+  NO_CONTACT_OUTCOMES,
+  OutcomeCode,
   MatchMode,
 } from '../lib/finishTypes';
 import {
@@ -56,7 +57,7 @@ type Match = {
   player_b: { display_name: string; avatar_key: string | null; avatar_url: string | null } | null;
 };
 
-type Round = { winner_id: string; finish_type: FinishCode };
+type Round = { winner_id: string | null; finish_type: OutcomeCode };
 type SavedRound = {
   id: string;
   round_number: number;
@@ -97,7 +98,7 @@ export default function MatchDetailScreen({ route, navigation }: any) {
 
   const [rounds, setRounds] = useState<Round[]>([]);
   const [pickedWinner, setPickedWinner] = useState<'a' | 'b' | null>(null);
-  const [pickedFinish, setPickedFinish] = useState<FinishCode | null>(null);
+  const [pickedFinish, setPickedFinish] = useState<OutcomeCode | null>(null);
   const [pickedCombo, setPickedCombo] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -186,9 +187,17 @@ export default function MatchDetailScreen({ route, navigation }: any) {
   const target = match?.points_to_win ?? 4;
   const decided = tallyA >= target || tallyB >= target;
 
+  // 'void' (empate / lanzamiento nulo) no tiene ganador; los demás resultados sí.
+  const needsWinner = pickedFinish !== 'void';
+
   function addRound() {
-    if (!match || pickedWinner === null || pickedFinish === null) return;
-    const winnerId = pickedWinner === 'a' ? match.player_a_id : match.player_b_id;
+    if (!match || pickedFinish === null) return;
+    if (needsWinner && pickedWinner === null) return;
+    const winnerId = !needsWinner
+      ? null
+      : pickedWinner === 'a'
+        ? match.player_a_id
+        : match.player_b_id;
     setRounds([...rounds, { winner_id: winnerId, finish_type: pickedFinish }]);
     setPickedWinner(null);
     setPickedFinish(null);
@@ -424,7 +433,9 @@ export default function MatchDetailScreen({ route, navigation }: any) {
                 <View key={i} style={styles.roundLine}>
                   <Text style={styles.roundNum}>R{i + 1}</Text>
                   <Text style={styles.roundText} numberOfLines={1}>
-                    {nameFor(r.winner_id)} · {finishLabel(r.finish_type)}
+                    {r.finish_type === 'void'
+                      ? finishLabel(r.finish_type)
+                      : `${nameFor(r.winner_id)} · ${finishLabel(r.finish_type)}`}
                   </Text>
                   <Text style={styles.roundPts}>+{finishPoints(r.finish_type)}</Text>
                 </View>
@@ -437,15 +448,18 @@ export default function MatchDetailScreen({ route, navigation }: any) {
 
           {!decided && (
             <>
-              <Text style={type.label}>¿Quién ganó el round?</Text>
-              <View style={styles.row}>
+              <Text style={type.label}>
+                {needsWinner ? '¿Quién ganó el round?' : 'Empate: no hace falta ganador'}
+              </Text>
+              <View style={[styles.row, !needsWinner && { opacity: 0.4 }]}>
                 {(['a', 'b'] as const).map((s) => (
                   <Pressable
                     key={s}
-                    onPress={() => setPickedWinner(s)}
-                    style={[styles.choice, { flex: 1 }, pickedWinner === s && styles.choiceOn]}
+                    onPress={() => needsWinner && setPickedWinner(s)}
+                    disabled={!needsWinner}
+                    style={[styles.choice, { flex: 1 }, pickedWinner === s && needsWinner && styles.choiceOn]}
                   >
-                    <Text style={[styles.choiceText, pickedWinner === s && styles.choiceTextOn]} numberOfLines={1}>
+                    <Text style={[styles.choiceText, pickedWinner === s && needsWinner && styles.choiceTextOn]} numberOfLines={1}>
                       {s === 'a' ? match.player_a?.display_name : match.player_b?.display_name}
                     </Text>
                   </Pressable>
@@ -473,11 +487,33 @@ export default function MatchDetailScreen({ route, navigation }: any) {
                 ))}
               </View>
 
+              {/* Reglas de lanzamiento: cuando NO hubo contacto válido. */}
+              <Text style={type.label}>Sin contacto válido</Text>
+              <View style={styles.finishGrid}>
+                {NO_CONTACT_OUTCOMES.map((f) => (
+                  <Pressable
+                    key={f.code}
+                    onPress={() => setPickedFinish(f.code)}
+                    style={[styles.finish, pickedFinish === f.code && styles.choiceOn]}
+                  >
+                    <View style={styles.finishTop}>
+                      <Text style={[styles.finishName, pickedFinish === f.code && styles.choiceTextOn]}>
+                        {f.label}
+                      </Text>
+                      <Text style={styles.finishPts}>{f.points > 0 ? `${f.points} pt` : 'repite'}</Text>
+                    </View>
+                    <Text style={styles.finishDesc} numberOfLines={2}>
+                      {f.description}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+
               <Button
                 label="AGREGAR ROUND"
                 variant="ghost"
                 onPress={addRound}
-                disabled={pickedWinner === null || pickedFinish === null}
+                disabled={pickedFinish === null || (needsWinner && pickedWinner === null)}
               />
             </>
           )}

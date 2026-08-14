@@ -1,10 +1,15 @@
 import { useCallback, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Alert, ScrollView } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import Screen from '../components/Screen';
+import Screen from '../ui/Screen';
+import Button from '../ui/Button';
+import Avatar from '../ui/Avatar';
+import { Card, Hex, Pill, SectionTitle } from '../ui/primitives';
+import { IconChevron } from '../ui/icons';
 import { badgeIcon } from '../lib/badges';
+import { colors, space, type } from '../theme';
 
 type Player = {
   id: string;
@@ -15,9 +20,19 @@ type Player = {
   play_style: string | null;
   elo_rating: number;
   matches_played: number;
+  avatar_key: string | null;
+  avatar_url: string | null;
+  experience_level: string | null;
 };
 
 type Badge = { code: string; name: string };
+
+const EXPERIENCE_LABEL: Record<string, string> = {
+  rookie: 'Rookie Blader',
+  blader: 'Blader',
+  pro: 'Pro Blader',
+  elite: 'Elite Blader',
+};
 
 export default function PlayerProfileScreen({ route, navigation }: any) {
   const { playerId: targetId } = route.params;
@@ -45,7 +60,9 @@ export default function PlayerProfileScreen({ route, navigation }: any) {
     ] = await Promise.all([
       supabase
         .from('players')
-        .select('id, display_name, city, country, main_beyblade, play_style, elo_rating, matches_played')
+        .select(
+          'id, display_name, city, country, main_beyblade, play_style, elo_rating, matches_played, avatar_key, avatar_url, experience_level'
+        )
         .eq('id', targetId)
         .single(),
       supabase.from('player_badges').select('badges(code, name)').eq('player_id', targetId),
@@ -118,106 +135,188 @@ export default function PlayerProfileScreen({ route, navigation }: any) {
 
   if (loading || !player) {
     return (
-      <Screen style={styles.container}>
-        <Text>Cargando…</Text>
+      <Screen>
+        <View style={styles.center}>
+          <Text style={type.soft}>Cargando…</Text>
+        </View>
       </Screen>
     );
   }
 
+  const leads = record ? record.mine - record.theirs : 0;
+
   return (
-    <Screen>
-      <ScrollView contentContainerStyle={styles.container}>
-        <View style={styles.avatar} />
+    <Screen scroll padded={false}>
+      <View style={styles.headRow}>
+        <Pressable onPress={() => navigation.goBack()} hitSlop={8}>
+          <Text style={styles.back}>‹</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.hero}>
+        <Hex size={108} color={colors.blue}>
+          <Avatar uri={player.avatar_url} avatarKey={player.avatar_key} size={74} />
+        </Hex>
         <Text style={styles.name}>{player.display_name}</Text>
-        <Text style={styles.sub}>
-          {[player.city, player.country].filter(Boolean).join(', ') || 'Ubicación no definida'}
+        <Pill label={EXPERIENCE_LABEL[player.experience_level ?? ''] ?? 'Blader'} align="center" />
+        <Text style={styles.city}>
+          {[player.city, player.country].filter(Boolean).join(', ') || 'Sin ubicación'}
         </Text>
+      </View>
 
-        <View style={styles.statsRow}>
-          <View style={styles.stat}>
-            <Text style={styles.statValue}>{Math.round(player.elo_rating)}</Text>
-            <Text style={styles.statLabel}>ELO</Text>
-          </View>
-          <View style={styles.stat}>
-            <Text style={styles.statValue}>{player.matches_played}</Text>
-            <Text style={styles.statLabel}>Matches</Text>
-          </View>
-          <View style={styles.stat}>
-            <Text style={styles.statValue}>{followers}</Text>
-            <Text style={styles.statLabel}>Seguidores</Text>
-          </View>
-          <View style={styles.stat}>
-            <Text style={styles.statValue}>{following}</Text>
-            <Text style={styles.statLabel}>Siguiendo</Text>
-          </View>
-        </View>
+      <View style={styles.pad}>
+        <Card style={styles.stats}>
+          <Stat label="ELO" value={Math.round(player.elo_rating).toLocaleString()} tint={colors.blue} />
+          <View style={styles.div} />
+          <Stat label="Batallas" value={String(player.matches_played)} />
+          <View style={styles.div} />
+          <Stat label="Seguidores" value={String(followers)} />
+          <View style={styles.div} />
+          <Stat label="Siguiendo" value={String(following)} />
+        </Card>
 
-        {player.main_beyblade ? <Text style={styles.field}>Main: {player.main_beyblade}</Text> : null}
-        {player.play_style ? <Text style={styles.field}>Estilo: {player.play_style}</Text> : null}
-
-        {record && (
-          <View style={styles.recordBox}>
-            <Text style={styles.recordLabel}>Tu récord contra {player.display_name}</Text>
-            <Text style={styles.recordValue}>
-              {record.mine} – {record.theirs}
+        {/* El cara a cara es lo que de verdad te interesa de OTRO jugador, así
+            que va antes que su equipo y sus logros. */}
+        {record && !isMe && (
+          <Card
+            style={[
+              styles.record,
+              { borderColor: leads > 0 ? colors.win : leads < 0 ? colors.loss : colors.lineHi },
+            ]}
+          >
+            <Text style={styles.recordLabel}>TU RÉCORD CONTRA ÉL</Text>
+            <View style={styles.recordRow}>
+              <Text style={[styles.recordNum, { color: colors.win }]}>{record.mine}</Text>
+              <Text style={styles.recordDash}>–</Text>
+              <Text style={[styles.recordNum, { color: colors.loss }]}>{record.theirs}</Text>
+            </View>
+            <Text style={styles.recordHint}>
+              {leads > 0
+                ? `Vas arriba por ${leads}`
+                : leads < 0
+                ? `Vas abajo por ${-leads}`
+                : 'Están empatados'}
             </Text>
-          </View>
+          </Card>
+        )}
+
+        {(player.main_beyblade || player.play_style) && (
+          <Card style={styles.gear}>
+            {player.main_beyblade ? <GearRow label="Beyblade principal" value={player.main_beyblade} /> : null}
+            {player.play_style ? <GearRow label="Estilo" value={player.play_style} /> : null}
+          </Card>
         )}
 
         {badges.length > 0 && (
-          <View style={styles.badgeStrip}>
-            {badges.map((b) => (
-              <Text key={b.code} style={styles.badgeIcon}>
-                {badgeIcon(b.code)}
-              </Text>
-            ))}
+          <View style={styles.block}>
+            <SectionTitle>Logros</SectionTitle>
+            <Card style={styles.badgeStrip}>
+              {badges.slice(0, 10).map((b) => (
+                <View key={b.code} style={styles.badge}>
+                  <Text style={styles.badgeGlyph}>{badgeIcon(b.code)}</Text>
+                </View>
+              ))}
+              {badges.length > 10 && <Text style={styles.more}>+{badges.length - 10}</Text>}
+            </Card>
           </View>
         )}
 
-        {!isMe && (
-          <>
-            <Pressable style={[styles.button, iFollow && styles.secondaryButton]} onPress={toggleFollow} disabled={busy}>
-              <Text style={styles.buttonText}>{iFollow ? 'Dejar de seguir' : 'Seguir'}</Text>
-            </Pressable>
-            <Pressable style={[styles.button, styles.secondaryButton]} onPress={challenge} disabled={busy}>
-              <Text style={styles.buttonText}>Retar</Text>
-            </Pressable>
-          </>
-        )}
+        <View style={styles.actions}>
+          {!isMe && (
+            <>
+              <Button label="RETAR" onPress={challenge} disabled={busy} />
+              <Button
+                label={iFollow ? 'DEJAR DE SEGUIR' : 'SEGUIR'}
+                variant="ghost"
+                onPress={toggleFollow}
+                disabled={busy}
+              />
+            </>
+          )}
 
-        <Pressable
-          style={[styles.button, styles.secondaryButton]}
-          onPress={() => navigation.navigate('Passport', { playerId: targetId })}
-        >
-          <Text style={styles.buttonText}>Ver League Passport</Text>
-        </Pressable>
-
-        <Pressable style={styles.back} onPress={() => navigation.goBack()}>
-          <Text style={styles.backText}>‹ Volver</Text>
-        </Pressable>
-      </ScrollView>
+          <Card
+            style={styles.link}
+            onPress={() => navigation.navigate('Passport', { playerId: targetId })}
+          >
+            <Text style={styles.linkGlyph}>🛂</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.linkLabel}>League Passport</Text>
+              <Text style={styles.meta}>Toda su trayectoria</Text>
+            </View>
+            <IconChevron />
+          </Card>
+        </View>
+      </View>
     </Screen>
   );
 }
 
+function Stat({ label, value, tint }: { label: string; value: string; tint?: string }) {
+  return (
+    <View style={styles.stat}>
+      <Text style={styles.statLabel}>{label.toUpperCase()}</Text>
+      <Text style={[styles.statVal, tint ? { color: tint } : null]}>{value}</Text>
+    </View>
+  );
+}
+
+function GearRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.gearRow}>
+      <Text style={styles.gearLabel}>{label}</Text>
+      <Text style={styles.gearValue} numberOfLines={1}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, alignItems: 'center', padding: 24, gap: 6, backgroundColor: '#fff' },
-  avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#e8edfd', marginBottom: 8 },
-  name: { fontSize: 22, fontWeight: '700' },
-  sub: { color: '#6b6b64' },
-  statsRow: { flexDirection: 'row', gap: 20, marginVertical: 12 },
-  stat: { alignItems: 'center' },
-  statValue: { fontSize: 18, fontWeight: '700' },
-  statLabel: { fontSize: 11, color: '#6b6b64' },
-  field: { fontSize: 14, color: '#333' },
-  recordBox: { backgroundColor: '#f6f7fb', borderRadius: 8, padding: 12, alignItems: 'center', marginTop: 12, width: '100%' },
-  recordLabel: { fontSize: 12, color: '#6b6b64' },
-  recordValue: { fontSize: 20, fontWeight: '700', color: '#2f5ad6', marginTop: 2 },
-  badgeStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center', marginTop: 12 },
-  badgeIcon: { fontSize: 22 },
-  button: { backgroundColor: '#2f5ad6', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 12, width: '100%' },
-  secondaryButton: { backgroundColor: '#444' },
-  buttonText: { color: '#fff', fontWeight: '600' },
-  back: { marginTop: 24 },
-  backText: { color: '#6b6b64' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  headRow: { paddingHorizontal: space.xl, paddingTop: space.md },
+  back: { color: colors.ink, fontSize: 30, lineHeight: 32, width: 22 },
+  pad: { paddingHorizontal: space.xl, paddingBottom: space.xxxl },
+
+  hero: { alignItems: 'center', gap: space.sm, paddingTop: space.sm, paddingBottom: space.lg, paddingHorizontal: space.xl },
+  name: { ...type.display, fontSize: 25, marginTop: space.sm, textAlign: 'center' },
+  city: { fontSize: 13, color: colors.inkSoft },
+
+  stats: { flexDirection: 'row', alignItems: 'center', paddingVertical: space.md },
+  stat: { flex: 1, alignItems: 'center', gap: 3 },
+  div: { width: 1, height: 32, backgroundColor: colors.line },
+  statLabel: { fontSize: 8.5, fontWeight: '800', letterSpacing: 0.7, color: colors.inkDim },
+  statVal: { fontSize: 17, fontWeight: '800', color: colors.ink },
+
+  record: { alignItems: 'center', gap: 2, marginTop: space.md },
+  recordLabel: { fontSize: 9, fontWeight: '800', letterSpacing: 1, color: colors.inkSoft },
+  recordRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  recordNum: { fontSize: 30, fontWeight: '800', fontStyle: 'italic' },
+  recordDash: { fontSize: 20, color: colors.inkDim },
+  recordHint: { fontSize: 11.5, color: colors.inkSoft },
+
+  gear: { marginTop: space.md, gap: space.sm },
+  gearRow: { flexDirection: 'row', justifyContent: 'space-between', gap: space.lg },
+  gearLabel: { fontSize: 12, color: colors.inkSoft },
+  gearValue: { fontSize: 13, color: colors.ink, fontWeight: '600', flexShrink: 1 },
+
+  block: { marginTop: space.xl, gap: space.sm },
+  badgeStrip: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space.sm },
+  badge: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeGlyph: { fontSize: 19 },
+  more: { fontSize: 12, color: colors.inkSoft, fontWeight: '700' },
+
+  actions: { marginTop: space.xl, gap: space.sm },
+  link: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  linkGlyph: { fontSize: 19, width: 26, textAlign: 'center' },
+  linkLabel: { fontSize: 14.5, fontWeight: '700', color: colors.ink },
+  meta: { fontSize: 11.5, color: colors.inkSoft, marginTop: 2 },
 });

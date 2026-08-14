@@ -3,8 +3,12 @@ import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import Screen from '../components/Screen';
+import Screen from '../ui/Screen';
+import Button from '../ui/Button';
+import Avatar from '../ui/Avatar';
+import { Card, Hex } from '../ui/primitives';
 import { badgeIcon } from '../lib/badges';
+import { colors, space, type } from '../theme';
 
 // El feed se arma con tres consultas filtradas por la gente que sigues y se
 // mezcla en el cliente. No hay tabla de feed denormalizada a propósito: para el
@@ -14,13 +18,22 @@ type FeedItem = {
   key: string;
   at: string;
   kind: 'match' | 'badge' | 'checkin';
-  text: string;
   icon: string;
+  actor: string;
+  text: string;
   playerId: string;
   matchId?: string;
+  avatarKey?: string | null;
+  avatarUrl?: string | null;
 };
 
 const FEED_LIMIT = 30;
+
+const KIND_COLOR: Record<FeedItem['kind'], string> = {
+  match: colors.blue,
+  badge: colors.streak,
+  checkin: colors.elite,
+};
 
 export default function FeedScreen({ navigation }: any) {
   const { playerId } = useAuth();
@@ -46,7 +59,7 @@ export default function FeedScreen({ navigation }: any) {
       supabase
         .from('matches')
         .select(
-          'id, winner_id, score_a, score_b, confirmed_at, player_a_id, player_b_id, player_a:players!matches_player_a_id_fkey(display_name), player_b:players!matches_player_b_id_fkey(display_name)'
+          'id, winner_id, score_a, score_b, confirmed_at, player_a_id, player_b_id, player_a:players!matches_player_a_id_fkey(display_name, avatar_key, avatar_url), player_b:players!matches_player_b_id_fkey(display_name, avatar_key, avatar_url)'
         )
         .eq('status', 'confirmed')
         .or(`player_a_id.in.(${list}),player_b_id.in.(${list})`)
@@ -54,13 +67,13 @@ export default function FeedScreen({ navigation }: any) {
         .limit(FEED_LIMIT),
       supabase
         .from('player_badges')
-        .select('player_id, earned_at, badges(code, name), players(display_name)')
+        .select('player_id, earned_at, badges(code, name), players(display_name, avatar_key, avatar_url)')
         .in('player_id', ids)
         .order('earned_at', { ascending: false })
         .limit(FEED_LIMIT),
       supabase
         .from('check_ins')
-        .select('id, player_id, checked_in_at, players(display_name), venues(name)')
+        .select('id, player_id, checked_in_at, players(display_name, avatar_key, avatar_url), venues(name)')
         .in('player_id', ids)
         .order('checked_in_at', { ascending: false })
         .limit(FEED_LIMIT),
@@ -71,8 +84,8 @@ export default function FeedScreen({ navigation }: any) {
     for (const m of ((matches as any[]) ?? [])) {
       if (!m.confirmed_at) continue;
       const winnerIsA = m.winner_id === m.player_a_id;
-      const winner = winnerIsA ? m.player_a?.display_name : m.player_b?.display_name;
-      const loser = winnerIsA ? m.player_b?.display_name : m.player_a?.display_name;
+      const winner = winnerIsA ? m.player_a : m.player_b;
+      const loser = winnerIsA ? m.player_b : m.player_a;
       const high = Math.max(m.score_a, m.score_b);
       const low = Math.min(m.score_a, m.score_b);
       merged.push({
@@ -80,9 +93,12 @@ export default function FeedScreen({ navigation }: any) {
         at: m.confirmed_at,
         kind: 'match',
         icon: '⚔️',
-        text: `${winner ?? '—'} le ganó ${high}–${low} a ${loser ?? '—'}`,
+        actor: winner?.display_name ?? '—',
+        text: `ganó ${high}–${low} a ${loser?.display_name ?? '—'}`,
         playerId: m.winner_id,
         matchId: m.id,
+        avatarKey: winner?.avatar_key,
+        avatarUrl: winner?.avatar_url,
       });
     }
 
@@ -92,8 +108,11 @@ export default function FeedScreen({ navigation }: any) {
         at: b.earned_at,
         kind: 'badge',
         icon: badgeIcon(b.badges?.code ?? ''),
-        text: `${b.players?.display_name ?? '—'} desbloqueó "${b.badges?.name ?? 'un logro'}"`,
+        actor: b.players?.display_name ?? '—',
+        text: `desbloqueó «${b.badges?.name ?? 'un logro'}»`,
         playerId: b.player_id,
+        avatarKey: b.players?.avatar_key,
+        avatarUrl: b.players?.avatar_url,
       });
     }
 
@@ -103,8 +122,11 @@ export default function FeedScreen({ navigation }: any) {
         at: c.checked_in_at,
         kind: 'checkin',
         icon: '📍',
-        text: `${c.players?.display_name ?? '—'} hizo check-in en ${c.venues?.name ?? 'un venue'}`,
+        actor: c.players?.display_name ?? '—',
+        text: `hizo check-in en ${c.venues?.name ?? 'una locación'}`,
         playerId: c.player_id,
+        avatarKey: c.players?.avatar_key,
+        avatarUrl: c.players?.avatar_url,
       });
     }
 
@@ -130,24 +152,28 @@ export default function FeedScreen({ navigation }: any) {
   }
 
   return (
-    <Screen style={styles.container}>
+    <Screen padded={false}>
       <FlatList
-        style={{ flex: 1 }}
         data={items}
         keyExtractor={(i) => i.key}
         refreshing={loading}
         onRefresh={load}
-        contentContainerStyle={{ gap: 6, paddingBottom: 24 }}
+        contentContainerStyle={styles.list}
         ListHeaderComponent={
-          <View style={{ marginBottom: 16 }}>
-            <Text style={styles.title}>Actividad</Text>
-            <Text style={styles.meta}>
-              Lo que hacen los {followingCount} jugador{followingCount === 1 ? '' : 'es'} que sigues.
+          <View style={styles.header}>
+            <View style={styles.headRow}>
+              <Pressable onPress={() => navigation.goBack()} hitSlop={8}>
+                <Text style={styles.back}>‹</Text>
+              </Pressable>
+              <Text style={styles.title}>Actividad</Text>
+            </View>
+            <Text style={styles.sub}>
+              Lo que hacen los {followingCount} blader{followingCount === 1 ? '' : 's'} que sigues.
             </Text>
           </View>
         }
         renderItem={({ item }) => (
-          <Pressable
+          <Card
             style={styles.row}
             onPress={() =>
               item.matchId
@@ -155,29 +181,41 @@ export default function FeedScreen({ navigation }: any) {
                 : navigation.navigate('PlayerProfile', { playerId: item.playerId })
             }
           >
-            <Text style={styles.icon}>{item.icon}</Text>
-            <Text style={styles.text}>{item.text}</Text>
-            <Text style={styles.time}>{timeAgo(item.at)}</Text>
-          </Pressable>
+            <View>
+              <Avatar uri={item.avatarUrl} avatarKey={item.avatarKey} size={42} />
+              <View style={[styles.kind, { borderColor: KIND_COLOR[item.kind] }]}>
+                <Text style={styles.kindGlyph}>{item.icon}</Text>
+              </View>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.text}>
+                <Text style={styles.actor}>{item.actor}</Text> {item.text}
+              </Text>
+              <Text style={styles.time}>{timeAgo(item.at)}</Text>
+            </View>
+          </Card>
         )}
         ListEmptyComponent={
           !loading ? (
-            <Text style={styles.empty}>
-              {followingCount === 0
-                ? 'Sigue a otros jugadores para ver aquí lo que hacen.'
-                : 'Todavía no hay actividad de la gente que sigues.'}
-            </Text>
+            <Card style={styles.empty}>
+              <Hex size={50} color={colors.inkDim}>
+                <Text style={{ fontSize: 19 }}>📡</Text>
+              </Hex>
+              <Text style={styles.emptyTitle}>
+                {followingCount === 0 ? 'Tu feed está en silencio' : 'Sin actividad todavía'}
+              </Text>
+              <Text style={styles.emptyText}>
+                {followingCount === 0
+                  ? 'Sigue a otros bladers para ver aquí sus batallas, logros y check-ins.'
+                  : 'Cuando la gente que sigues juegue, aparecerá aquí.'}
+              </Text>
+            </Card>
           ) : null
         }
         ListFooterComponent={
-          <>
-            <Pressable style={styles.button} onPress={() => navigation.navigate('Follows')}>
-              <Text style={styles.buttonText}>Mi gente</Text>
-            </Pressable>
-            <Pressable style={styles.back} onPress={() => navigation.goBack()}>
-              <Text style={styles.backText}>‹ Volver</Text>
-            </Pressable>
-          </>
+          <View style={{ marginTop: space.xl }}>
+            <Button label="MI GENTE" variant="ghost" onPress={() => navigation.navigate('Follows')} />
+          </View>
         }
       />
     </Screen>
@@ -185,23 +223,32 @@ export default function FeedScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: '#fff' },
-  title: { fontSize: 22, fontWeight: '700' },
-  meta: { color: '#6b6b64', fontSize: 12, marginTop: 6 },
-  row: {
-    flexDirection: 'row',
+  list: { paddingHorizontal: space.xl, paddingBottom: space.xxxl, gap: space.sm },
+  header: { gap: space.sm, paddingTop: space.md, marginBottom: space.sm },
+  headRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  back: { color: colors.ink, fontSize: 30, lineHeight: 32, width: 22 },
+  title: { ...type.title, fontSize: 20 },
+  sub: { ...type.soft, fontSize: 12.5 },
+
+  row: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  kind: {
+    position: 'absolute',
+    right: -4,
+    bottom: -4,
+    width: 21,
+    height: 21,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    backgroundColor: colors.bg,
     alignItems: 'center',
-    gap: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    paddingVertical: 12,
+    justifyContent: 'center',
   },
-  icon: { fontSize: 20 },
-  text: { flex: 1, fontSize: 13 },
-  time: { fontSize: 10, color: '#6b6b64' },
-  empty: { textAlign: 'center', color: '#6b6b64', marginTop: 40 },
-  button: { backgroundColor: '#2f5ad6', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 16 },
-  buttonText: { color: '#fff', fontWeight: '600' },
-  back: { marginTop: 16 },
-  backText: { color: '#6b6b64' },
+  kindGlyph: { fontSize: 10 },
+  text: { fontSize: 13, color: colors.inkSoft, lineHeight: 18 },
+  actor: { color: colors.ink, fontWeight: '700' },
+  time: { fontSize: 10.5, color: colors.inkDim, marginTop: 3 },
+
+  empty: { alignItems: 'center', gap: space.md, paddingVertical: space.xl },
+  emptyTitle: { fontSize: 15, fontWeight: '700', color: colors.ink },
+  emptyText: { ...type.soft, fontSize: 12, textAlign: 'center' },
 });

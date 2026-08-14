@@ -38,7 +38,7 @@ const ACTIONS = [
   { key: 'Play', tint: colors.blue, title: 'Encontrar\nrival', desc: 'Quién juega ahora', Icon: IconSearch },
   { key: 'Batallas', tint: colors.elite, title: 'Mis\nbatallas', desc: 'Retos y pendientes', Icon: IconSwords },
   { key: 'Events', tint: colors.win, title: 'Eventos\nde la liga', desc: 'Torneos y quedadas', Icon: IconCalendar },
-  { key: 'Venues', tint: colors.streak, title: 'Lugares para\nbatallar', desc: 'Venues y tiendas', Icon: IconPin },
+  { key: 'Venues', tint: colors.streak, title: 'Lugares para\nbatallar', desc: 'Locaciones y tiendas', Icon: IconPin },
 ];
 
 export default function HomeScreen({ navigation }: any) {

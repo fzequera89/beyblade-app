@@ -1,8 +1,12 @@
 import { useState } from 'react';
-import { Text, TextInput, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import Screen from '../components/Screen';
+import Screen from '../ui/Screen';
+import Button from '../ui/Button';
+import { Field } from '../ui/Field';
+import { Card, Hex } from '../ui/primitives';
+import { colors, space, type } from '../theme';
 
 export default function CreateLeagueScreen({ navigation }: any) {
   const { playerId } = useAuth();
@@ -30,37 +34,60 @@ export default function CreateLeagueScreen({ navigation }: any) {
   }
 
   return (
-    <Screen style={styles.container}>
-      <Text style={styles.title}>Nueva liga</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Nombre de la liga"
-        placeholderTextColor="#8a8a8a"
-        value={name}
-        onChangeText={setName}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Descripción (opcional)"
-        placeholderTextColor="#8a8a8a"
-        value={description}
-        onChangeText={setDescription}
-      />
-      <Pressable style={styles.button} onPress={create} disabled={loading}>
-        <Text style={styles.buttonText}>Crear liga</Text>
-      </Pressable>
-      <Pressable onPress={() => navigation.goBack()}>
-        <Text style={styles.link}>Cancelar</Text>
-      </Pressable>
+    <Screen scroll padded={false}>
+      <View style={styles.pad}>
+        <View style={styles.headRow}>
+          <Pressable onPress={() => navigation.goBack()} hitSlop={8}>
+            <Text style={styles.back}>‹</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.hero}>
+          <Hex size={80} color={colors.blue}>
+            <Text style={{ fontSize: 30 }}>🏅</Text>
+          </Hex>
+          <Text style={styles.title}>Nueva liga</Text>
+          <Text style={styles.sub}>
+            Una liga agrupa a sus miembros, sus torneos y su ranking. Tú quedas como moderador.
+          </Text>
+        </View>
+
+        <Card style={{ gap: space.lg }}>
+          <Field
+            label="Nombre de la liga"
+            placeholder="Ej. DML Ciudad de México"
+            value={name}
+            onChangeText={setName}
+            counter={`${name.length}/40`}
+            maxLength={40}
+          />
+          <Field
+            label="Descripción (opcional)"
+            placeholder="Quiénes son, dónde y cada cuándo juegan"
+            value={description}
+            onChangeText={setDescription}
+            multiline
+            hint="Es lo primero que ve un blader que no te conoce."
+          />
+        </Card>
+
+        <View style={styles.actions}>
+          <Button label="CREAR LIGA" onPress={create} disabled={loading || !name.trim()} loading={loading} />
+          <Button label="Cancelar" variant="ghost" onPress={() => navigation.goBack()} />
+        </View>
+      </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', padding: 24, gap: 12, backgroundColor: '#fff' },
-  title: { fontSize: 22, fontWeight: '700', textAlign: 'center', marginBottom: 16 },
-  input: { color: '#1a1a20', borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12 },
-  button: { backgroundColor: '#2f5ad6', borderRadius: 8, padding: 14, alignItems: 'center' },
-  buttonText: { color: '#fff', fontWeight: '600' },
-  link: { textAlign: 'center', color: '#6b6b64', marginTop: 8 },
+  pad: { paddingHorizontal: space.xl, paddingBottom: space.xxxl },
+  headRow: { paddingTop: space.md },
+  back: { color: colors.ink, fontSize: 30, lineHeight: 32, width: 22 },
+
+  hero: { alignItems: 'center', gap: space.sm, paddingVertical: space.lg },
+  title: { ...type.display, fontSize: 24, textAlign: 'center' },
+  sub: { fontSize: 12.5, color: colors.inkSoft, textAlign: 'center', lineHeight: 18 },
+
+  actions: { marginTop: space.xl, gap: space.sm },
 });

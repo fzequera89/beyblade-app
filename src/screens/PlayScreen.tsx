@@ -247,7 +247,7 @@ export default function PlayScreen({ navigation }: any) {
             </View>
 
             <View style={styles.shortcuts}>
-              <Shortcut label="Venues" glyph="📍" onPress={() => navigation.navigate('Venues')} />
+              <Shortcut label="Locaciones" glyph="📍" onPress={() => navigation.navigate('Venues')} />
               <Shortcut label="Eventos" glyph="📅" onPress={() => navigation.navigate('Events')} />
               <Shortcut label="Clubes" glyph="🛡️" onPress={() => navigation.navigate('Clubs')} />
             </View>

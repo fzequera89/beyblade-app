@@ -63,10 +63,14 @@ export default function BattlesScreen({ navigation }: any) {
       ]);
 
     // Si arbitras, lo que está detenido esperándote va antes que lo tuyo.
-    const [{ data: me }, { count: disputes }] = await Promise.all([
+    // El servidor decide CUÁLES te tocan: contar todas las disputas de la
+    // plataforma inflaba el aviso con combates que este juez no puede tocar,
+    // incluidos los que él mismo está jugando.
+    const [{ data: me }, { data: arbitrable }] = await Promise.all([
       supabase.from('players').select('judge_role, is_admin').eq('id', playerId).maybeSingle(),
-      supabase.from('matches').select('*', { count: 'exact', head: true }).eq('status', 'disputed'),
+      supabase.rpc('arbitrable_match_ids'),
     ]);
+    const disputes = ((arbitrable as string[]) ?? []).length;
     const judge =
       (me as any)?.is_admin === true ||
       ((me as any)?.judge_role && (me as any).judge_role !== 'none') ||
@@ -128,8 +132,9 @@ export default function BattlesScreen({ navigation }: any) {
       </View>
 
       <View style={styles.pad}>
-        {/* Si eres juez, lo que está detenido esperando tu fallo va antes que
-            tus propias batallas: cada disputa tiene a dos personas paradas. */}
+        {/* Si arbitras, lo que espera tu aprobación va antes que tus propias
+            batallas: ningún resultado cuenta para el ELO hasta que lo apruebes,
+            así que cada uno tiene a dos personas esperando. */}
         {isJudge && disputeCount > 0 && (
           <Card
             style={[styles.judgeCall, glow(colors.loss, 8)]}
@@ -138,7 +143,10 @@ export default function BattlesScreen({ navigation }: any) {
             <Text style={styles.judgeTag}>TE TOCA ARBITRAR</Text>
             <Text style={styles.judgeBig}>
               {disputeCount}
-              <Text style={styles.judgeUnit}> combate{disputeCount === 1 ? '' : 's'} detenido{disputeCount === 1 ? '' : 's'}</Text>
+              <Text style={styles.judgeUnit}>
+                {' '}
+                resultado{disputeCount === 1 ? '' : 's'} esperando
+              </Text>
             </Text>
             <Text style={styles.judgeCta}>Abrir bandeja ›</Text>
           </Card>

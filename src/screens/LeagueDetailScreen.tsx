@@ -160,6 +160,18 @@ export default function LeagueDetailScreen({ route, navigation }: any) {
             </View>
             <IconChevron />
           </Card>
+
+          <Card
+            style={styles.link}
+            onPress={() => navigation.navigate('Judges', { leagueId, title: league.name })}
+          >
+            <Text style={styles.linkGlyph}>⚖️</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.linkLabel}>Cuerpo de jueces</Text>
+              <Text style={styles.meta}>Quién aprueba los resultados de esta liga</Text>
+            </View>
+            <IconChevron />
+          </Card>
         </View>
 
         <View style={styles.block}>

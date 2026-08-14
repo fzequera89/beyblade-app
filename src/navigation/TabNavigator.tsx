@@ -21,6 +21,7 @@ import AdminScreen from '../screens/AdminScreen';
 import AdminPlayersScreen from '../screens/AdminPlayersScreen';
 import AdminGlobalRankingScreen from '../screens/AdminGlobalRankingScreen';
 import DisputesScreen from '../screens/DisputesScreen';
+import JudgesScreen from '../screens/JudgesScreen';
 import VenuesScreen from '../screens/VenuesScreen';
 import CreateVenueScreen from '../screens/CreateVenueScreen';
 import VenueDetailScreen from '../screens/VenueDetailScreen';
@@ -75,6 +76,9 @@ function Inicio() {
       <InicioStack.Screen name="ScanCheckIn" component={ScanCheckInScreen} />
       <InicioStack.Screen name="ClubDetail" component={ClubDetailScreen} />
       <InicioStack.Screen name="LeagueStandings" component={LeagueStandingsScreen} />
+      {/* TournamentDetail también vive en esta pila, y desde ahí se navega a
+          Judges: sin registrarla aquí el botón no haría nada, sin error visible. */}
+      <InicioStack.Screen name="Judges" component={JudgesScreen} />
     </InicioStack.Navigator>
   );
 }
@@ -100,6 +104,7 @@ function Batallas() {
       <BatallasStack.Screen name="Bracket" component={BracketScreen} />
       <BatallasStack.Screen name="ClubDetail" component={ClubDetailScreen} />
       <BatallasStack.Screen name="Disputes" component={DisputesScreen} />
+      <BatallasStack.Screen name="Judges" component={JudgesScreen} />
     </BatallasStack.Navigator>
   );
 }

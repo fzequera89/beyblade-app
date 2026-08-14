@@ -16,27 +16,63 @@ type Row = {
   winner_id: string | null;
   player_a_id: string;
   player_b_id: string;
+  countermark_by: string | null;
+  countermark_winner_id: string | null;
+  countermark_score_a: number | null;
+  countermark_score_b: number | null;
   player_a: { display_name: string; avatar_key: string | null; avatar_url: string | null } | null;
   player_b: { display_name: string; avatar_key: string | null; avatar_url: string | null } | null;
 };
 
-// La bandeja del juez. Un combate en disputa está detenido: nadie puede seguir
-// hasta que alguien falle, así que aquí se ordenan por el que lleva más tiempo
-// esperando, no por el más reciente.
+// En qué estado llega cada combate a la bandeja. El juez necesita distinguir de
+// un vistazo lo que solo hay que aprobar de lo que hay que decidir.
+function state(r: Row) {
+  if (r.status === 'disputed') return { tag: 'EN DISPUTA', color: colors.loss, rank: 0 };
+  if (!r.countermark_by) return { tag: 'FALTA LA 2ª MARCA', color: colors.inkDim, rank: 2 };
+  const agree =
+    r.countermark_winner_id === r.winner_id &&
+    r.countermark_score_a === r.score_a &&
+    r.countermark_score_b === r.score_b;
+  return agree
+    ? { tag: 'COINCIDEN', color: colors.win, rank: 1 }
+    : { tag: 'NO COINCIDEN', color: colors.streak, rank: 0 };
+}
+
+// La bandeja del juez. Desde 0025 ningún resultado queda firme sin su
+// aprobación, así que aquí cae TODO lo reportado, no solo las disputas. Se
+// ordena por lo que está detenido primero y, dentro de eso, por lo que lleva
+// más tiempo esperando: un combate parado tiene a dos personas paradas.
 export default function DisputesScreen({ navigation }: any) {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
+
+    // Qué combates puede arbitrar ESTE juez lo decide el servidor, con la misma
+    // función que después acepta o rechaza el fallo. Antes se listaban TODAS las
+    // disputas de la plataforma, incluidas las de combates que el propio juez
+    // está jugando — y en esas no puede hacer nada.
+    const { data: ids } = await supabase.rpc('arbitrable_match_ids');
+    const list = (ids as string[]) ?? [];
+    if (list.length === 0) {
+      setRows([]);
+      setLoading(false);
+      return;
+    }
+
     const { data } = await supabase
       .from('matches')
       .select(
-        'id, score_a, score_b, status, reported_at, winner_id, player_a_id, player_b_id, player_a:players!matches_player_a_id_fkey(display_name, avatar_key, avatar_url), player_b:players!matches_player_b_id_fkey(display_name, avatar_key, avatar_url)'
+        'id, score_a, score_b, status, reported_at, winner_id, player_a_id, player_b_id, countermark_by, countermark_winner_id, countermark_score_a, countermark_score_b, player_a:players!matches_player_a_id_fkey(display_name, avatar_key, avatar_url), player_b:players!matches_player_b_id_fkey(display_name, avatar_key, avatar_url)'
       )
-      .eq('status', 'disputed')
+      .in('id', list)
       .order('reported_at', { ascending: true });
-    setRows((data as any) ?? []);
+
+    // Lo trabado va primero; dentro de cada grupo se respeta el orden por
+    // antigüedad que ya trajo la consulta.
+    const sorted = (((data as any) ?? []) as Row[]).sort((a, b) => state(a).rank - state(b).rank);
+    setRows(sorted);
     setLoading(false);
   }, []);
 
@@ -68,23 +104,27 @@ export default function DisputesScreen({ navigation }: any) {
               <Pressable onPress={() => navigation.goBack()} hitSlop={8}>
                 <Text style={styles.back}>‹</Text>
               </Pressable>
-              <Text style={styles.title}>Disputas</Text>
+              <Text style={styles.title}>Por arbitrar</Text>
             </View>
             <Text style={styles.sub}>
               {rows.length > 0
-                ? 'Combates detenidos esperando el fallo de un juez.'
+                ? 'Ningún resultado cuenta para el ELO hasta que lo apruebes.'
                 : 'Nada pendiente de arbitrar.'}
             </Text>
           </View>
         }
         renderItem={({ item, index }) => {
-          const hero = index === 0;
+          const st = state(item);
+          // Tratamiento de héroe solo si de verdad es lo más urgente: la
+          // primera tarjeta cuando lo primero está trabado. Si arriba hay algo
+          // que solo falta aprobar, destacarlo le inventaría urgencia.
+          const hero = index === 0 && st.rank === 0;
           return (
             <Card
-              style={[styles.row, hero && { borderColor: colors.loss }]}
+              style={[styles.row, hero && { borderColor: st.color }]}
               onPress={() => navigation.navigate('MatchDetail', { matchId: item.id })}
             >
-              {hero && <Text style={styles.oldest}>LA QUE MÁS LLEVA ESPERANDO</Text>}
+              {hero && <Text style={[styles.oldest, { color: st.color }]}>LO QUE MÁS LLEVA DETENIDO</Text>}
               <View style={styles.duel}>
                 <View style={styles.side}>
                   <Avatar
@@ -100,7 +140,7 @@ export default function DisputesScreen({ navigation }: any) {
                   <Text style={styles.score}>
                     {item.score_a}–{item.score_b}
                   </Text>
-                  <Text style={styles.vs}>EN DISPUTA</Text>
+                  <Text style={[styles.vs, { color: st.color }]}>{st.tag}</Text>
                 </View>
                 <View style={styles.side}>
                   <Avatar
@@ -115,7 +155,9 @@ export default function DisputesScreen({ navigation }: any) {
               </View>
               <View style={styles.foot}>
                 <Text style={styles.meta}>{waiting(item.reported_at)}</Text>
-                <Text style={styles.cta}>Arbitrar ›</Text>
+                <Text style={[styles.cta, { color: st.color }]}>
+                  {st.rank === 1 ? 'Aprobar ›' : 'Arbitrar ›'}
+                </Text>
               </View>
             </Card>
           );
@@ -126,9 +168,10 @@ export default function DisputesScreen({ navigation }: any) {
               <Hex size={50} color={colors.win}>
                 <Text style={{ fontSize: 19 }}>✓</Text>
               </Hex>
-              <Text style={styles.emptyTitle}>Sin disputas</Text>
+              <Text style={styles.emptyTitle}>Nada por aprobar</Text>
               <Text style={styles.emptyText}>
-                Cuando dos jugadores no coincidan en un resultado, el combate aparece aquí.
+                Cada resultado que reporten los jugadores va a aparecer aquí esperando tu
+                aprobación.
               </Text>
             </Card>
           ) : null

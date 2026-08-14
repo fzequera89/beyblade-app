@@ -46,6 +46,12 @@ type Match = {
   penalty_points_b: number;
   arbitrated_by: string | null;
   arbitration_reason: string | null;
+  countermark_by: string | null;
+  countermark_winner_id: string | null;
+  countermark_score_a: number | null;
+  countermark_score_b: number | null;
+  disputed_by: string | null;
+  dispute_reason: string | null;
   player_a: { display_name: string; avatar_key: string | null; avatar_url: string | null } | null;
   player_b: { display_name: string; avatar_key: string | null; avatar_url: string | null } | null;
 };
@@ -80,6 +86,15 @@ export default function MatchDetailScreen({ route, navigation }: any) {
   const [pickedCode, setPickedCode] = useState<string | null>(null);
   const [penaltyNote, setPenaltyNote] = useState('');
 
+  // Doble marca: la versión del segundo jugador, registrada sin ver la del primero.
+  const [markWinner, setMarkWinner] = useState<'a' | 'b' | null>(null);
+  const [markA, setMarkA] = useState('');
+  const [markB, setMarkB] = useState('');
+  const [clash, setClash] = useState<{ winner_id: string; score_a: number; score_b: number } | null>(
+    null
+  );
+  const [disputeNote, setDisputeNote] = useState('');
+
   const [rounds, setRounds] = useState<Round[]>([]);
   const [pickedWinner, setPickedWinner] = useState<'a' | 'b' | null>(null);
   const [pickedFinish, setPickedFinish] = useState<FinishCode | null>(null);
@@ -92,7 +107,7 @@ export default function MatchDetailScreen({ route, navigation }: any) {
     const { data, error } = await supabase
       .from('matches')
       .select(
-        'id, league_id, tournament_id, player_a_id, player_b_id, score_a, score_b, winner_id, status, reported_by, elo_a_change, elo_b_change, points_to_win, mode, penalty_points_a, penalty_points_b, arbitrated_by, arbitration_reason, player_a:players!matches_player_a_id_fkey(display_name, avatar_key, avatar_url), player_b:players!matches_player_b_id_fkey(display_name, avatar_key, avatar_url)'
+        'id, league_id, tournament_id, player_a_id, player_b_id, score_a, score_b, winner_id, status, reported_by, elo_a_change, elo_b_change, points_to_win, mode, penalty_points_a, penalty_points_b, arbitrated_by, arbitration_reason, countermark_by, countermark_winner_id, countermark_score_a, countermark_score_b, disputed_by, dispute_reason, player_a:players!matches_player_a_id_fkey(display_name, avatar_key, avatar_url), player_b:players!matches_player_b_id_fkey(display_name, avatar_key, avatar_url)'
       )
       .eq('id', matchId)
       .single();
@@ -147,6 +162,20 @@ export default function MatchDetailScreen({ route, navigation }: any) {
   const isParticipant = match && (match.player_a_id === playerId || match.player_b_id === playerId);
   const isReporter = match && match.reported_by === playerId;
 
+  // Mientras me toque marcar, NO puedo ver la versión de mi rival: ni el
+  // marcador de arriba, ni los rounds que registró. Si la viera, esto dejaría
+  // de ser una verificación independiente y volvería a ser ratificar.
+  const mustMarkBlind =
+    !!match && match.status === 'reported' && !!isParticipant && !isReporter && !match.countermark_by;
+
+  // Las dos versiones coinciden: para el juez, el camino de aprobar de un toque.
+  const marksAgree =
+    !!match &&
+    !!match.countermark_by &&
+    match.countermark_winner_id === match.winner_id &&
+    match.countermark_score_a === match.score_a &&
+    match.countermark_score_b === match.score_b;
+
   // El marcador se calcula sumando el valor de cada finish, NO contando rounds.
   const tallyA = match
     ? rounds.filter((r) => r.winner_id === match.player_a_id).reduce((s, r) => s + finishPoints(r.finish_type), 0)
@@ -180,19 +209,68 @@ export default function MatchDetailScreen({ route, navigation }: any) {
     load();
   }
 
-  async function confirm() {
+  // Ya no cierra el combate: deja constancia de que B se dio por convencido,
+  // para que el juez lo apruebe de un toque. Todo resultado pasa por el juez.
+  async function acceptReported() {
     setBusy(true);
-    const { error } = await supabase.rpc('confirm_match_result', { p_match_id: matchId });
+    const { error } = await supabase.rpc('accept_reported_result', { p_match_id: matchId });
     setBusy(false);
     if (error) return Alert.alert('Error', error.message);
+    setClash(null);
+    Alert.alert('Listo', 'Quedó registrado que están de acuerdo. Falta que un juez lo apruebe.');
+    load();
+  }
+
+  // El juez toma el resultado tal cual. Para CAMBIARLO existe "fallar", que sí
+  // exige dejar escrito el porqué.
+  async function approve() {
+    setBusy(true);
+    const { error } = await supabase.rpc('approve_match_result', { p_match_id: matchId });
+    setBusy(false);
+    if (error) return Alert.alert('No se pudo aprobar', error.message);
+    Alert.alert('Aprobado', 'El resultado quedó firme y el ELO ya se aplicó.');
+    load();
+  }
+
+  // B registra su versión sin haber visto la de A. Si coinciden, el servidor
+  // cierra el combate solo y el ELO ya viene aplicado al recargar.
+  async function submitMark() {
+    if (!match || markWinner === null) return;
+    setBusy(true);
+    const { data, error } = await supabase.rpc('submit_countermark', {
+      p_match_id: match.id,
+      p_winner_id: markWinner === 'a' ? match.player_a_id : match.player_b_id,
+      p_score_a: Number(markA) || 0,
+      p_score_b: Number(markB) || 0,
+    });
+    setBusy(false);
+    if (error) return Alert.alert('No se pudo registrar', error.message);
+
+    const r = data as any;
+    if (r?.agreed) {
+      Alert.alert('Coinciden', 'Los dos marcaron lo mismo. El combate quedó cerrado.');
+      setClash(null);
+    } else {
+      // Recién ahora se revela lo que puso el rival.
+      setClash({
+        winner_id: r.reported_winner_id,
+        score_a: r.reported_score_a,
+        score_b: r.reported_score_b,
+      });
+    }
     load();
   }
 
   async function dispute() {
     setBusy(true);
-    const { error } = await supabase.from('matches').update({ status: 'disputed' }).eq('id', matchId);
+    const { error } = await supabase.rpc('dispute_match', {
+      p_match_id: matchId,
+      p_reason: disputeNote || null,
+    });
     setBusy(false);
     if (error) return Alert.alert('Error', error.message);
+    setClash(null);
+    setDisputeNote('');
     load();
   }
 
@@ -293,7 +371,7 @@ export default function MatchDetailScreen({ route, navigation }: any) {
             uri={match.player_a?.avatar_url}
             avatarKey={match.player_a?.avatar_key}
             size={58}
-            ring={match.winner_id === match.player_a_id ? colors.win : colors.line}
+            ring={!mustMarkBlind && match.winner_id === match.player_a_id ? colors.win : colors.line}
           />
           <Text style={styles.sideName} numberOfLines={1}>
             {match.player_a?.display_name}
@@ -302,9 +380,19 @@ export default function MatchDetailScreen({ route, navigation }: any) {
 
         <View style={styles.scoreMid}>
           <View style={styles.scoreRow}>
-            <Text style={[styles.score, liveA > liveB && styles.scoreLead]}>{liveA}</Text>
-            <Text style={styles.dash}>–</Text>
-            <Text style={[styles.score, liveB > liveA && styles.scoreLead]}>{liveB}</Text>
+            {mustMarkBlind ? (
+              <>
+                <Text style={styles.score}>?</Text>
+                <Text style={styles.dash}>–</Text>
+                <Text style={styles.score}>?</Text>
+              </>
+            ) : (
+              <>
+                <Text style={[styles.score, liveA > liveB && styles.scoreLead]}>{liveA}</Text>
+                <Text style={styles.dash}>–</Text>
+                <Text style={[styles.score, liveB > liveA && styles.scoreLead]}>{liveB}</Text>
+              </>
+            )}
           </View>
           <Text style={styles.target}>a {target} puntos</Text>
         </View>
@@ -314,7 +402,7 @@ export default function MatchDetailScreen({ route, navigation }: any) {
             uri={match.player_b?.avatar_url}
             avatarKey={match.player_b?.avatar_key}
             size={58}
-            ring={match.winner_id === match.player_b_id ? colors.win : colors.line}
+            ring={!mustMarkBlind && match.winner_id === match.player_b_id ? colors.win : colors.line}
           />
           <Text style={styles.sideName} numberOfLines={1}>
             {match.player_b?.display_name}
@@ -426,29 +514,190 @@ export default function MatchDetailScreen({ route, navigation }: any) {
         </Card>
       )}
 
-      {/* Confirmación */}
-      {match.status === 'reported' && (
+      {/* Doble marca: me toca registrar mi versión, sin ver la suya */}
+      {mustMarkBlind && !clash && (
         <View style={styles.block}>
-          <Card>
+          <SectionTitle>Marca tu resultado</SectionTitle>
+          <Card style={{ borderColor: colors.blue, gap: 4 }}>
+            <Text style={styles.blindTag}>A CIEGAS</Text>
+            <Text style={styles.hint}>
+              Tu rival ya registró su versión, pero no la vas a ver hasta que marques la tuya. Si
+              las dos coinciden, el combate se cierra solo y nadie tiene que arbitrar.
+            </Text>
+          </Card>
+
+          <Text style={type.label}>¿Quién ganó?</Text>
+          <View style={styles.row}>
+            {(['a', 'b'] as const).map((s) => (
+              <Pressable
+                key={s}
+                onPress={() => setMarkWinner(s)}
+                style={[styles.choice, { flex: 1 }, markWinner === s && styles.choiceOn]}
+              >
+                <Text
+                  style={[styles.choiceText, markWinner === s && styles.choiceTextOn]}
+                  numberOfLines={1}
+                >
+                  {s === 'a' ? match.player_a?.display_name : match.player_b?.display_name}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+
+          <Text style={type.label}>¿Cómo quedó el marcador?</Text>
+          <View style={styles.row}>
+            <View style={{ flex: 1 }}>
+              <Field
+                label={match.player_a?.display_name}
+                value={markA}
+                onChangeText={setMarkA}
+                keyboardType="number-pad"
+              />
+            </View>
+            <Text style={styles.dashSmall}>–</Text>
+            <View style={{ flex: 1 }}>
+              <Field
+                label={match.player_b?.display_name}
+                value={markB}
+                onChangeText={setMarkB}
+                keyboardType="number-pad"
+              />
+            </View>
+          </View>
+
+          <Button
+            label="ENVIAR MI MARCA"
+            onPress={submitMark}
+            disabled={markWinner === null || (markA === '' && markB === '')}
+            loading={busy}
+          />
+        </View>
+      )}
+
+      {/* Las dos marcas no coincidieron: recién aquí se revela la del rival */}
+      {clash && match.status === 'reported' && (
+        <View style={styles.block}>
+          <SectionTitle>No coinciden</SectionTitle>
+          <Card style={{ borderColor: colors.streak, gap: space.md }}>
+            <View style={styles.versus}>
+              <View style={styles.versusSide}>
+                <Text style={styles.versusWho}>TU MARCA</Text>
+                <Text style={styles.versusScore}>
+                  {Number(markA) || 0}–{Number(markB) || 0}
+                </Text>
+                <Text style={styles.versusName} numberOfLines={1}>
+                  ganó {markWinner === 'a' ? match.player_a?.display_name : match.player_b?.display_name}
+                </Text>
+              </View>
+              <View style={styles.versusDiv} />
+              <View style={styles.versusSide}>
+                <Text style={styles.versusWho}>LA DE TU RIVAL</Text>
+                <Text style={styles.versusScore}>
+                  {clash.score_a}–{clash.score_b}
+                </Text>
+                <Text style={styles.versusName} numberOfLines={1}>
+                  ganó {nameFor(clash.winner_id)}
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.hint}>
+              Puede ser solo una cuenta mal hecha. Si al verlo te suena bien, acéptalo y listo. Si
+              de verdad no están de acuerdo, lo resuelve un juez.
+            </Text>
+          </Card>
+
+          <Button label="ACEPTO SU RESULTADO" onPress={acceptReported} loading={busy} />
+
+          <Field
+            label="Si vas a disputar, ¿qué pasó?"
+            placeholder="Ej. el tercer round fue burst, no over."
+            value={disputeNote}
+            onChangeText={setDisputeNote}
+            multiline
+            hint="Lo lee el juez antes de fallar."
+          />
+          <Button label="NO ESTOY DE ACUERDO" variant="danger" onPress={dispute} disabled={busy} />
+        </View>
+      )}
+
+      {/* Ya marqué y quedó esperando, o soy quien reportó */}
+      {match.status === 'reported' && !mustMarkBlind && !clash && (
+        <View style={styles.block}>
+          <Card style={{ gap: 6 }}>
             <Text style={styles.reported}>
               Reportado: ganó {nameFor(match.winner_id)} por {match.score_a}–{match.score_b}
             </Text>
+            {match.countermark_by ? (
+              marksAgree ? (
+                <Text style={[styles.hint, { color: colors.win }]}>
+                  Los dos marcaron lo mismo.
+                </Text>
+              ) : (
+                <Text style={styles.hint}>
+                  {nameFor(match.countermark_by)} marcó {match.countermark_score_a}–
+                  {match.countermark_score_b}, ganó {nameFor(match.countermark_winner_id)}.
+                </Text>
+              )
+            ) : null}
           </Card>
-          {isOrganizer || (isParticipant && !isReporter) ? (
-            <>
-              <Button label="CONFIRMAR RESULTADO" onPress={confirm} loading={busy} />
-              <Button label="Disputar" variant="danger" onPress={dispute} disabled={busy} />
-            </>
-          ) : (
-            <Text style={styles.hint}>Esperando que tu rival confirme el resultado.</Text>
+
+          {isParticipant && isReporter && !match.countermark_by && (
+            <Text style={styles.hint}>Esperando que tu rival marque su resultado.</Text>
+          )}
+
+          {/* Ningún resultado queda firme sin juez, coincidan o no. */}
+          {!canJudge && match.countermark_by && (
+            <Card style={{ borderColor: colors.elite }}>
+              <Text style={styles.judgeTag}>ESPERANDO AL JUEZ</Text>
+              <Text style={styles.hint}>
+                El resultado no cuenta para el ELO hasta que un juez lo apruebe.
+              </Text>
+            </Card>
           )}
         </View>
       )}
 
       {match.status === 'disputed' && (
         <View style={styles.block}>
-          <Card style={{ borderColor: colors.loss }}>
+          <Card style={{ borderColor: colors.loss, gap: space.md }}>
             <Text style={styles.disputed}>Resultado en disputa</Text>
+
+            {/* El juez llega viendo QUÉ marcó cada uno, no solo que hay pleito. */}
+            {match.countermark_by && (
+              <View style={styles.versus}>
+                <View style={styles.versusSide}>
+                  <Text style={styles.versusWho} numberOfLines={1}>
+                    {nameFor(match.reported_by)?.toUpperCase()}
+                  </Text>
+                  <Text style={styles.versusScore}>
+                    {match.score_a}–{match.score_b}
+                  </Text>
+                  <Text style={styles.versusName} numberOfLines={1}>
+                    ganó {nameFor(match.winner_id)}
+                  </Text>
+                </View>
+                <View style={styles.versusDiv} />
+                <View style={styles.versusSide}>
+                  <Text style={styles.versusWho} numberOfLines={1}>
+                    {nameFor(match.countermark_by)?.toUpperCase()}
+                  </Text>
+                  <Text style={styles.versusScore}>
+                    {match.countermark_score_a}–{match.countermark_score_b}
+                  </Text>
+                  <Text style={styles.versusName} numberOfLines={1}>
+                    ganó {nameFor(match.countermark_winner_id)}
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {match.dispute_reason ? (
+              <View>
+                <Text style={type.label}>Lo que dijo {nameFor(match.disputed_by)}</Text>
+                <Text style={styles.judgeReason}>{match.dispute_reason}</Text>
+              </View>
+            ) : null}
+
             <Text style={styles.hint}>
               {canJudge
                 ? 'Te toca decidir. Tu fallo cierra el combate y no vuelve a los jugadores.'
@@ -465,8 +714,27 @@ export default function MatchDetailScreen({ route, navigation }: any) {
 
           {panel === 'none' && (
             <>
+              {/* El camino rápido. Si los dos jugadores marcaron lo mismo, el
+                  juez no tiene nada que decidir: solo dar fe. */}
+              <Card style={{ borderColor: marksAgree ? colors.win : colors.line, gap: 4 }}>
+                <Text style={[styles.judgeTag, marksAgree && { color: colors.win }]}>
+                  {marksAgree
+                    ? 'LOS DOS MARCARON LO MISMO'
+                    : match.countermark_by
+                    ? 'LAS MARCAS NO COINCIDEN'
+                    : 'FALTA LA MARCA DEL SEGUNDO JUGADOR'}
+                </Text>
+                <Text style={styles.hint}>
+                  Aprobar toma el resultado tal cual: ganó {nameFor(match.winner_id)} por{' '}
+                  {match.score_a}–{match.score_b}.
+                </Text>
+              </Card>
+
+              <Button label="APROBAR TAL CUAL" onPress={approve} loading={busy} />
+
               <Button
-                label="RESOLVER Y CERRAR EL COMBATE"
+                label="FALLAR OTRO RESULTADO"
+                variant="ghost"
                 onPress={() => {
                   setRuledA(String(match.score_a));
                   setRuledB(String(match.score_b));
@@ -635,8 +903,9 @@ export default function MatchDetailScreen({ route, navigation }: any) {
         </View>
       )}
 
-      {/* Rounds guardados */}
-      {savedRounds.length > 0 && (
+      {/* Rounds guardados. Ocultos mientras me toque marcar a ciegas: son la
+          versión completa de mi rival, round por round. */}
+      {savedRounds.length > 0 && !mustMarkBlind && (
         <View style={styles.block}>
           <SectionTitle>Rounds</SectionTitle>
           <Card style={{ gap: 8 }}>
@@ -734,6 +1003,14 @@ const styles = StyleSheet.create({
 
   reported: { fontSize: 14, color: colors.ink, fontWeight: '600' },
   disputed: { fontSize: 15, fontWeight: '800', color: colors.loss, marginBottom: 4 },
+
+  blindTag: { fontSize: 9, fontWeight: '800', letterSpacing: 1, color: colors.blue },
+  versus: { flexDirection: 'row', alignItems: 'center' },
+  versusSide: { flex: 1, alignItems: 'center', gap: 3 },
+  versusDiv: { width: 1, alignSelf: 'stretch', backgroundColor: colors.line, marginHorizontal: space.sm },
+  versusWho: { fontSize: 9, fontWeight: '800', letterSpacing: 0.8, color: colors.inkDim },
+  versusScore: { fontSize: 26, fontWeight: '800', fontStyle: 'italic', color: colors.ink, letterSpacing: -0.5 },
+  versusName: { fontSize: 11, color: colors.inkSoft },
 
   secondary: { fontSize: 12, color: colors.inkDim, textAlign: 'center', paddingVertical: space.sm },
   dashSmall: { fontSize: 20, color: colors.inkDim, alignSelf: 'center' },

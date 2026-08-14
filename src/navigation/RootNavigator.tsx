@@ -1,9 +1,10 @@
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { colors } from '../theme';
 import { useAuth } from '../context/AuthContext';
 import SignInScreen from '../screens/SignInScreen';
 import SignUpScreen from '../screens/SignUpScreen';
-import CompleteProfileScreen from '../screens/CompleteProfileScreen';
+import OnboardingScreen from '../screens/OnboardingScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import LeaguesScreen from '../screens/LeaguesScreen';
 import CreateLeagueScreen from '../screens/CreateLeagueScreen';
@@ -38,6 +39,20 @@ import PassportScreen from '../screens/PassportScreen';
 
 const Stack = createNativeStackNavigator();
 
+// Sin esto, React Navigation pinta su tema claro (#f2f2f2) detrás de cada
+// pantalla y se ve un destello blanco en cada transición.
+const theme = {
+  ...DarkTheme,
+  colors: {
+    ...DarkTheme.colors,
+    background: colors.bg,
+    card: colors.surface,
+    text: colors.ink,
+    border: colors.line,
+    primary: colors.blue,
+  },
+};
+
 export default function RootNavigator() {
   const { session, hasPlayer, loading } = useAuth();
 
@@ -46,15 +61,17 @@ export default function RootNavigator() {
   }
 
   return (
-    <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <NavigationContainer theme={theme}>
+      <Stack.Navigator
+        screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}
+      >
         {!session ? (
           <>
             <Stack.Screen name="SignIn" component={SignInScreen} />
             <Stack.Screen name="SignUp" component={SignUpScreen} />
           </>
         ) : !hasPlayer ? (
-          <Stack.Screen name="CompleteProfile" component={CompleteProfileScreen} />
+          <Stack.Screen name="Onboarding" component={OnboardingScreen} />
         ) : (
           <>
             <Stack.Screen name="Profile" component={ProfileScreen} />

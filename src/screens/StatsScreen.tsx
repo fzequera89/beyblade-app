@@ -1,11 +1,14 @@
 import { useCallback, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Alert, ScrollView } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import Screen from '../components/Screen';
+import Screen from '../ui/Screen';
 import EloChart from '../components/EloChart';
-import { FINISH_TYPES } from '../lib/finishTypes';
+import { Card, SectionTitle } from '../ui/primitives';
+import { IconChevron, IconFlame } from '../ui/icons';
+import { FINISH_TYPES, FINISH_COLORS } from '../lib/finishTypes';
+import { colors, space, type, radius } from '../theme';
 
 type MatchRow = {
   id: string;
@@ -49,11 +52,11 @@ export default function StatsScreen({ navigation }: any) {
 
     const confirmed = (matchRows as any as MatchRow[]) ?? [];
     setMatches(confirmed);
-    const confirmedIds = confirmed.map((m) => m.id);
+    const ids = confirmed.map((m) => m.id);
 
     const [{ data: roundRows }, { data: comboRows }, { data: snapshots }] = await Promise.all([
-      confirmedIds.length
-        ? supabase.from('match_rounds').select('winner_id, finish_type, match_id').in('match_id', confirmedIds)
+      ids.length
+        ? supabase.from('match_rounds').select('winner_id, finish_type, points').in('match_id', ids)
         : Promise.resolve({ data: [] as any[] }),
       supabase.from('combos').select('id, name').eq('player_id', playerId),
       supabase
@@ -65,18 +68,11 @@ export default function StatsScreen({ navigation }: any) {
     ]);
     setLoading(false);
 
-    // Solo cuentan los rounds de matches confirmados: un match reportado y aún
-    // sin confirmar no debe mover las estadísticas (misma regla que el ELO).
-    const myRounds = ((roundRows as any[]) ?? []);
-
     const counts: Record<string, number> = {};
     let lost = 0;
-    for (const r of myRounds) {
-      if (r.winner_id === playerId) {
-        counts[r.finish_type] = (counts[r.finish_type] ?? 0) + 1;
-      } else {
-        lost += 1;
-      }
+    for (const r of ((roundRows as any[]) ?? [])) {
+      if (r.winner_id === playerId) counts[r.finish_type] = (counts[r.finish_type] ?? 0) + 1;
+      else lost += 1;
     }
     setFinishCounts(counts);
     setRoundsLost(lost);
@@ -108,7 +104,6 @@ export default function StatsScreen({ navigation }: any) {
   const won = matches.filter((m) => m.winner_id === playerId).length;
   const winRate = played > 0 ? Math.round((won / played) * 100) : 0;
 
-  // Racha actual: se cuenta desde el match más reciente hacia atrás.
   let currentStreak = 0;
   for (let i = matches.length - 1; i >= 0; i--) {
     if (matches[i].winner_id === playerId) currentStreak += 1;
@@ -121,139 +116,230 @@ export default function StatsScreen({ navigation }: any) {
     if (m.winner_id === playerId) {
       running += 1;
       bestStreak = Math.max(bestStreak, running);
-    } else {
-      running = 0;
-    }
+    } else running = 0;
   }
 
   const roundsWon = Object.values(finishCounts).reduce((a, b) => a + b, 0);
+  const finishes = FINISH_TYPES.map((f) => ({
+    ...f,
+    n: finishCounts[f.code] ?? 0,
+    pct: roundsWon > 0 ? Math.round(((finishCounts[f.code] ?? 0) / roundsWon) * 100) : 0,
+  })).filter((f) => f.n > 0);
 
   return (
-    <Screen>
-      <ScrollView contentContainerStyle={styles.container}>
+    <Screen scroll padded={false}>
+      <View style={styles.head}>
+        <Pressable onPress={() => navigation.goBack()} hitSlop={8}>
+          <Text style={styles.back}>‹</Text>
+        </Pressable>
         <Text style={styles.title}>Mis estadísticas</Text>
-        <Text style={styles.meta}>Solo cuentan los matches ya confirmados.</Text>
+      </View>
 
-        <View style={styles.statsRow}>
-          <View style={styles.stat}>
-            <Text style={styles.statValue}>{played}</Text>
-            <Text style={styles.statLabel}>Jugados</Text>
-          </View>
-          <View style={styles.stat}>
-            <Text style={styles.statValue}>{won}</Text>
-            <Text style={styles.statLabel}>Ganados</Text>
-          </View>
-          <View style={styles.stat}>
-            <Text style={styles.statValue}>{winRate}%</Text>
-            <Text style={styles.statLabel}>Win rate</Text>
-          </View>
-        </View>
-
-        <View style={styles.statsRow}>
-          <View style={styles.stat}>
-            <Text style={styles.statValue}>{currentStreak}</Text>
-            <Text style={styles.statLabel}>Racha actual</Text>
-          </View>
-          <View style={styles.stat}>
-            <Text style={styles.statValue}>{bestStreak}</Text>
-            <Text style={styles.statLabel}>Mejor racha</Text>
-          </View>
-        </View>
-
-        <Text style={styles.sectionTitle}>Evolución de ELO</Text>
-        <EloChart points={eloPoints} />
-
-        <Text style={styles.sectionTitle}>Cómo ganas tus rounds</Text>
-        {roundsWon === 0 ? (
-          <Text style={styles.empty}>
-            Todavía no hay rounds registrados. Se empiezan a llenar con los matches que reportes round a round.
-          </Text>
-        ) : (
-          <>
-            {FINISH_TYPES.map((f) => {
-              const n = finishCounts[f.code] ?? 0;
-              const pct = roundsWon > 0 ? (n / roundsWon) * 100 : 0;
-              return (
-                <View key={f.code} style={styles.finishRow}>
-                  <Text style={styles.finishLabel}>{f.label}</Text>
-                  <View style={styles.barTrack}>
-                    <View style={[styles.barFill, { width: `${pct}%` }]} />
-                  </View>
-                  <Text style={styles.finishCount}>{n}</Text>
-                </View>
-              );
-            })}
-            <Text style={styles.meta}>
-              {roundsWon} round{roundsWon === 1 ? '' : 's'} ganado{roundsWon === 1 ? '' : 's'} · {roundsLost} perdido
-              {roundsLost === 1 ? '' : 's'}
-            </Text>
-          </>
-        )}
-
-        <Text style={styles.sectionTitle}>Rendimiento por combo</Text>
-        {comboStats.length === 0 ? (
-          <Text style={styles.empty}>
-            Registra tus combos y elígelos al reportar un match para ver cuál te da mejores resultados.
-          </Text>
-        ) : (
-          comboStats.map((c) => (
-            <View key={c.id} style={styles.comboRow}>
-              <Text style={styles.comboName}>{c.name}</Text>
-              <Text style={styles.comboRecord}>
-                {c.won}–{c.played - c.won}
-              </Text>
-              <Text style={styles.comboRate}>{Math.round((c.won / c.played) * 100)}%</Text>
+      <View style={styles.pad}>
+        {/* Resumen */}
+        <Card style={styles.summary}>
+          <View style={styles.bigRow}>
+            <View style={styles.big}>
+              <Text style={styles.bigVal}>{winRate}%</Text>
+              <Text style={styles.bigLabel}>WIN RATE</Text>
             </View>
-          ))
-        )}
+            <View style={styles.vDiv} />
+            <View style={styles.big}>
+              <Text style={styles.bigVal}>
+                {won}<Text style={styles.bigDim}>–{played - won}</Text>
+              </Text>
+              <Text style={styles.bigLabel}>RÉCORD</Text>
+            </View>
+          </View>
 
-        <Pressable style={styles.button} onPress={() => navigation.navigate('Combos')}>
-          <Text style={styles.buttonText}>Mis combos</Text>
-        </Pressable>
-        <Pressable style={[styles.button, styles.secondaryButton]} onPress={() => navigation.navigate('Rivalries')}>
-          <Text style={styles.buttonText}>Rivalidades</Text>
-        </Pressable>
-        <Pressable style={[styles.button, styles.secondaryButton]} onPress={() => navigation.navigate('Badges')}>
-          <Text style={styles.buttonText}>Mis logros</Text>
-        </Pressable>
+          <View style={styles.streaks}>
+            <View style={styles.streak}>
+              {currentStreak > 0 && <IconFlame size={14} />}
+              <Text style={[styles.streakVal, currentStreak > 0 && { color: colors.streak }]}>
+                {currentStreak}
+              </Text>
+              <Text style={styles.streakLabel}>racha actual</Text>
+            </View>
+            <View style={styles.streak}>
+              <Text style={styles.streakVal}>{bestStreak}</Text>
+              <Text style={styles.streakLabel}>mejor racha</Text>
+            </View>
+            <View style={styles.streak}>
+              <Text style={styles.streakVal}>{played}</Text>
+              <Text style={styles.streakLabel}>jugadas</Text>
+            </View>
+          </View>
+          <Text style={styles.note}>Solo cuentan las batallas confirmadas.</Text>
+        </Card>
 
-        <Pressable style={styles.back} onPress={() => navigation.goBack()} disabled={loading}>
-          <Text style={styles.backText}>‹ Volver al perfil</Text>
-        </Pressable>
-      </ScrollView>
+        {/* ELO */}
+        <View style={styles.block}>
+          <SectionTitle>Evolución de ELO</SectionTitle>
+          <Card>
+            <EloChart points={eloPoints} />
+          </Card>
+        </View>
+
+        {/* Finishes */}
+        <View style={styles.block}>
+          <SectionTitle>Cómo ganas tus rounds</SectionTitle>
+          {roundsWon === 0 ? (
+            <Card>
+              <Text style={type.soft}>
+                Todavía no hay rounds registrados. Se llenan con las batallas que reportes.
+              </Text>
+            </Card>
+          ) : (
+            <Card style={{ gap: space.md }}>
+              <View style={styles.stack}>
+                {finishes.map((f) => (
+                  <View
+                    key={f.code}
+                    style={{ width: `${f.pct}%`, backgroundColor: FINISH_COLORS[f.code] }}
+                  />
+                ))}
+              </View>
+
+              {finishes.map((f) => (
+                <View key={f.code} style={styles.finishRow}>
+                  <View style={[styles.dot, { backgroundColor: FINISH_COLORS[f.code] }]} />
+                  <Text style={styles.finishName}>{f.label}</Text>
+                  <Text style={styles.finishPts}>{f.points} pt{f.points > 1 ? 's' : ''}</Text>
+                  <Text style={styles.finishPct}>{f.pct}%</Text>
+                  <Text style={styles.finishN}>{f.n}</Text>
+                </View>
+              ))}
+
+              <Text style={styles.note}>
+                {roundsWon} round{roundsWon === 1 ? '' : 's'} ganado{roundsWon === 1 ? '' : 's'} ·{' '}
+                {roundsLost} perdido{roundsLost === 1 ? '' : 's'}
+              </Text>
+            </Card>
+          )}
+        </View>
+
+        {/* Combos */}
+        <View style={styles.block}>
+          <SectionTitle
+            right={
+              <Pressable onPress={() => navigation.navigate('Combos')} hitSlop={6}>
+                <Text style={styles.link}>Mis combos</Text>
+              </Pressable>
+            }
+          >
+            Rendimiento por combo
+          </SectionTitle>
+
+          {comboStats.length === 0 ? (
+            <Card>
+              <Text style={type.soft}>
+                Registra tus combos y elígelos al reportar una batalla para ver cuál te funciona.
+              </Text>
+            </Card>
+          ) : (
+            comboStats.map((c, i) => {
+              const rate = Math.round((c.won / c.played) * 100);
+              // El combo más usado va destacado: es el que define tu estilo.
+              const hero = i === 0;
+              return (
+                <Card key={c.id} style={[styles.combo, hero && { borderColor: colors.blue }]}>
+                  <View style={styles.comboTop}>
+                    <View style={{ flex: 1 }}>
+                      {hero && <Text style={styles.comboTag}>TU COMBO PRINCIPAL</Text>}
+                      <Text style={[styles.comboName, hero && { fontSize: 16 }]} numberOfLines={1}>
+                        {c.name}
+                      </Text>
+                      <Text style={styles.note}>
+                        {c.played} batalla{c.played === 1 ? '' : 's'} · {c.won}–{c.played - c.won}
+                      </Text>
+                    </View>
+                    <Text style={[styles.comboRate, rate >= 50 ? { color: colors.win } : { color: colors.loss }]}>
+                      {rate}%
+                    </Text>
+                  </View>
+                  <View style={styles.barTrack}>
+                    <View
+                      style={[
+                        styles.barFill,
+                        { width: `${rate}%`, backgroundColor: rate >= 50 ? colors.win : colors.loss },
+                      ]}
+                    />
+                  </View>
+                </Card>
+              );
+            })
+          )}
+        </View>
+
+        {/* Accesos */}
+        <View style={styles.block}>
+          <Card style={styles.linkRow} onPress={() => navigation.navigate('Rivalries')}>
+            <Text style={styles.linkGlyph}>⚔️</Text>
+            <Text style={styles.linkLabel}>Rivalidades</Text>
+            <IconChevron />
+          </Card>
+          <Card style={styles.linkRow} onPress={() => navigation.navigate('Badges')}>
+            <Text style={styles.linkGlyph}>🏅</Text>
+            <Text style={styles.linkLabel}>Mis logros</Text>
+            <IconChevron />
+          </Card>
+        </View>
+      </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, padding: 20, backgroundColor: '#fff' },
-  title: { fontSize: 22, fontWeight: '700' },
-  meta: { color: '#6b6b64', fontSize: 12, marginTop: 6 },
-  statsRow: { flexDirection: 'row', gap: 24, marginVertical: 12, justifyContent: 'space-around' },
-  stat: { alignItems: 'center' },
-  statValue: { fontSize: 20, fontWeight: '700' },
-  statLabel: { fontSize: 12, color: '#6b6b64' },
-  sectionTitle: { fontSize: 16, fontWeight: '700', marginTop: 24, marginBottom: 8 },
-  finishRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
-  finishLabel: { width: 60, fontSize: 13 },
-  barTrack: { flex: 1, height: 8, backgroundColor: '#eee', borderRadius: 4, overflow: 'hidden' },
-  barFill: { height: 8, backgroundColor: '#2f5ad6' },
-  finishCount: { width: 28, textAlign: 'right', fontSize: 12, fontWeight: '600' },
-  comboRow: {
+  head: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    paddingVertical: 10,
+    gap: space.sm,
+    paddingHorizontal: space.xl,
+    paddingTop: space.md,
+    paddingBottom: space.lg,
   },
-  comboName: { flex: 1, fontSize: 14, fontWeight: '600' },
-  comboRecord: { fontSize: 12, color: '#6b6b64' },
-  comboRate: { width: 44, textAlign: 'right', fontWeight: '700', color: '#2f5ad6' },
-  empty: { color: '#6b6b64', fontSize: 12 },
-  button: { backgroundColor: '#2f5ad6', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 12 },
-  secondaryButton: { backgroundColor: '#444' },
-  buttonText: { color: '#fff', fontWeight: '600' },
-  back: { marginTop: 24 },
-  backText: { color: '#6b6b64' },
+  back: { color: colors.ink, fontSize: 30, lineHeight: 32, width: 22 },
+  title: { ...type.title, fontSize: 20 },
+  pad: { paddingHorizontal: space.xl },
+
+  summary: { gap: space.lg },
+  bigRow: { flexDirection: 'row', alignItems: 'center' },
+  big: { flex: 1, alignItems: 'center', gap: 2 },
+  bigVal: { fontSize: 32, fontWeight: '800', fontStyle: 'italic', color: colors.blue },
+  bigDim: { color: colors.inkDim },
+  bigLabel: { fontSize: 8.5, fontWeight: '800', letterSpacing: 0.9, color: colors.inkDim },
+  vDiv: { width: 1, height: 40, backgroundColor: colors.line },
+  streaks: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
+    paddingTop: space.md,
+  },
+  streak: { flex: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 4 },
+  streakVal: { fontSize: 15, fontWeight: '800', color: colors.ink },
+  streakLabel: { fontSize: 10.5, color: colors.inkSoft },
+  note: { fontSize: 11, color: colors.inkDim },
+
+  block: { marginTop: space.xxl, gap: space.sm },
+  link: { color: colors.blue, fontSize: 12, fontWeight: '700' },
+
+  stack: { flexDirection: 'row', height: 10, borderRadius: 5, overflow: 'hidden', backgroundColor: colors.line },
+  finishRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  finishName: { flex: 1, fontSize: 13, color: colors.ink, fontWeight: '600' },
+  finishPts: { fontSize: 10.5, color: colors.inkDim, width: 42 },
+  finishPct: { fontSize: 13, fontWeight: '800', color: colors.ink, width: 40, textAlign: 'right' },
+  finishN: { fontSize: 11, color: colors.inkSoft, width: 26, textAlign: 'right' },
+
+  combo: { gap: space.md },
+  comboTop: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  comboTag: { fontSize: 8.5, fontWeight: '800', letterSpacing: 0.9, color: colors.blue, marginBottom: 2 },
+  comboName: { fontSize: 14, fontWeight: '700', color: colors.ink },
+  comboRate: { fontSize: 20, fontWeight: '800' },
+  barTrack: { height: 6, borderRadius: 3, backgroundColor: colors.line, overflow: 'hidden' },
+  barFill: { height: 6, borderRadius: 3 },
+
+  linkRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md },
+  linkGlyph: { fontSize: 18, width: 24, textAlign: 'center' },
+  linkLabel: { flex: 1, fontSize: 14.5, fontWeight: '700', color: colors.ink },
 });

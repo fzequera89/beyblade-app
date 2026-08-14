@@ -43,6 +43,16 @@ export const FINISH_TYPES = [
 export type FinishCode = (typeof FINISH_TYPES)[number]['code'];
 export type MatchMode = 'ranking' | 'casual';
 
+// Un color por finish, compartido entre el ranking y las estadísticas. Si cada
+// pantalla eligiera el suyo, el mismo dato se leería distinto en cada lugar.
+export const FINISH_COLORS: Record<string, string> = {
+  spin: '#5BA8FF',
+  over: '#35C46A',
+  burst: '#F5A524',
+  xtreme: '#9B6BFF',
+  aerial: '#FF7AC8',
+};
+
 export function finishesFor(mode: MatchMode) {
   return FINISH_TYPES.filter((f) => mode === 'casual' || !('casualOnly' in f && f.casualOnly));
 }

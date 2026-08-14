@@ -1,9 +1,13 @@
 import { useCallback, useState } from 'react';
-import { View, Text, TextInput, FlatList, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, FlatList, Pressable, StyleSheet, Alert } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import Screen from '../components/Screen';
+import Screen from '../ui/Screen';
+import Button from '../ui/Button';
+import { Field } from '../ui/Field';
+import { Card, Hex, SectionTitle } from '../ui/primitives';
+import { colors, space, type, radius } from '../theme';
 
 type Combo = {
   id: string;
@@ -16,24 +20,43 @@ const EMPTY_FORM = { name: '', blade: '', ratchet: '', bit: '' };
 export default function CombosScreen({ navigation }: any) {
   const { playerId } = useAuth();
   const [combos, setCombos] = useState<Combo[]>([]);
+  const [usage, setUsage] = useState<Record<string, { played: number; won: number }>>({});
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('combos')
-      .select('id, name, parts')
-      .eq('player_id', playerId)
-      .order('created_at', { ascending: false });
+    const [{ data, error }, { data: matches }] = await Promise.all([
+      supabase
+        .from('combos')
+        .select('id, name, parts')
+        .eq('player_id', playerId)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('matches')
+        .select('player_a_id, combo_a_id, combo_b_id, winner_id')
+        .eq('status', 'confirmed')
+        .or(`player_a_id.eq.${playerId},player_b_id.eq.${playerId}`),
+    ]);
     setLoading(false);
-    if (error) {
-      Alert.alert('Error', error.message);
-      return;
-    }
+    if (error) return Alert.alert('Error', error.message);
+
     setCombos((data as any) ?? []);
+
+    // El rendimiento se calcula aquí para poder mostrarlo junto a cada combo:
+    // un combo sin su récord es solo una lista de piezas.
+    const u: Record<string, { played: number; won: number }> = {};
+    for (const m of ((matches as any[]) ?? [])) {
+      const mine = m.player_a_id === playerId ? m.combo_a_id : m.combo_b_id;
+      if (!mine) continue;
+      u[mine] = u[mine] ?? { played: 0, won: 0 };
+      u[mine].played += 1;
+      if (m.winner_id === playerId) u[mine].won += 1;
+    }
+    setUsage(u);
   }, [playerId]);
 
   useFocusEffect(
@@ -44,6 +67,7 @@ export default function CombosScreen({ navigation }: any) {
 
   function startEdit(combo: Combo) {
     setEditingId(combo.id);
+    setOpen(true);
     setForm({
       name: combo.name,
       blade: combo.parts?.blade ?? '',
@@ -54,15 +78,14 @@ export default function CombosScreen({ navigation }: any) {
 
   function cancelEdit() {
     setEditingId(null);
+    setOpen(false);
     setForm(EMPTY_FORM);
   }
 
   async function save() {
     const name = form.name.trim();
-    if (!name) {
-      Alert.alert('Falta el nombre', 'Ponle un nombre al combo para reconocerlo después.');
-      return;
-    }
+    if (!name) return Alert.alert('Falta el nombre', 'Ponle un nombre para reconocerlo después.');
+
     const parts = {
       blade: form.blade.trim() || null,
       ratchet: form.ratchet.trim() || null,
@@ -73,15 +96,12 @@ export default function CombosScreen({ navigation }: any) {
       ? await supabase.from('combos').update({ name, parts }).eq('id', editingId)
       : await supabase.from('combos').insert({ player_id: playerId, name, parts });
     setBusy(false);
-    if (error) {
-      Alert.alert('Error', error.message);
-      return;
-    }
+    if (error) return Alert.alert('Error', error.message);
     cancelEdit();
     load();
   }
 
-  async function remove(combo: Combo) {
+  function remove(combo: Combo) {
     Alert.alert('Borrar combo', `¿Borrar "${combo.name}"?`, [
       { text: 'Cancelar', style: 'cancel' },
       {
@@ -90,9 +110,8 @@ export default function CombosScreen({ navigation }: any) {
         onPress: async () => {
           const { error } = await supabase.from('combos').delete().eq('id', combo.id);
           if (error) {
-            // Un combo ya usado en un match no se puede borrar: la FK lo protege
-            // para no perder el historial de con qué se ganó.
-            Alert.alert('No se puede borrar', 'Este combo ya se usó en un match registrado.');
+            // La FK protege el historial: un combo usado en una batalla no se borra.
+            Alert.alert('No se puede borrar', 'Este combo ya se usó en una batalla registrada.');
             return;
           }
           load();
@@ -101,90 +120,129 @@ export default function CombosScreen({ navigation }: any) {
     ]);
   }
 
-  function describe(combo: Combo) {
-    const parts = [combo.parts?.blade, combo.parts?.ratchet, combo.parts?.bit].filter(Boolean);
-    return parts.length ? parts.join(' · ') : 'Sin piezas anotadas';
+  function parts(combo: Combo) {
+    return [combo.parts?.blade, combo.parts?.ratchet, combo.parts?.bit].filter(Boolean);
   }
 
   return (
-    <Screen style={styles.container}>
+    <Screen padded={false}>
       <FlatList
-        style={{ flex: 1 }}
         data={combos}
         keyExtractor={(c) => c.id}
         refreshing={loading}
         onRefresh={load}
-        contentContainerStyle={{ gap: 6, paddingBottom: 24 }}
+        contentContainerStyle={styles.list}
         ListHeaderComponent={
-          <View style={{ marginBottom: 16 }}>
-            <Text style={styles.title}>Mis combos</Text>
-            <Text style={styles.meta}>
-              Registra los combos que usas para saber después cuál te da mejores resultados.
+          <View style={styles.header}>
+            <View style={styles.headRow}>
+              <Pressable onPress={() => navigation.goBack()} hitSlop={8}>
+                <Text style={styles.back}>‹</Text>
+              </Pressable>
+              <Text style={styles.title}>Mis combos</Text>
+            </View>
+            <Text style={styles.sub}>
+              Registra lo que usas para saber después cuál te da mejores resultados.
             </Text>
 
-            <View style={styles.form}>
-              <TextInput
-                style={styles.input}
-                value={form.name}
-                onChangeText={(v) => setForm({ ...form, name: v })}
-                placeholder="Nombre del combo"
-                placeholderTextColor="#8a8a8a"
-              />
-              <TextInput
-                style={styles.input}
-                value={form.blade}
-                onChangeText={(v) => setForm({ ...form, blade: v })}
-                placeholder="Blade"
-                placeholderTextColor="#8a8a8a"
-              />
-              <TextInput
-                style={styles.input}
-                value={form.ratchet}
-                onChangeText={(v) => setForm({ ...form, ratchet: v })}
-                placeholder="Ratchet"
-                placeholderTextColor="#8a8a8a"
-              />
-              <TextInput
-                style={styles.input}
-                value={form.bit}
-                onChangeText={(v) => setForm({ ...form, bit: v })}
-                placeholder="Bit"
-                placeholderTextColor="#8a8a8a"
-              />
-              <View style={styles.rowGap}>
-                <Pressable style={styles.button} onPress={save} disabled={busy}>
-                  <Text style={styles.buttonText}>{editingId ? 'Guardar cambios' : 'Agregar combo'}</Text>
-                </Pressable>
-                {editingId && (
-                  <Pressable style={[styles.button, styles.secondaryButton]} onPress={cancelEdit}>
-                    <Text style={styles.buttonText}>Cancelar</Text>
-                  </Pressable>
+            {open ? (
+              <Card style={{ gap: space.lg }}>
+                <Text style={type.label}>{editingId ? 'Editar combo' : 'Nuevo combo'}</Text>
+                <Field
+                  label="Nombre"
+                  placeholder="Combo Tormenta"
+                  value={form.name}
+                  onChangeText={(v) => setForm({ ...form, name: v })}
+                />
+                <Field
+                  label="Blade"
+                  placeholder="Dran Sword"
+                  value={form.blade}
+                  onChangeText={(v) => setForm({ ...form, blade: v })}
+                />
+                <Field
+                  label="Ratchet"
+                  placeholder="3-60"
+                  value={form.ratchet}
+                  onChangeText={(v) => setForm({ ...form, ratchet: v })}
+                />
+                <Field
+                  label="Bit"
+                  placeholder="Rush"
+                  value={form.bit}
+                  onChangeText={(v) => setForm({ ...form, bit: v })}
+                />
+                <Button label={editingId ? 'GUARDAR CAMBIOS' : 'AGREGAR COMBO'} onPress={save} loading={busy} />
+                <Button label="Cancelar" variant="ghost" onPress={cancelEdit} />
+              </Card>
+            ) : (
+              <Button label="＋  NUEVO COMBO" onPress={() => setOpen(true)} />
+            )}
+
+            {combos.length > 0 && <SectionTitle>{`Tus combos (${combos.length})`}</SectionTitle>}
+          </View>
+        }
+        renderItem={({ item }) => {
+          const u = usage[item.id];
+          const rate = u && u.played > 0 ? Math.round((u.won / u.played) * 100) : null;
+          const p = parts(item);
+
+          return (
+            <Card style={styles.combo}>
+              <View style={styles.comboTop}>
+                <Hex size={46} color={colors.blue}>
+                  <Text style={{ fontSize: 17 }}>🌀</Text>
+                </Hex>
+                <View style={{ flex: 1, gap: 3 }}>
+                  <Text style={styles.name} numberOfLines={1}>
+                    {item.name}
+                  </Text>
+                  {p.length > 0 ? (
+                    <View style={styles.partsRow}>
+                      {p.map((x, i) => (
+                        <View key={i} style={styles.part}>
+                          <Text style={styles.partText}>{x}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : (
+                    <Text style={styles.meta}>Sin piezas anotadas</Text>
+                  )}
+                </View>
+                {rate !== null && (
+                  <View style={styles.rateBox}>
+                    <Text style={[styles.rate, { color: rate >= 50 ? colors.win : colors.loss }]}>
+                      {rate}%
+                    </Text>
+                    <Text style={styles.rateLabel}>
+                      {u.won}–{u.played - u.won}
+                    </Text>
+                  </View>
                 )}
               </View>
-            </View>
-          </View>
-        }
-        renderItem={({ item }) => (
-          <View style={styles.row}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.name}>{item.name}</Text>
-              <Text style={styles.parts}>{describe(item)}</Text>
-            </View>
-            <Pressable style={styles.smallButton} onPress={() => startEdit(item)}>
-              <Text style={styles.smallButtonText}>Editar</Text>
-            </Pressable>
-            <Pressable style={[styles.smallButton, styles.dangerButton]} onPress={() => remove(item)}>
-              <Text style={styles.smallButtonText}>Borrar</Text>
-            </Pressable>
-          </View>
-        )}
+
+              <View style={styles.actions}>
+                <Pressable style={styles.action} onPress={() => startEdit(item)}>
+                  <Text style={styles.actionText}>Editar</Text>
+                </Pressable>
+                <Pressable style={[styles.action, styles.danger]} onPress={() => remove(item)}>
+                  <Text style={[styles.actionText, { color: colors.loss }]}>Borrar</Text>
+                </Pressable>
+              </View>
+            </Card>
+          );
+        }}
         ListEmptyComponent={
-          !loading ? <Text style={styles.empty}>Todavía no registras ningún combo.</Text> : null
-        }
-        ListFooterComponent={
-          <Pressable style={styles.back} onPress={() => navigation.goBack()}>
-            <Text style={styles.backText}>‹ Volver al perfil</Text>
-          </Pressable>
+          !loading ? (
+            <Card style={styles.empty}>
+              <Hex size={54} color={colors.inkDim}>
+                <Text style={{ fontSize: 20 }}>🌀</Text>
+              </Hex>
+              <Text style={styles.emptyTitle}>Todavía no registras combos</Text>
+              <Text style={styles.meta}>
+                Al reportar una batalla podrás elegir con cuál jugaste, y con eso sabrás cuál rinde más.
+              </Text>
+            </Card>
+          ) : null
         }
       />
     </Screen>
@@ -192,29 +250,49 @@ export default function CombosScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: '#fff' },
-  title: { fontSize: 22, fontWeight: '700' },
-  meta: { color: '#6b6b64', fontSize: 12, marginTop: 6, marginBottom: 16 },
-  form: { gap: 8 },
-  input: { color: '#1a1a20', borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12, width: '100%' },
-  rowGap: { flexDirection: 'row', gap: 8 },
-  button: { backgroundColor: '#2f5ad6', borderRadius: 8, padding: 12, alignItems: 'center', flex: 1 },
-  secondaryButton: { backgroundColor: '#444' },
-  buttonText: { color: '#fff', fontWeight: '600' },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    paddingVertical: 10,
+  list: { paddingHorizontal: space.xl, paddingBottom: space.xxxl, gap: space.sm },
+  header: { gap: space.lg, paddingTop: space.md, marginBottom: space.sm },
+  headRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  back: { color: colors.ink, fontSize: 30, lineHeight: 32, width: 22 },
+  title: { ...type.title, fontSize: 20 },
+  sub: { ...type.soft, fontSize: 12.5, marginTop: -12 },
+
+  combo: { gap: space.md },
+  comboTop: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  name: { fontSize: 15, fontWeight: '700', color: colors.ink },
+  meta: { fontSize: 11.5, color: colors.inkSoft, lineHeight: 16 },
+  partsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 5 },
+  part: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.sm,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
   },
-  name: { fontSize: 14, fontWeight: '600' },
-  parts: { fontSize: 12, color: '#6b6b64', marginTop: 2 },
-  smallButton: { backgroundColor: '#444', borderRadius: 6, paddingVertical: 4, paddingHorizontal: 8 },
-  dangerButton: { backgroundColor: '#b00020' },
-  smallButtonText: { color: '#fff', fontSize: 11, fontWeight: '600' },
-  empty: { textAlign: 'center', color: '#6b6b64', marginTop: 40 },
-  back: { marginTop: 16 },
-  backText: { color: '#6b6b64' },
+  partText: { fontSize: 10.5, color: colors.inkSoft, fontWeight: '600' },
+  rateBox: { alignItems: 'flex-end' },
+  rate: { fontSize: 18, fontWeight: '800' },
+  rateLabel: { fontSize: 10, color: colors.inkDim },
+
+  actions: {
+    flexDirection: 'row',
+    gap: space.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
+    paddingTop: space.md,
+  },
+  action: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.sm,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  danger: { borderColor: colors.loss + '55' },
+  actionText: { fontSize: 12, fontWeight: '700', color: colors.inkSoft },
+
+  empty: { alignItems: 'center', gap: space.md, paddingVertical: space.xl },
+  emptyTitle: { fontSize: 15, fontWeight: '700', color: colors.ink, textAlign: 'center' },
 });

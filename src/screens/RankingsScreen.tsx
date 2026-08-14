@@ -6,18 +6,8 @@ import { useAuth } from '../context/AuthContext';
 import Screen from '../ui/Screen';
 import Avatar from '../ui/Avatar';
 import { Card, Chip } from '../ui/primitives';
-import { FINISH_TYPES } from '../lib/finishTypes';
+import { FINISH_TYPES, FINISH_COLORS as FINISH_COLOR } from '../lib/finishTypes';
 import { colors, space, type, radius } from '../theme';
-
-// Un color por tipo de finish. Se repite en la barra y en la leyenda, y es lo
-// que permite leer la mezcla sin contar números.
-const FINISH_COLOR: Record<string, string> = {
-  spin: '#5BA8FF',
-  over: '#35C46A',
-  burst: '#F5A524',
-  xtreme: '#9B6BFF',
-  aerial: '#FF7AC8',
-};
 
 function ChampStat({ label, value, tint }: { label: string; value: string; tint?: string }) {
   return (

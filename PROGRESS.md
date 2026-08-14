@@ -147,11 +147,25 @@ Medido el 2026-08-14 cruzando `Reglamento DML Beyblade actualizado pro.docx` con
 
 Orden recomendado: **arbitraje + penalizaciones (24x)** primero, porque la disputa ya está rota; después categorías + ascenso + VP (45x), que es lo que le da sentido competitivo a la liga.
 
+### 🔴 Arbitraje y penalizaciones — construido, PENDIENTE DE CORRER (2026-08-14)
+
+**Lo primero al retomar: correr `supabase/migrations/0022_arbitration_and_penalties.sql` en el SQL Editor de Supabase.** El código de la app ya está en `main` y espera esas funciones. Mientras no corra, el panel del juez simplemente no aparece (`can_arbitrate` no existe) y el resto de la app sigue funcionando igual — no rompe nada, pero la función nueva no se puede usar.
+
+Lo que trae 0022: rol de juez (`players.judge_role`), `can_arbitrate`, `resolve_dispute`, catálogo `penalty_codes` con las 12 infracciones del reglamento, `register_penalty` con su efecto en el marcador, `suspend_player`, `set_judge_role`, y `apply_match_confirmation` (el cierre del match — ELO, snapshots, rivalidad, logros — extraído a un solo lugar en vez de copiado en dos funciones).
+
+Detalle de diseño que importa: los puntos de penalización viven en `matches.penalty_points_a/b`, no dentro de `score_a/score_b`. Si vivieran ahí, el siguiente reporte los borraría, porque ese reporte recalcula el marcador desde los rounds.
+
+En la app quedó: panel del juez dentro del match (resolver o sancionar), bandeja de disputas ordenada por la que más lleva esperando, aviso "te toca arbitrar" arriba de Batallas, y el admin nombrando jueces desde el listado de jugadores.
+
+**Sin probar con datos reales.** Verificado: typecheck limpio, 0 rutas de navegación muertas, la bandeja monta en el preview.
+
+**Lo que sigue de este bloque:** el reglamento pide que los DOS jugadores marquen el resultado y que el juez entre solo si difieren (hoy uno reporta y el otro acepta o disputa), y las notificaciones para avisarle al juez. Faltan también las reglas de ronda: lanzamiento nulo, empate y self-over (8x).
+
 ## Cómo retomar el proyecto (checklist para una sesión nueva)
 
 1. `git clone` / `git pull` del repo.
 2. Copiar `.env.example` a `.env` y llenar `EXPO_PUBLIC_SUPABASE_URL` y `EXPO_PUBLIC_SUPABASE_ANON_KEY` (Supabase → Settings → API del proyecto "CML Beyblade").
-3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-14 las 21 ya están corridas** — si se agrega una nueva, actualizar esta línea.
+3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-14 las 21 primeras ya están corridas; la 0022 (arbitraje) está escrita y PENDIENTE de correr** — si se agrega una nueva, actualizar esta línea.
 4. `npm install`, luego `npm run web` para verificar rápido en el preview del navegador (no requiere emulador Android).
 5. Para un build real: `npx eas-cli build --platform android --profile preview --non-interactive` (requiere `eas login` ya hecho en la máquina).
 

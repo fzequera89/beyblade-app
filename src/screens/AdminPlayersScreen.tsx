@@ -18,6 +18,19 @@ type PlayerRow = {
   is_admin: boolean;
   avatar_key: string | null;
   avatar_url: string | null;
+  judge_role: 'none' | 'support' | 'principal';
+};
+
+// Rotación al tocar el sello: nadie → apoyo → principal → nadie.
+const NEXT_JUDGE: Record<string, 'none' | 'support' | 'principal'> = {
+  none: 'support',
+  support: 'principal',
+  principal: 'none',
+};
+
+const JUDGE_LABEL: Record<string, string> = {
+  support: 'Juez de apoyo',
+  principal: 'Juez principal',
 };
 
 export default function AdminPlayersScreen({ navigation }: any) {
@@ -33,7 +46,7 @@ export default function AdminPlayersScreen({ navigation }: any) {
     setLoading(true);
     const { data, error } = await supabase
       .from('players')
-      .select('id, display_name, city, elo_rating, auth_user_id, is_admin, avatar_key, avatar_url')
+      .select('id, display_name, city, elo_rating, auth_user_id, is_admin, avatar_key, avatar_url, judge_role')
       .order('display_name', { ascending: true });
     setLoading(false);
     if (error) {
@@ -68,6 +81,15 @@ export default function AdminPlayersScreen({ navigation }: any) {
     setCity('');
     setMainBeyblade('');
     setShowNew(false);
+    load();
+  }
+
+  async function cycleJudge(p: PlayerRow) {
+    const next = NEXT_JUDGE[p.judge_role ?? 'none'];
+    // Por RPC y no por update directo: la política de `players` solo deja
+    // editar tu propia fila, así que un update aquí no afectaría nada.
+    const { error } = await supabase.rpc('set_judge_role', { p_player_id: p.id, p_role: next });
+    if (error) return Alert.alert('No se pudo cambiar', error.message);
     load();
   }
 
@@ -151,8 +173,14 @@ export default function AdminPlayersScreen({ navigation }: any) {
               <Text style={styles.meta} numberOfLines={1}>
                 {item.city ?? 'Sin ciudad'} · {item.auth_user_id ? 'con cuenta' : 'sin cuenta'}
               </Text>
+              {item.judge_role && item.judge_role !== 'none' ? (
+                <Text style={styles.judge}>{JUDGE_LABEL[item.judge_role]}</Text>
+              ) : null}
             </View>
             {item.is_admin && <Pill label="Admin" color={colors.elite} />}
+            <Pressable style={styles.gavel} onPress={() => cycleJudge(item)} hitSlop={6}>
+              <Text style={[styles.gavelGlyph, item.judge_role === 'none' && { opacity: 0.25 }]}>⚖️</Text>
+            </Pressable>
             <Text style={styles.elo}>{Math.round(item.elo_rating)}</Text>
           </Card>
         )}
@@ -199,6 +227,9 @@ const styles = StyleSheet.create({
   name: { fontSize: 14, fontWeight: '700', color: colors.ink },
   meta: { fontSize: 11, color: colors.inkSoft, marginTop: 2 },
   elo: { fontSize: 14, fontWeight: '800', color: colors.blue },
+  judge: { fontSize: 10, fontWeight: '700', color: colors.elite, marginTop: 2 },
+  gavel: { padding: 4 },
+  gavelGlyph: { fontSize: 16 },
 
   empty: { alignItems: 'center', gap: space.md, paddingVertical: space.xl },
   emptyTitle: { fontSize: 15, fontWeight: '700', color: colors.ink },

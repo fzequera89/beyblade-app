@@ -57,15 +57,16 @@ export default function AdminScreen({ navigation }: any) {
 
         {/* La disputa es lo único que exige acción del admin: si hay, va primero. */}
         {openDisputes > 0 && (
-          <Card style={styles.alert}>
+          <Card style={styles.alert} onPress={() => navigation.navigate('Disputes')}>
             <Text style={styles.alertTag}>REQUIERE ARBITRAJE</Text>
             <Text style={styles.alertBig}>
               {openDisputes}
               <Text style={styles.alertUnit}> batalla{openDisputes === 1 ? '' : 's'} en disputa</Text>
             </Text>
             <Text style={styles.meta}>
-              Los jugadores reportaron resultados distintos. Entra al match y define el ganador.
+              Los jugadores reportaron resultados distintos. Cada combate está detenido hasta que un juez falle.
             </Text>
+            <Text style={styles.alertCta}>Ver bandeja ›</Text>
           </Card>
         )}
 
@@ -100,6 +101,16 @@ export default function AdminScreen({ navigation }: any) {
             title="Ranking global"
             sub="Toda la plataforma ordenada por ELO"
             onPress={() => navigation.navigate('AdminGlobalRanking')}
+          />
+          <Link
+            glyph="⚖️"
+            title="Disputas"
+            sub={
+              openDisputes > 0
+                ? `${openDisputes} combate${openDisputes === 1 ? '' : 's'} esperando fallo`
+                : 'Nada pendiente de arbitrar'
+            }
+            onPress={() => navigation.navigate('Disputes')}
           />
         </View>
       </View>
@@ -151,6 +162,7 @@ const styles = StyleSheet.create({
   alertTag: { fontSize: 9, fontWeight: '800', letterSpacing: 1.1, color: colors.loss },
   alertBig: { fontSize: 22, fontWeight: '800', fontStyle: 'italic', color: colors.ink },
   alertUnit: { fontSize: 13, fontWeight: '600', fontStyle: 'normal', color: colors.inkSoft },
+  alertCta: { fontSize: 12, fontWeight: '800', color: colors.loss, marginTop: 4 },
 
   stats: { flexDirection: 'row', alignItems: 'center' },
   stat: { flex: 1, alignItems: 'center', gap: 2 },

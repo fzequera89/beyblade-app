@@ -20,6 +20,7 @@ import LeagueStandingsScreen from '../screens/LeagueStandingsScreen';
 import AdminScreen from '../screens/AdminScreen';
 import AdminPlayersScreen from '../screens/AdminPlayersScreen';
 import AdminGlobalRankingScreen from '../screens/AdminGlobalRankingScreen';
+import DisputesScreen from '../screens/DisputesScreen';
 import VenuesScreen from '../screens/VenuesScreen';
 import CreateVenueScreen from '../screens/CreateVenueScreen';
 import VenueDetailScreen from '../screens/VenueDetailScreen';
@@ -98,6 +99,7 @@ function Batallas() {
       <BatallasStack.Screen name="TournamentDetail" component={TournamentDetailScreen} />
       <BatallasStack.Screen name="Bracket" component={BracketScreen} />
       <BatallasStack.Screen name="ClubDetail" component={ClubDetailScreen} />
+      <BatallasStack.Screen name="Disputes" component={DisputesScreen} />
     </BatallasStack.Navigator>
   );
 }
@@ -159,6 +161,7 @@ function Perfil() {
       <PerfilStack.Screen name="AdminPlayers" component={AdminPlayersScreen} />
       <PerfilStack.Screen name="AdminGlobalRanking" component={AdminGlobalRankingScreen} />
       <PerfilStack.Screen name="LeagueStandings" component={LeagueStandingsScreen} />
+      <PerfilStack.Screen name="Disputes" component={DisputesScreen} />
     </PerfilStack.Navigator>
   );
 }

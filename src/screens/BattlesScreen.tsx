@@ -29,6 +29,8 @@ export default function BattlesScreen({ navigation }: any) {
   const [received, setReceived] = useState<any[]>([]);
   const [tournaments, setTournaments] = useState<any[]>([]);
   const [leagues, setLeagues] = useState<any[]>([]);
+  const [isJudge, setIsJudge] = useState(false);
+  const [disputeCount, setDisputeCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -59,6 +61,18 @@ export default function BattlesScreen({ navigation }: any) {
           .limit(20),
         supabase.from('league_members').select('league_id, role, leagues(id, name, description)').eq('player_id', playerId),
       ]);
+
+    // Si arbitras, lo que está detenido esperándote va antes que lo tuyo.
+    const [{ data: me }, { count: disputes }] = await Promise.all([
+      supabase.from('players').select('judge_role, is_admin').eq('id', playerId).maybeSingle(),
+      supabase.from('matches').select('*', { count: 'exact', head: true }).eq('status', 'disputed'),
+    ]);
+    const judge =
+      (me as any)?.is_admin === true ||
+      ((me as any)?.judge_role && (me as any).judge_role !== 'none') ||
+      ((memberships as any[]) ?? []).some((m) => m.role === 'organizer');
+    setIsJudge(!!judge);
+    setDisputeCount(disputes ?? 0);
 
     setPending(
       ((challenges as any[]) ?? []).filter((c) => c.match && c.match.status !== 'confirmed')
@@ -114,6 +128,22 @@ export default function BattlesScreen({ navigation }: any) {
       </View>
 
       <View style={styles.pad}>
+        {/* Si eres juez, lo que está detenido esperando tu fallo va antes que
+            tus propias batallas: cada disputa tiene a dos personas paradas. */}
+        {isJudge && disputeCount > 0 && (
+          <Card
+            style={[styles.judgeCall, glow(colors.loss, 8)]}
+            onPress={() => navigation.navigate('Disputes')}
+          >
+            <Text style={styles.judgeTag}>TE TOCA ARBITRAR</Text>
+            <Text style={styles.judgeBig}>
+              {disputeCount}
+              <Text style={styles.judgeUnit}> combate{disputeCount === 1 ? '' : 's'} detenido{disputeCount === 1 ? '' : 's'}</Text>
+            </Text>
+            <Text style={styles.judgeCta}>Abrir bandeja ›</Text>
+          </Card>
+        )}
+
         {tab === 'jugar' && (
           <>
             {received.length > 0 && (
@@ -395,6 +425,12 @@ const styles = StyleSheet.create({
   title: { ...type.display, fontSize: 28 },
   sub: { ...type.soft, marginTop: 4 },
   pad: { paddingHorizontal: space.xl },
+
+  judgeCall: { gap: 2, borderColor: colors.loss, marginBottom: space.lg },
+  judgeTag: { fontSize: 9, fontWeight: '800', letterSpacing: 1.1, color: colors.loss },
+  judgeBig: { fontSize: 22, fontWeight: '800', fontStyle: 'italic', color: colors.ink },
+  judgeUnit: { fontSize: 13, fontWeight: '600', fontStyle: 'normal', color: colors.inkSoft },
+  judgeCta: { fontSize: 12, fontWeight: '800', color: colors.loss, marginTop: 4 },
 
   tabs: {
     flexDirection: 'row',

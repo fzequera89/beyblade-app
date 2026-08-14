@@ -7,6 +7,7 @@ import Screen from '../ui/Screen';
 import Button from '../ui/Button';
 import Avatar from '../ui/Avatar';
 import { Card, Pill, SectionTitle } from '../ui/primitives';
+import { Field } from '../ui/Field';
 import { colors, space, type, radius } from '../theme';
 import {
   finishesFor,
@@ -15,6 +16,16 @@ import {
   FinishCode,
   MatchMode,
 } from '../lib/finishTypes';
+import {
+  loadPenaltyCodes,
+  loadMatchPenalties,
+  PenaltyCode,
+  Penalty,
+  Severity,
+  SEVERITY_COLOR,
+  SEVERITY_LABEL,
+  SEVERITY_EFFECT,
+} from '../lib/penalties';
 
 type Match = {
   id: string;
@@ -31,6 +42,10 @@ type Match = {
   elo_b_change: number | null;
   points_to_win: number;
   mode: MatchMode;
+  penalty_points_a: number;
+  penalty_points_b: number;
+  arbitrated_by: string | null;
+  arbitration_reason: string | null;
   player_a: { display_name: string; avatar_key: string | null; avatar_url: string | null } | null;
   player_b: { display_name: string; avatar_key: string | null; avatar_url: string | null } | null;
 };
@@ -52,6 +67,19 @@ export default function MatchDetailScreen({ route, navigation }: any) {
   const [combos, setCombos] = useState<{ id: string; name: string }[]>([]);
   const [isOrganizer, setIsOrganizer] = useState(false);
 
+  // Arbitraje
+  const [canJudge, setCanJudge] = useState(false);
+  const [penalties, setPenalties] = useState<Penalty[]>([]);
+  const [codes, setCodes] = useState<PenaltyCode[]>([]);
+  const [panel, setPanel] = useState<'none' | 'resolve' | 'penalty'>('none');
+  const [ruledWinner, setRuledWinner] = useState<'a' | 'b' | null>(null);
+  const [ruledA, setRuledA] = useState('');
+  const [ruledB, setRuledB] = useState('');
+  const [reason, setReason] = useState('');
+  const [offender, setOffender] = useState<'a' | 'b' | null>(null);
+  const [pickedCode, setPickedCode] = useState<string | null>(null);
+  const [penaltyNote, setPenaltyNote] = useState('');
+
   const [rounds, setRounds] = useState<Round[]>([]);
   const [pickedWinner, setPickedWinner] = useState<'a' | 'b' | null>(null);
   const [pickedFinish, setPickedFinish] = useState<FinishCode | null>(null);
@@ -64,7 +92,7 @@ export default function MatchDetailScreen({ route, navigation }: any) {
     const { data, error } = await supabase
       .from('matches')
       .select(
-        'id, league_id, tournament_id, player_a_id, player_b_id, score_a, score_b, winner_id, status, reported_by, elo_a_change, elo_b_change, points_to_win, mode, player_a:players!matches_player_a_id_fkey(display_name, avatar_key, avatar_url), player_b:players!matches_player_b_id_fkey(display_name, avatar_key, avatar_url)'
+        'id, league_id, tournament_id, player_a_id, player_b_id, score_a, score_b, winner_id, status, reported_by, elo_a_change, elo_b_change, points_to_win, mode, penalty_points_a, penalty_points_b, arbitrated_by, arbitration_reason, player_a:players!matches_player_a_id_fkey(display_name, avatar_key, avatar_url), player_b:players!matches_player_b_id_fkey(display_name, avatar_key, avatar_url)'
       )
       .eq('id', matchId)
       .single();
@@ -95,6 +123,18 @@ export default function MatchDetailScreen({ route, navigation }: any) {
     setIsOrganizer((membership as any)?.role === 'organizer');
     setSavedRounds((roundRows as any) ?? []);
     setCombos((comboRows as any) ?? []);
+
+    // Quién puede arbitrar lo decide el servidor, no el cliente: es la misma
+    // función que después rechaza la llamada si no le corresponde.
+    const [{ data: allowed }, marks, catalog] = await Promise.all([
+      supabase.rpc('can_arbitrate', { p_player_id: playerId, p_match_id: matchId }),
+      loadMatchPenalties(matchId),
+      loadPenaltyCodes(),
+    ]);
+    setCanJudge(allowed === true);
+    setPenalties(marks);
+    setCodes(catalog);
+
     setLoading(false);
   }, [matchId, playerId]);
 
@@ -164,6 +204,54 @@ export default function MatchDetailScreen({ route, navigation }: any) {
       .eq('id', matchId);
     setBusy(false);
     if (error) return Alert.alert('Error', error.message);
+    load();
+  }
+
+  // El juez FALLA el resultado. No lo devuelve a los jugadores: el reglamento
+  // dice que la decisión del juez es inapelable, así que el match queda cerrado.
+  async function resolve() {
+    if (!match || ruledWinner === null) return;
+    setBusy(true);
+    const { error } = await supabase.rpc('resolve_dispute', {
+      p_match_id: match.id,
+      p_winner_id: ruledWinner === 'a' ? match.player_a_id : match.player_b_id,
+      p_score_a: Number(ruledA) || 0,
+      p_score_b: Number(ruledB) || 0,
+      p_reason: reason,
+    });
+    setBusy(false);
+    if (error) return Alert.alert('No se pudo resolver', error.message);
+    setPanel('none');
+    setReason('');
+    Alert.alert('Resuelto', 'El resultado quedó firme y el ELO ya se aplicó.');
+    load();
+  }
+
+  async function sanction() {
+    if (!match || offender === null || !pickedCode) return;
+    setBusy(true);
+    const { data, error } = await supabase.rpc('register_penalty', {
+      p_match_id: match.id,
+      p_player_id: offender === 'a' ? match.player_a_id : match.player_b_id,
+      p_code: pickedCode,
+      p_notes: penaltyNote || null,
+    });
+    setBusy(false);
+    if (error) return Alert.alert('No se pudo registrar', error.message);
+
+    const r = data as any;
+    Alert.alert(
+      'Infracción registrada',
+      r?.forfeited_match
+        ? 'El infractor pierde el combate. El resultado quedó cerrado.'
+        : r?.awarded_point
+        ? 'Segunda del mismo tipo: 1 punto al rival.'
+        : 'Queda como advertencia.'
+    );
+    setPanel('none');
+    setPickedCode(null);
+    setOffender(null);
+    setPenaltyNote('');
     load();
   }
 
@@ -361,9 +449,179 @@ export default function MatchDetailScreen({ route, navigation }: any) {
         <View style={styles.block}>
           <Card style={{ borderColor: colors.loss }}>
             <Text style={styles.disputed}>Resultado en disputa</Text>
-            <Text style={styles.hint}>Un moderador de la liga tiene que reabrirlo.</Text>
+            <Text style={styles.hint}>
+              {canJudge
+                ? 'Te toca decidir. Tu fallo cierra el combate y no vuelve a los jugadores.'
+                : 'Un juez tiene que resolverlo. Le llega el aviso en su bandeja.'}
+            </Text>
           </Card>
-          {isOrganizer && <Button label="REABRIR PARA REPORTAR DE NUEVO" onPress={reopen} loading={busy} />}
+        </View>
+      )}
+
+      {/* Panel del juez */}
+      {canJudge && (match.status === 'reported' || match.status === 'disputed') && (
+        <View style={styles.block}>
+          <SectionTitle>Panel del juez</SectionTitle>
+
+          {panel === 'none' && (
+            <>
+              <Button
+                label="RESOLVER Y CERRAR EL COMBATE"
+                onPress={() => {
+                  setRuledA(String(match.score_a));
+                  setRuledB(String(match.score_b));
+                  setRuledWinner(match.winner_id === match.player_b_id ? 'b' : 'a');
+                  setPanel('resolve');
+                }}
+              />
+              <Button label="REGISTRAR INFRACCIÓN" variant="ghost" onPress={() => setPanel('penalty')} />
+              {isOrganizer && (
+                <Pressable onPress={reopen} hitSlop={6}>
+                  <Text style={styles.secondary}>o reabrir para que lo reporten de nuevo</Text>
+                </Pressable>
+              )}
+            </>
+          )}
+
+          {panel === 'resolve' && (
+            <Card style={{ gap: space.md }}>
+              <Text style={type.label}>¿Quién ganó?</Text>
+              <View style={styles.row}>
+                {(['a', 'b'] as const).map((s) => (
+                  <Pressable
+                    key={s}
+                    onPress={() => setRuledWinner(s)}
+                    style={[styles.choice, { flex: 1 }, ruledWinner === s && styles.choiceOn]}
+                  >
+                    <Text
+                      style={[styles.choiceText, ruledWinner === s && styles.choiceTextOn]}
+                      numberOfLines={1}
+                    >
+                      {s === 'a' ? match.player_a?.display_name : match.player_b?.display_name}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              <Text style={type.label}>Marcador oficial</Text>
+              <View style={styles.row}>
+                <View style={{ flex: 1 }}>
+                  <Field value={ruledA} onChangeText={setRuledA} keyboardType="number-pad" />
+                </View>
+                <Text style={styles.dashSmall}>–</Text>
+                <View style={{ flex: 1 }}>
+                  <Field value={ruledB} onChangeText={setRuledB} keyboardType="number-pad" />
+                </View>
+              </View>
+
+              <Field
+                label="¿Por qué se resuelve así?"
+                placeholder="Ej. El burst ocurrió antes que el over, se revisó la repetición."
+                value={reason}
+                onChangeText={setReason}
+                multiline
+                hint="Queda escrito en el historial del combate."
+              />
+
+              <Button
+                label="FALLAR A FAVOR"
+                onPress={resolve}
+                disabled={ruledWinner === null || reason.trim().length < 3}
+                loading={busy}
+              />
+              <Button label="Cancelar" variant="ghost" onPress={() => setPanel('none')} />
+            </Card>
+          )}
+
+          {panel === 'penalty' && (
+            <Card style={{ gap: space.md }}>
+              <Text style={type.label}>¿A quién se sanciona?</Text>
+              <View style={styles.row}>
+                {(['a', 'b'] as const).map((s) => (
+                  <Pressable
+                    key={s}
+                    onPress={() => setOffender(s)}
+                    style={[styles.choice, { flex: 1 }, offender === s && styles.choiceOn]}
+                  >
+                    <Text style={[styles.choiceText, offender === s && styles.choiceTextOn]} numberOfLines={1}>
+                      {s === 'a' ? match.player_a?.display_name : match.player_b?.display_name}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              <Text style={type.label}>Infracción</Text>
+              {codes.map((c) => (
+                <Pressable
+                  key={c.code}
+                  onPress={() => setPickedCode(c.code)}
+                  style={[
+                    styles.infraction,
+                    pickedCode === c.code && { borderColor: SEVERITY_COLOR[c.severity] },
+                  ]}
+                >
+                  <View style={styles.infractionTop}>
+                    <Text style={styles.infractionName}>{c.label}</Text>
+                    <Pill label={SEVERITY_LABEL[c.severity]} color={SEVERITY_COLOR[c.severity]} />
+                  </View>
+                  <Text style={styles.infractionDesc}>{c.description}</Text>
+                  {pickedCode === c.code && (
+                    <Text style={[styles.effect, { color: SEVERITY_COLOR[c.severity] }]}>
+                      {SEVERITY_EFFECT[c.severity]}
+                    </Text>
+                  )}
+                </Pressable>
+              ))}
+
+              <Field
+                label="Nota (opcional)"
+                placeholder="Lo que viste"
+                value={penaltyNote}
+                onChangeText={setPenaltyNote}
+              />
+
+              <Button
+                label="REGISTRAR INFRACCIÓN"
+                variant="danger"
+                onPress={sanction}
+                disabled={offender === null || !pickedCode}
+                loading={busy}
+              />
+              <Button label="Cancelar" variant="ghost" onPress={() => setPanel('none')} />
+            </Card>
+          )}
+        </View>
+      )}
+
+      {/* Fallo del juez, ya cerrado */}
+      {match.arbitration_reason && (
+        <View style={styles.block}>
+          <Card style={{ borderColor: colors.elite, gap: 4 }}>
+            <Text style={styles.judgeTag}>RESUELTO POR UN JUEZ</Text>
+            <Text style={styles.judgeReason}>{match.arbitration_reason}</Text>
+          </Card>
+        </View>
+      )}
+
+      {/* Sanciones del combate */}
+      {penalties.length > 0 && (
+        <View style={styles.block}>
+          <SectionTitle>Infracciones</SectionTitle>
+          {penalties.map((p) => (
+            <Card key={p.id} style={styles.penaltyRow}>
+              <View style={[styles.severityBar, { backgroundColor: SEVERITY_COLOR[p.severity as Severity] }]} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.penaltyName}>{p.penalty_codes?.label ?? p.code}</Text>
+                <Text style={styles.hint}>
+                  {nameFor(p.player_id)}
+                  {p.awarded_point ? ' · 1 punto al rival' : ''}
+                  {p.forfeited_match ? ' · pierde el combate' : ''}
+                </Text>
+                {p.notes ? <Text style={styles.penaltyNote}>{p.notes}</Text> : null}
+              </View>
+              <Pill label={SEVERITY_LABEL[p.severity as Severity]} color={SEVERITY_COLOR[p.severity as Severity]} />
+            </Card>
+          ))}
         </View>
       )}
 
@@ -476,6 +734,29 @@ const styles = StyleSheet.create({
 
   reported: { fontSize: 14, color: colors.ink, fontWeight: '600' },
   disputed: { fontSize: 15, fontWeight: '800', color: colors.loss, marginBottom: 4 },
+
+  secondary: { fontSize: 12, color: colors.inkDim, textAlign: 'center', paddingVertical: space.sm },
+  dashSmall: { fontSize: 20, color: colors.inkDim, alignSelf: 'center' },
+  infraction: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    padding: space.md,
+    gap: 5,
+  },
+  infractionTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
+  infractionName: { flex: 1, fontSize: 13.5, fontWeight: '700', color: colors.ink },
+  infractionDesc: { fontSize: 11.5, color: colors.inkSoft, lineHeight: 16 },
+  effect: { fontSize: 11.5, fontWeight: '700', marginTop: 2 },
+
+  judgeTag: { fontSize: 9, fontWeight: '800', letterSpacing: 1, color: colors.elite },
+  judgeReason: { fontSize: 13, color: colors.ink, lineHeight: 18 },
+
+  penaltyRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  severityBar: { width: 3, alignSelf: 'stretch', borderRadius: 2 },
+  penaltyName: { fontSize: 13.5, fontWeight: '700', color: colors.ink },
+  penaltyNote: { fontSize: 11.5, color: colors.inkDim, marginTop: 3, fontStyle: 'italic' },
 
   eloCard: { flexDirection: 'row', alignItems: 'center' },
   eloSide: { flex: 1, alignItems: 'center', gap: 2 },

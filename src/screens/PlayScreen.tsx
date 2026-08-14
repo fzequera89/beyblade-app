@@ -231,7 +231,7 @@ export default function PlayScreen({ navigation }: any) {
               </View>
               {venues.length === 0 && (
                 <Text style={styles.help}>
-                  No hay venues registrados en tu ciudad todavía.
+                  No hay locaciones registradas en tu ciudad todavía.
                 </Text>
               )}
 

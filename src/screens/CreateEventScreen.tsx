@@ -169,7 +169,7 @@ export default function CreateEventScreen({ navigation }: any) {
         <View style={{ gap: space.sm }}>
           <Text style={type.label}>¿Dónde? (opcional)</Text>
           {venues.length === 0 ? (
-            <Text style={styles.note}>No hay venues registrados todavía.</Text>
+            <Text style={styles.note}>No hay locaciones registradas todavía.</Text>
           ) : (
             <View style={styles.chips}>
               <Chip label="Sin lugar fijo" selected={venueId === null} onPress={() => setVenueId(null)} />

@@ -50,7 +50,7 @@ export default function CreateVenueScreen({ navigation }: any) {
         <Pressable onPress={() => navigation.goBack()} hitSlop={8}>
           <Text style={styles.back}>‹</Text>
         </Pressable>
-        <Text style={styles.title}>Nuevo venue</Text>
+        <Text style={styles.title}>Nueva locación</Text>
       </View>
 
       <View style={styles.hero}>

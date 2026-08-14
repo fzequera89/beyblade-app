@@ -3,12 +3,15 @@ import { Text, View, Pressable, StyleSheet, Alert } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import QRCode from 'react-native-qrcode-svg';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../context/AuthContext';
+import { pickVenuePhoto, uploadVenuePhoto } from '../lib/venuePhoto';
 import Screen from '../ui/Screen';
 import Button from '../ui/Button';
 import Avatar from '../ui/Avatar';
-import { Card, Hex, Pill, SectionTitle } from '../ui/primitives';
+import VenueCover from '../ui/VenueCover';
+import { Card, Pill, SectionTitle } from '../ui/primitives';
 import { IconPin } from '../ui/icons';
-import { colors, space, type, radius, glow } from '../theme';
+import { colors, space, type, radius } from '../theme';
 
 type Venue = {
   id: string;
@@ -16,6 +19,7 @@ type Venue = {
   address: string | null;
   city: string | null;
   qr_code: string | null;
+  photo_url: string | null;
 };
 
 type CheckIn = {
@@ -34,26 +38,40 @@ const WINDOW_HOURS = 4;
 
 export default function VenueDetailScreen({ route, navigation }: any) {
   const { venueId } = route.params;
+  const { playerId, isAdmin } = useAuth();
   const [venue, setVenue] = useState<Venue | null>(null);
   const [checkIns, setCheckIns] = useState<CheckIn[]>([]);
   const [showQr, setShowQr] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [canEdit, setCanEdit] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     const since = new Date(Date.now() - WINDOW_HOURS * 60 * 60 * 1000).toISOString();
-    const [{ data, error }, { data: recent }] = await Promise.all([
-      supabase.from('venues').select('id, name, address, city, qr_code').eq('id', venueId).single(),
+    const [{ data, error }, { data: recent }, { count: organizerCount }] = await Promise.all([
+      supabase
+        .from('venues')
+        .select('id, name, address, city, qr_code, photo_url')
+        .eq('id', venueId)
+        .single(),
       supabase
         .from('check_ins')
         .select('id, checked_in_at, players(id, display_name, elo_rating, avatar_key, avatar_url)')
         .eq('venue_id', venueId)
         .gte('checked_in_at', since)
         .order('checked_in_at', { ascending: false }),
+      supabase
+        .from('league_members')
+        .select('*', { count: 'exact', head: true })
+        .eq('player_id', playerId)
+        .eq('role', 'organizer'),
     ]);
     setLoading(false);
     if (error) return Alert.alert('Error', error.message);
     setVenue(data as any);
+    // Misma regla que para crear locaciones: admin o moderador de alguna liga.
+    setCanEdit(isAdmin || (organizerCount ?? 0) > 0);
 
     // Un jugador que escaneó dos veces no son dos personas: se queda el más
     // reciente de cada uno.
@@ -66,7 +84,20 @@ export default function VenueDetailScreen({ route, navigation }: any) {
       unique.push(c);
     }
     setCheckIns(unique);
-  }, [venueId]);
+  }, [venueId, playerId, isAdmin]);
+
+  async function changePhoto() {
+    const uri = await pickVenuePhoto();
+    if (!uri) return;
+    setUploading(true);
+    const url = await uploadVenuePhoto(venueId, uri);
+    if (url) {
+      const { error } = await supabase.from('venues').update({ photo_url: url }).eq('id', venueId);
+      if (error) Alert.alert('No se pudo guardar', error.message);
+    }
+    setUploading(false);
+    load();
+  }
 
   useFocusEffect(
     useCallback(() => {
@@ -95,23 +126,34 @@ export default function VenueDetailScreen({ route, navigation }: any) {
 
   return (
     <Screen scroll padded={false}>
-      <View style={styles.headRow}>
-        <Pressable onPress={() => navigation.goBack()} hitSlop={8}>
+      {/* La portada es lo primero: entras al lugar, no a una ficha. */}
+      <View>
+        <VenueCover id={venue.id} photoUrl={venue.photo_url} live={live} height={190} />
+        <Pressable style={styles.backOverCover} onPress={() => navigation.goBack()} hitSlop={8}>
           <Text style={styles.back}>‹</Text>
         </Pressable>
+        <View style={styles.coverText}>
+          {live && (
+            <Pill label={`${checkIns.length} jugando ahora`} color={colors.win} />
+          )}
+          <Text style={styles.title}>{venue.name}</Text>
+          <View style={styles.placeRow}>
+            <IconPin size={13} color={colors.inkSoft} />
+            <Text style={styles.address} numberOfLines={2}>
+              {[venue.address, venue.city].filter(Boolean).join(', ') || 'Sin dirección'}
+            </Text>
+          </View>
+        </View>
       </View>
 
       <View style={styles.pad}>
-        <View style={styles.hero}>
-          <Hex size={72} color={live ? colors.win : colors.blue}>
-            <IconPin size={26} color={live ? colors.win : colors.blue} />
-          </Hex>
-          <Text style={styles.title}>{venue.name}</Text>
-          <Text style={styles.address}>
-            {[venue.address, venue.city].filter(Boolean).join(', ') || 'Sin dirección'}
-          </Text>
-          {live && <Pill label={`${checkIns.length} jugando ahora`} color={colors.win} align="center" />}
-        </View>
+        {canEdit && (
+          <Pressable onPress={changePhoto} disabled={uploading} hitSlop={6} style={styles.photoBtn}>
+            <Text style={styles.photoBtnText}>
+              {uploading ? 'Subiendo…' : venue.photo_url ? '🖼️ Cambiar foto del lugar' : '🖼️ Poner foto del lugar'}
+            </Text>
+          </Pressable>
+        )}
 
         <Button label="📷  HACER CHECK-IN AQUÍ" onPress={() => navigation.navigate('ScanCheckIn')} />
 
@@ -152,7 +194,7 @@ export default function VenueDetailScreen({ route, navigation }: any) {
 
         {venue.qr_code && (
           <View style={styles.block}>
-            <SectionTitle>Código del venue</SectionTitle>
+            <SectionTitle>Código de la locación</SectionTitle>
             {showQr ? (
               <Card style={styles.qrCard}>
                 {/* El QR va sobre blanco a propósito: un código sobre fondo
@@ -161,14 +203,14 @@ export default function VenueDetailScreen({ route, navigation }: any) {
                   <QRCode value={venue.qr_code} size={196} />
                 </View>
                 <Text style={styles.note}>
-                  Muéstralo en el venue para que los demás hagan check-in.
+                  Muéstralo en el lugar para que los demás hagan check-in.
                 </Text>
                 <Pressable onPress={() => setShowQr(false)} hitSlop={6}>
                   <Text style={styles.link}>Ocultar</Text>
                 </Pressable>
               </Card>
             ) : (
-              <Button label="MOSTRAR QR DEL VENUE" variant="ghost" onPress={() => setShowQr(true)} />
+              <Button label="MOSTRAR QR DE LA LOCACIÓN" variant="ghost" onPress={() => setShowQr(true)} />
             )}
           </View>
         )}
@@ -179,13 +221,26 @@ export default function VenueDetailScreen({ route, navigation }: any) {
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  headRow: { paddingHorizontal: space.xl, paddingTop: space.md },
   back: { color: colors.ink, fontSize: 30, lineHeight: 32, width: 22 },
-  pad: { paddingHorizontal: space.xl },
+  backOverCover: {
+    position: 'absolute',
+    top: space.md,
+    left: space.xl,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(4,6,12,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pad: { paddingHorizontal: space.xl, gap: space.sm },
 
-  hero: { alignItems: 'center', gap: space.sm, paddingVertical: space.lg },
-  title: { ...type.display, fontSize: 24, textAlign: 'center' },
-  address: { fontSize: 12.5, color: colors.inkSoft, textAlign: 'center' },
+  coverText: { paddingHorizontal: space.xl, paddingTop: space.md, gap: 4, marginBottom: space.lg },
+  title: { ...type.display, fontSize: 24 },
+  placeRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  address: { flex: 1, fontSize: 12.5, color: colors.inkSoft },
+  photoBtn: { alignSelf: 'flex-start', paddingVertical: 4 },
+  photoBtnText: { color: colors.blue, fontSize: 12.5, fontWeight: '700' },
 
   block: { marginTop: space.xxl, gap: space.sm },
   note: { fontSize: 11.5, color: colors.inkDim },

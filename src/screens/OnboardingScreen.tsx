@@ -30,7 +30,7 @@ const INTERESTS = [
   { key: 'batallas', label: 'Batallas 1v1', desc: 'Desafíos individuales' },
   { key: 'torneos', label: 'Eventos y torneos', desc: 'Competir en torneos oficiales' },
   { key: 'cerca', label: 'Bladers cerca de mí', desc: 'Encontrar jugadores y comunidad' },
-  { key: 'venues', label: 'Tiendas y venues', desc: 'Descubrir lugares para batallar' },
+  { key: 'venues', label: 'Tiendas y locaciones', desc: 'Descubrir lugares para batallar' },
 ];
 
 // DD/MM/AAAA -> ISO. Se captura como texto porque un selector de fecha nativo

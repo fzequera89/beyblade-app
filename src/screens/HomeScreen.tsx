@@ -31,10 +31,13 @@ const EXPERIENCE_LABEL: Record<string, string> = {
 // Las cuatro acciones son las que el jugador viene a hacer. Van arriba porque
 // esta pantalla sustituye al menú de botones que había en el perfil: en vez de
 // una lista de secciones, se ofrece lo que se puede HACER ahora.
+// Cada acción lleva a un sitio distinto: dos que hacen lo mismo con nombres
+// distintos solo confunden. Las dos primeras saltan de pestaña; las otras dos
+// abren dentro de Inicio.
 const ACTIONS = [
-  { key: 'NearMe', tint: colors.blue, title: 'Encontrar\nbladers cerca', desc: 'Conecta y compite', Icon: IconSearch },
-  { key: 'Challenges', tint: colors.elite, title: 'Retar a\nun blader', desc: 'Envía un desafío', Icon: IconSwords },
-  { key: 'Events', tint: colors.win, title: 'Programar\nbatalla', desc: 'Fecha, hora y lugar', Icon: IconCalendar },
+  { key: 'Play', tint: colors.blue, title: 'Encontrar\nrival', desc: 'Quién juega ahora', Icon: IconSearch },
+  { key: 'Batallas', tint: colors.elite, title: 'Mis\nbatallas', desc: 'Retos y pendientes', Icon: IconSwords },
+  { key: 'Events', tint: colors.win, title: 'Eventos\nde la liga', desc: 'Torneos y quedadas', Icon: IconCalendar },
   { key: 'Venues', tint: colors.streak, title: 'Lugares para\nbatallar', desc: 'Venues y tiendas', Icon: IconPin },
 ];
 

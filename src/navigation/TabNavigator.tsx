@@ -6,6 +6,7 @@ import { colors } from '../theme';
 import HomeScreen from '../screens/HomeScreen';
 import BattlesScreen from '../screens/BattlesScreen';
 import RankingsScreen from '../screens/RankingsScreen';
+import PlayScreen from '../screens/PlayScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import EditProfileScreen from '../screens/EditProfileScreen';
 import LeaguesScreen from '../screens/LeaguesScreen';
@@ -23,7 +24,6 @@ import VenuesScreen from '../screens/VenuesScreen';
 import CreateVenueScreen from '../screens/CreateVenueScreen';
 import VenueDetailScreen from '../screens/VenueDetailScreen';
 import ScanCheckInScreen from '../screens/ScanCheckInScreen';
-import NearMeScreen from '../screens/NearMeScreen';
 import ChallengesScreen from '../screens/ChallengesScreen';
 import StatsScreen from '../screens/StatsScreen';
 import CombosScreen from '../screens/CombosScreen';
@@ -68,7 +68,6 @@ function Inicio() {
       <InicioStack.Screen name="TournamentDetail" component={TournamentDetailScreen} />
       <InicioStack.Screen name="Bracket" component={BracketScreen} />
       <InicioStack.Screen name="Challenges" component={ChallengesScreen} />
-      <InicioStack.Screen name="NearMe" component={NearMeScreen} />
       <InicioStack.Screen name="Venues" component={VenuesScreen} />
       <InicioStack.Screen name="VenueDetail" component={VenueDetailScreen} />
     </InicioStack.Navigator>
@@ -102,7 +101,7 @@ const PlayStack = createNativeStackNavigator();
 function Play() {
   return (
     <PlayStack.Navigator screenOptions={stackOptions}>
-      <PlayStack.Screen name="NearMe" component={NearMeScreen} />
+      <PlayStack.Screen name="Find" component={PlayScreen} />
       <PlayStack.Screen name="Challenges" component={ChallengesScreen} />
       <PlayStack.Screen name="MatchDetail" component={MatchDetailScreen} />
       <PlayStack.Screen name="PlayerProfile" component={PlayerProfileScreen} />

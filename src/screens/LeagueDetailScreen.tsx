@@ -1,9 +1,14 @@
 import { useCallback, useState } from 'react';
-import { View, Text, TextInput, FlatList, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import Screen from '../components/Screen';
+import Screen from '../ui/Screen';
+import Button from '../ui/Button';
+import { Field } from '../ui/Field';
+import { Card, Hex, Pill, SectionTitle } from '../ui/primitives';
+import { IconChevron } from '../ui/icons';
+import { colors, space, type } from '../theme';
 
 type Season = { id: string; name: string; start_date: string | null; end_date: string | null };
 type League = { id: string; name: string; description: string | null };
@@ -15,32 +20,46 @@ export default function LeagueDetailScreen({ route, navigation }: any) {
   const [role, setRole] = useState<'member' | 'organizer' | null>(null);
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [memberCount, setMemberCount] = useState(0);
-  const [newSeasonName, setNewSeasonName] = useState('');
-  const [showNewSeason, setShowNewSeason] = useState(false);
+  const [tournamentCount, setTournamentCount] = useState(0);
+  const [myRank, setMyRank] = useState<number | null>(null);
+  const [newSeason, setNewSeason] = useState('');
+  const [creating, setCreating] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [{ data: leagueData }, { data: membership }, { data: seasonRows }, { count }] = await Promise.all([
-      supabase.from('leagues').select('id, name, description').eq('id', leagueId).single(),
-      supabase
-        .from('league_members')
-        .select('role')
-        .eq('league_id', leagueId)
-        .eq('player_id', playerId)
-        .maybeSingle(),
-      supabase
-        .from('seasons')
-        .select('id, name, start_date, end_date')
-        .eq('league_id', leagueId)
-        .order('created_at', { ascending: false }),
-      supabase.from('league_members').select('*', { count: 'exact', head: true }).eq('league_id', leagueId),
-    ]);
+    const [{ data: leagueData }, { data: membership }, { data: seasonRows }, { data: roster }, { count: tCount }] =
+      await Promise.all([
+        supabase.from('leagues').select('id, name, description').eq('id', leagueId).single(),
+        supabase
+          .from('league_members')
+          .select('role')
+          .eq('league_id', leagueId)
+          .eq('player_id', playerId)
+          .maybeSingle(),
+        supabase
+          .from('seasons')
+          .select('id, name, start_date, end_date')
+          .eq('league_id', leagueId)
+          .order('created_at', { ascending: false }),
+        supabase.from('league_members').select('player_id, players(elo_rating)').eq('league_id', leagueId),
+        supabase.from('tournaments').select('*', { count: 'exact', head: true }).eq('league_id', leagueId),
+      ]);
+
     setLoading(false);
     setLeague(leagueData ?? null);
-    setRole((membership?.role as 'member' | 'organizer' | undefined) ?? null);
+    setRole((membership?.role as any) ?? null);
     setSeasons(seasonRows ?? []);
-    setMemberCount(count ?? 0);
+    setTournamentCount(tCount ?? 0);
+
+    const list = ((roster as any[]) ?? []).map((r) => ({
+      id: r.player_id,
+      elo: r.players?.elo_rating ?? 1000,
+    }));
+    setMemberCount(list.length);
+    list.sort((a, b) => b.elo - a.elo);
+    const idx = list.findIndex((p) => p.id === playerId);
+    setMyRank(idx >= 0 ? idx + 1 : null);
   }, [leagueId, playerId]);
 
   useFocusEffect(
@@ -53,136 +72,172 @@ export default function LeagueDetailScreen({ route, navigation }: any) {
     const { error } = await supabase
       .from('league_members')
       .insert({ league_id: leagueId, player_id: playerId, role: 'member' });
-    if (error) {
-      Alert.alert('Error', error.message);
-      return;
-    }
+    if (error) return Alert.alert('Error', error.message);
     load();
   }
 
   async function createSeason() {
-    if (!newSeasonName.trim()) return;
-    const { error } = await supabase
-      .from('seasons')
-      .insert({ league_id: leagueId, name: newSeasonName.trim() });
-    if (error) {
-      Alert.alert('Error', error.message);
-      return;
-    }
-    setNewSeasonName('');
-    setShowNewSeason(false);
+    if (!newSeason.trim()) return;
+    const { error } = await supabase.from('seasons').insert({ league_id: leagueId, name: newSeason.trim() });
+    if (error) return Alert.alert('Error', error.message);
+    setNewSeason('');
+    setCreating(false);
     load();
   }
 
   if (loading || !league) {
     return (
-      <Screen style={styles.container}>
-        <Text>Cargando…</Text>
+      <Screen>
+        <View style={styles.center}>
+          <Text style={type.soft}>Cargando…</Text>
+        </View>
       </Screen>
     );
   }
 
   return (
-    <Screen style={styles.container}>
-      <FlatList
-        style={{ flex: 1 }}
-        data={seasons}
-        keyExtractor={(s) => s.id}
-        contentContainerStyle={{ gap: 8, paddingBottom: 24 }}
-        ListHeaderComponent={
-          <View style={{ marginBottom: 16 }}>
-            <Text style={styles.title}>{league.name}</Text>
-            {league.description ? <Text style={styles.sub}>{league.description}</Text> : null}
-            <Text style={styles.meta}>
-              {memberCount} miembro{memberCount === 1 ? '' : 's'}
-            </Text>
+    <Screen scroll padded={false}>
+      <View style={styles.headRow}>
+        <Pressable onPress={() => navigation.goBack()} hitSlop={8}>
+          <Text style={styles.back}>‹</Text>
+        </Pressable>
+      </View>
 
-            {!role ? (
-              <Pressable style={styles.button} onPress={join}>
-                <Text style={styles.buttonText}>Unirme a esta liga</Text>
-              </Pressable>
-            ) : (
-              <Text style={styles.roleTag}>
-                {role === 'organizer' ? 'Eres moderador de esta liga' : 'Eres miembro'}
-              </Text>
-            )}
+      <View style={styles.pad}>
+        <View style={styles.hero}>
+          <Hex size={80} color={colors.blue}>
+            <Text style={{ fontSize: 30 }}>🏅</Text>
+          </Hex>
+          <Text style={styles.title}>{league.name}</Text>
+          {league.description ? <Text style={styles.desc}>{league.description}</Text> : null}
+          {role && (
+            <Pill
+              label={role === 'organizer' ? 'Eres moderador' : 'Eres miembro'}
+              color={role === 'organizer' ? colors.streak : colors.blue}
+              align="center"
+            />
+          )}
+        </View>
 
-            {role && (
-              <Pressable
-                style={styles.button}
-                onPress={() => navigation.navigate('Tournaments', { leagueId, isOrganizer: role === 'organizer' })}
-              >
-                <Text style={styles.buttonText}>Torneos</Text>
-              </Pressable>
-            )}
+        <Card style={styles.stats}>
+          <Stat label="Miembros" value={String(memberCount)} />
+          <View style={styles.vDiv} />
+          <Stat label="Torneos" value={String(tournamentCount)} />
+          <View style={styles.vDiv} />
+          <Stat
+            label="Tu posición"
+            value={myRank ? `#${myRank}` : '—'}
+            tint={myRank ? colors.blue : undefined}
+          />
+        </Card>
 
-            {role && (
-              <Pressable
-                style={[styles.button, styles.secondaryButton]}
-                onPress={() => navigation.navigate('LeagueStandings', { leagueId })}
-              >
-                <Text style={styles.buttonText}>Ranking / Reporte</Text>
-              </Pressable>
-            )}
-
-            <Text style={styles.sectionTitle}>Temporadas</Text>
-          </View>
-        }
-        renderItem={({ item }) => (
-          <View style={styles.seasonCard}>
-            <Text style={styles.seasonName}>{item.name}</Text>
+        {!role && (
+          <View style={{ marginTop: space.lg }}>
+            <Button label="UNIRME A ESTA LIGA" onPress={join} />
           </View>
         )}
-        ListEmptyComponent={<Text style={styles.empty}>Sin temporadas todavía.</Text>}
-        ListFooterComponent={
-          <View>
-            {role === 'organizer' &&
-              (showNewSeason ? (
-                <View style={styles.newSeasonRow}>
-                  <TextInput
-                    style={[styles.input, { flex: 1 }]}
-                    placeholder="Nombre de la temporada"
-                    placeholderTextColor="#8a8a8a"
-                    value={newSeasonName}
-                    onChangeText={setNewSeasonName}
-                  />
-                  <Pressable style={styles.button} onPress={createSeason}>
-                    <Text style={styles.buttonText}>Crear</Text>
-                  </Pressable>
-                </View>
-              ) : (
-                <Pressable style={styles.linkButton} onPress={() => setShowNewSeason(true)}>
-                  <Text style={styles.link}>+ Nueva temporada</Text>
-                </Pressable>
-              ))}
 
-            <Pressable style={styles.back} onPress={() => navigation.navigate('Leagues')}>
-              <Text style={styles.backText}>‹ Volver a ligas</Text>
-            </Pressable>
-          </View>
-        }
-      />
+        <View style={styles.block}>
+          <Card
+            style={styles.link}
+            onPress={() => navigation.navigate('Tournaments', { leagueId, isOrganizer: role === 'organizer' })}
+          >
+            <Text style={styles.linkGlyph}>🏆</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.linkLabel}>Torneos</Text>
+              <Text style={styles.meta}>
+                {tournamentCount} torneo{tournamentCount === 1 ? '' : 's'} en esta liga
+              </Text>
+            </View>
+            <IconChevron />
+          </Card>
+
+          <Card style={styles.link} onPress={() => navigation.navigate('LeagueStandings', { leagueId })}>
+            <Text style={styles.linkGlyph}>📊</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.linkLabel}>Ranking de la liga</Text>
+              <Text style={styles.meta}>Posiciones y reporte</Text>
+            </View>
+            <IconChevron />
+          </Card>
+        </View>
+
+        <View style={styles.block}>
+          <SectionTitle>Temporadas</SectionTitle>
+          {seasons.length === 0 ? (
+            <Card>
+              <Text style={type.soft}>Sin temporadas todavía.</Text>
+            </Card>
+          ) : (
+            seasons.map((s) => (
+              <Card key={s.id} style={styles.season}>
+                <Hex size={38} color={colors.blue}>
+                  <Text style={{ fontSize: 14 }}>📅</Text>
+                </Hex>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.name}>{s.name}</Text>
+                  {s.start_date ? (
+                    <Text style={styles.meta}>
+                      {new Date(s.start_date).toLocaleDateString()}
+                      {s.end_date ? ` – ${new Date(s.end_date).toLocaleDateString()}` : ''}
+                    </Text>
+                  ) : null}
+                </View>
+              </Card>
+            ))
+          )}
+
+          {role === 'organizer' &&
+            (creating ? (
+              <Card style={{ gap: space.md }}>
+                <Field
+                  label="Nombre de la temporada"
+                  placeholder="Temporada 2026"
+                  value={newSeason}
+                  onChangeText={setNewSeason}
+                />
+                <Button label="CREAR TEMPORADA" onPress={createSeason} />
+                <Button label="Cancelar" variant="ghost" onPress={() => setCreating(false)} />
+              </Card>
+            ) : (
+              <Button label="＋  NUEVA TEMPORADA" variant="ghost" onPress={() => setCreating(true)} />
+            ))}
+        </View>
+      </View>
     </Screen>
   );
 }
 
+function Stat({ label, value, tint }: { label: string; value: string; tint?: string }) {
+  return (
+    <View style={styles.stat}>
+      <Text style={styles.statLabel}>{label.toUpperCase()}</Text>
+      <Text style={[styles.statVal, tint ? { color: tint } : null]}>{value}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: '#fff' },
-  title: { fontSize: 22, fontWeight: '700' },
-  sub: { color: '#6b6b64', marginTop: 4 },
-  meta: { color: '#6b6b64', fontSize: 12, marginTop: 6 },
-  roleTag: { color: '#2f5ad6', fontWeight: '600', marginTop: 10 },
-  sectionTitle: { fontSize: 16, fontWeight: '700', marginTop: 20, marginBottom: 8 },
-  seasonCard: { borderWidth: 1, borderColor: '#eee', borderRadius: 8, padding: 12 },
-  seasonName: { fontWeight: '600' },
-  empty: { color: '#6b6b64' },
-  newSeasonRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
-  input: { color: '#1a1a20', borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 10 },
-  button: { backgroundColor: '#2f5ad6', borderRadius: 8, padding: 12, alignItems: 'center', marginTop: 10 },
-  secondaryButton: { backgroundColor: '#444' },
-  buttonText: { color: '#fff', fontWeight: '600' },
-  linkButton: { marginTop: 12 },
-  link: { color: '#2f5ad6', fontWeight: '600' },
-  back: { marginTop: 20 },
-  backText: { color: '#6b6b64' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  headRow: { paddingHorizontal: space.xl, paddingTop: space.md },
+  back: { color: colors.ink, fontSize: 30, lineHeight: 32, width: 22 },
+  pad: { paddingHorizontal: space.xl },
+
+  hero: { alignItems: 'center', gap: space.sm, paddingVertical: space.lg },
+  title: { ...type.display, fontSize: 24, textAlign: 'center' },
+  desc: { fontSize: 12.5, color: colors.inkSoft, textAlign: 'center', lineHeight: 18 },
+
+  stats: { flexDirection: 'row', alignItems: 'center' },
+  stat: { flex: 1, alignItems: 'center', gap: 2 },
+  statLabel: { fontSize: 8.5, fontWeight: '800', letterSpacing: 0.8, color: colors.inkDim },
+  statVal: { fontSize: 17, fontWeight: '800', color: colors.ink },
+  vDiv: { width: 1, height: 28, backgroundColor: colors.line },
+
+  block: { marginTop: space.xxl, gap: space.sm },
+  link: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  linkGlyph: { fontSize: 19, width: 26, textAlign: 'center' },
+  linkLabel: { fontSize: 14.5, fontWeight: '700', color: colors.ink },
+  season: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  name: { fontSize: 14, fontWeight: '700', color: colors.ink },
+  meta: { fontSize: 11.5, color: colors.inkSoft, marginTop: 2 },
 });

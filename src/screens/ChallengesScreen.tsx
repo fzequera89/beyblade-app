@@ -3,22 +3,35 @@ import { View, Text, FlatList, Pressable, StyleSheet, Alert } from 'react-native
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import Screen from '../components/Screen';
+import Screen from '../ui/Screen';
+import Avatar from '../ui/Avatar';
+import { Card, Hex, Pill, SectionTitle } from '../ui/primitives';
+import { IconChevron } from '../ui/icons';
+import { colors, space, type } from '../theme';
+
+type Person = {
+  id: string;
+  display_name: string;
+  elo_rating: number;
+  avatar_key: string | null;
+  avatar_url: string | null;
+} | null;
 
 type Challenge = {
   id: string;
   status: string;
   match_id: string | null;
-  challenger: { id: string; display_name: string } | null;
-  challenged: { id: string; display_name: string } | null;
+  challenger: Person;
+  challenged: Person;
   match: { id: string; status: string } | null;
 };
 
 // Los dos embeds de `players` sí necesitan nombre de FK porque hay dos caminos
 // (challenger y challenged). El de `matches` no: hay una sola relación, así que
 // PostgREST la infiere sola y no hay que adivinar cómo nombró Postgres la llave.
+const P = 'id, display_name, elo_rating, avatar_key, avatar_url';
 const SELECT =
-  'id, status, match_id, challenger:players!challenges_challenger_id_fkey(id, display_name), challenged:players!challenges_challenged_id_fkey(id, display_name), match:matches(id, status)';
+  `id, status, match_id, challenger:players!challenges_challenger_id_fkey(${P}), challenged:players!challenges_challenged_id_fkey(${P}), match:matches(id, status)`;
 
 export default function ChallengesScreen({ navigation }: any) {
   const { playerId } = useAuth();
@@ -104,84 +117,159 @@ export default function ChallengesScreen({ navigation }: any) {
 
   const sentPending = sent.filter((c) => c.status !== 'accepted');
 
-  function opponentOf(c: Challenge) {
-    return (c.challenger?.id === playerId ? c.challenged?.display_name : c.challenger?.display_name) ?? '—';
+  function opponentOf(c: Challenge): Person {
+    return c.challenger?.id === playerId ? c.challenged : c.challenger;
   }
 
   function matchLabel(status: string | undefined) {
-    if (status === 'reported') return 'Resultado reportado · falta confirmar';
+    if (status === 'reported') return 'Falta confirmar el resultado';
     if (status === 'disputed') return 'Resultado en disputa';
     return 'Sin jugar todavía';
   }
 
+  function statusLabel(status: string) {
+    if (status === 'pending') return 'Esperando respuesta';
+    if (status === 'declined') return 'Rechazado';
+    if (status === 'cancelled') return 'Cancelado';
+    return status;
+  }
+
   return (
-    <Screen style={styles.container}>
+    <Screen padded={false}>
       <FlatList
-        style={{ flex: 1 }}
         data={pendingReceived}
         keyExtractor={(c) => c.id}
         refreshing={loading}
         onRefresh={load}
-        contentContainerStyle={{ gap: 8, paddingBottom: 24 }}
+        contentContainerStyle={styles.list}
         ListHeaderComponent={
-          <View>
+          <View style={styles.header}>
+            <View style={styles.headRow}>
+              <Pressable onPress={() => navigation.goBack()} hitSlop={8}>
+                <Text style={styles.back}>‹</Text>
+              </Pressable>
+              <Text style={styles.title}>Retos</Text>
+            </View>
+
             {toPlay.length > 0 && (
-              <View style={{ marginBottom: 20 }}>
-                <Text style={styles.title}>Mis matches</Text>
-                {toPlay.map((c) => (
-                  <Pressable
-                    key={c.id}
-                    style={styles.matchCard}
-                    onPress={() => navigation.navigate('MatchDetail', { matchId: c.match_id })}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.name}>vs {opponentOf(c)}</Text>
-                      <Text style={styles.matchStatus}>{matchLabel(c.match?.status)}</Text>
-                    </View>
-                    <Text style={styles.chevron}>›</Text>
-                  </Pressable>
-                ))}
+              <View style={{ gap: space.sm }}>
+                <SectionTitle>Batallas por jugar</SectionTitle>
+                {toPlay.map((c, i) => {
+                  const o = opponentOf(c);
+                  const urgent = c.match?.status === 'reported' || c.match?.status === 'disputed';
+                  // La primera se destaca: es la batalla que tienes que resolver ya.
+                  if (i === 0) {
+                    return (
+                      <Card
+                        key={c.id}
+                        style={[styles.hero, urgent && { borderColor: colors.streak }]}
+                        onPress={() => navigation.navigate('MatchDetail', { matchId: c.match_id })}
+                      >
+                        <Text style={[styles.heroTag, urgent && { color: colors.streak }]}>
+                          {urgent ? matchLabel(c.match?.status).toUpperCase() : 'TE ESPERA UNA BATALLA'}
+                        </Text>
+                        <View style={styles.heroRow}>
+                          <Avatar uri={o?.avatar_url} avatarKey={o?.avatar_key} size={58} ring={colors.blue} />
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.heroName} numberOfLines={1}>
+                              {o?.display_name ?? '—'}
+                            </Text>
+                            <Text style={styles.meta}>{Math.round(o?.elo_rating ?? 1000)} ELO</Text>
+                          </View>
+                          <Text style={styles.heroCta}>Abrir ›</Text>
+                        </View>
+                      </Card>
+                    );
+                  }
+                  return (
+                    <Card
+                      key={c.id}
+                      style={styles.row}
+                      onPress={() => navigation.navigate('MatchDetail', { matchId: c.match_id })}
+                    >
+                      <Avatar uri={o?.avatar_url} avatarKey={o?.avatar_key} size={40} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.name} numberOfLines={1}>
+                          vs {o?.display_name ?? '—'}
+                        </Text>
+                        <Text style={styles.meta}>{matchLabel(c.match?.status)}</Text>
+                      </View>
+                      <IconChevron />
+                    </Card>
+                  );
+                })}
               </View>
             )}
-            <Text style={styles.title}>Retos recibidos</Text>
+
+            <SectionTitle>Retos recibidos</SectionTitle>
           </View>
         }
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <Text style={styles.name}>{item.challenger?.display_name ?? '—'} te retó</Text>
-            <View style={styles.actionsRow}>
-              <Pressable style={styles.acceptButton} onPress={() => accept(item.id)} disabled={busy}>
-                <Text style={styles.actionText}>Aceptar</Text>
-              </Pressable>
-              <Pressable style={styles.declineButton} onPress={() => decline(item.id)} disabled={busy}>
-                <Text style={styles.actionText}>Rechazar</Text>
-              </Pressable>
-            </View>
-          </View>
-        )}
-        ListEmptyComponent={!loading ? <Text style={styles.empty}>Sin retos pendientes.</Text> : null}
+        renderItem={({ item }) => {
+          const c = item.challenger;
+          return (
+            <Card style={styles.challenge}>
+              <View style={styles.row}>
+                <Avatar uri={c?.avatar_url} avatarKey={c?.avatar_key} size={44} ring={colors.streak} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.name} numberOfLines={1}>
+                    {c?.display_name ?? '—'}
+                  </Text>
+                  <Text style={styles.meta}>{Math.round(c?.elo_rating ?? 1000)} ELO · te retó</Text>
+                </View>
+              </View>
+              <View style={styles.actions}>
+                <Pressable style={styles.accept} onPress={() => accept(item.id)} disabled={busy}>
+                  <Text style={styles.acceptText}>ACEPTAR</Text>
+                </Pressable>
+                <Pressable style={styles.decline} onPress={() => decline(item.id)} disabled={busy}>
+                  <Text style={styles.declineText}>Rechazar</Text>
+                </Pressable>
+              </View>
+            </Card>
+          );
+        }}
+        ListEmptyComponent={
+          !loading ? (
+            <Card style={styles.empty}>
+              <Hex size={50} color={colors.inkDim}>
+                <Text style={{ fontSize: 19 }}>⚔️</Text>
+              </Hex>
+              <Text style={styles.emptyTitle}>Nadie te ha retado</Text>
+              <Text style={styles.meta}>Busca bladers cerca y manda tú el primer reto.</Text>
+            </Card>
+          ) : null
+        }
         ListFooterComponent={
-          <View>
-            <Text style={styles.sectionTitle}>Retos enviados</Text>
+          <View style={{ gap: space.sm, marginTop: space.xl }}>
+            <SectionTitle>Retos enviados</SectionTitle>
             {sentPending.length === 0 ? (
-              <Text style={styles.empty}>No tienes retos enviados sin responder.</Text>
+              <Card>
+                <Text style={type.soft}>No tienes retos esperando respuesta.</Text>
+              </Card>
             ) : (
               sentPending.map((c) => (
-                <View key={c.id} style={styles.card}>
-                  <Text style={styles.name}>
-                    Retaste a {c.challenged?.display_name ?? '—'} · <Text style={styles.status}>{c.status}</Text>
-                  </Text>
-                  {c.status === 'pending' && (
-                    <Pressable style={styles.declineButton} onPress={() => cancelSent(c.id)} disabled={busy}>
-                      <Text style={styles.actionText}>Cancelar</Text>
+                <Card key={c.id} style={styles.row}>
+                  <Avatar
+                    uri={c.challenged?.avatar_url}
+                    avatarKey={c.challenged?.avatar_key}
+                    size={38}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.name} numberOfLines={1}>
+                      {c.challenged?.display_name ?? '—'}
+                    </Text>
+                    <Text style={styles.meta}>{statusLabel(c.status)}</Text>
+                  </View>
+                  {c.status === 'pending' ? (
+                    <Pressable style={styles.cancel} onPress={() => cancelSent(c.id)} disabled={busy}>
+                      <Text style={styles.cancelText}>Cancelar</Text>
                     </Pressable>
+                  ) : (
+                    <Pill label={statusLabel(c.status)} color={colors.inkDim} />
                   )}
-                </View>
+                </Card>
               ))
             )}
-            <Pressable style={styles.back} onPress={() => navigation.goBack()}>
-              <Text style={styles.backText}>‹ Volver</Text>
-            </Pressable>
           </View>
         }
       />
@@ -190,29 +278,44 @@ export default function ChallengesScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: '#fff' },
-  title: { fontSize: 22, fontWeight: '700', marginBottom: 12 },
-  sectionTitle: { fontSize: 16, fontWeight: '700', marginTop: 20, marginBottom: 8 },
-  card: { borderWidth: 1, borderColor: '#eee', borderRadius: 10, padding: 12, marginBottom: 8 },
-  matchCard: {
-    flexDirection: 'row',
+  list: { paddingHorizontal: space.xl, paddingBottom: space.xxxl, gap: space.sm },
+  header: { gap: space.md, paddingTop: space.md },
+  headRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  back: { color: colors.ink, fontSize: 30, lineHeight: 32, width: 22 },
+  title: { ...type.title, fontSize: 20 },
+
+  hero: { gap: space.md, borderColor: colors.blue },
+  heroTag: { fontSize: 9, fontWeight: '800', letterSpacing: 1.1, color: colors.blue },
+  heroRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  heroName: { ...type.display, fontSize: 19 },
+  heroCta: { fontSize: 12, fontWeight: '800', color: colors.blue },
+
+  row: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  challenge: { gap: space.md },
+  name: { fontSize: 14, fontWeight: '700', color: colors.ink },
+  meta: { fontSize: 11.5, color: colors.inkSoft, marginTop: 2 },
+
+  actions: { flexDirection: 'row', gap: space.sm },
+  accept: {
+    flex: 1,
+    backgroundColor: colors.win,
+    borderRadius: 8,
+    paddingVertical: 10,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#2f5ad6',
-    backgroundColor: '#e8edfd',
-    borderRadius: 10,
-    padding: 14,
-    marginBottom: 8,
   },
-  matchStatus: { fontSize: 12, color: '#2f5ad6', marginTop: 3 },
-  chevron: { fontSize: 22, color: '#2f5ad6', fontWeight: '700' },
-  name: { fontSize: 14, fontWeight: '600' },
-  status: { fontWeight: '400', color: '#6b6b64', textTransform: 'capitalize' },
-  actionsRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
-  acceptButton: { backgroundColor: '#1f7a4d', borderRadius: 6, paddingVertical: 6, paddingHorizontal: 12 },
-  declineButton: { backgroundColor: '#b00020', borderRadius: 6, paddingVertical: 6, paddingHorizontal: 12, marginTop: 8, alignSelf: 'flex-start' },
-  actionText: { color: '#fff', fontSize: 12, fontWeight: '600' },
-  empty: { color: '#6b6b64', fontSize: 13 },
-  back: { marginTop: 16 },
-  backText: { color: '#6b6b64' },
+  acceptText: { color: '#04160B', fontSize: 12, fontWeight: '800', letterSpacing: 0.6 },
+  decline: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  declineText: { color: colors.inkSoft, fontSize: 12, fontWeight: '700' },
+  cancel: { borderWidth: 1, borderColor: colors.line, borderRadius: 6, paddingVertical: 5, paddingHorizontal: 9 },
+  cancelText: { color: colors.inkSoft, fontSize: 10.5, fontWeight: '700' },
+
+  empty: { alignItems: 'center', gap: space.md, paddingVertical: space.xl },
+  emptyTitle: { fontSize: 15, fontWeight: '700', color: colors.ink },
 });

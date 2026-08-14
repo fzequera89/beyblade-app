@@ -2,24 +2,31 @@ import { useCallback, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
-import Screen from '../components/Screen';
+import Screen from '../ui/Screen';
+import { Card, Hex, Pill, SectionTitle } from '../ui/primitives';
+import { IconChevron } from '../ui/icons';
+import { colors, space, type } from '../theme';
 
 export default function AdminScreen({ navigation }: any) {
   const [playerCount, setPlayerCount] = useState(0);
   const [leagueCount, setLeagueCount] = useState(0);
   const [matchCount, setMatchCount] = useState(0);
+  const [openDisputes, setOpenDisputes] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [{ count: players }, { count: leagues }, { count: matches }] = await Promise.all([
-      supabase.from('players').select('*', { count: 'exact', head: true }),
-      supabase.from('leagues').select('*', { count: 'exact', head: true }),
-      supabase.from('matches').select('*', { count: 'exact', head: true }).eq('status', 'confirmed'),
-    ]);
+    const [{ count: players }, { count: leagues }, { count: matches }, { count: disputes }] =
+      await Promise.all([
+        supabase.from('players').select('*', { count: 'exact', head: true }),
+        supabase.from('leagues').select('*', { count: 'exact', head: true }),
+        supabase.from('matches').select('*', { count: 'exact', head: true }).eq('status', 'confirmed'),
+        supabase.from('matches').select('*', { count: 'exact', head: true }).eq('status', 'disputed'),
+      ]);
     setPlayerCount(players ?? 0);
     setLeagueCount(leagues ?? 0);
     setMatchCount(matches ?? 0);
+    setOpenDisputes(disputes ?? 0);
     setLoading(false);
   }, []);
 
@@ -29,57 +36,128 @@ export default function AdminScreen({ navigation }: any) {
     }, [load])
   );
 
-  return (
-    <Screen style={styles.container}>
-      <Text style={styles.title}>Panel de administrador</Text>
+  const n = (v: number) => (loading ? '—' : String(v));
 
-      <View style={styles.statsRow}>
-        <View style={styles.stat}>
-          <Text style={styles.statValue}>{loading ? '—' : playerCount}</Text>
-          <Text style={styles.statLabel}>Jugadores</Text>
+  return (
+    <Screen scroll padded={false}>
+      <View style={styles.pad}>
+        <View style={styles.headRow}>
+          <Pressable onPress={() => navigation.goBack()} hitSlop={8}>
+            <Text style={styles.back}>‹</Text>
+          </Pressable>
         </View>
-        <View style={styles.stat}>
-          <Text style={styles.statValue}>{loading ? '—' : leagueCount}</Text>
-          <Text style={styles.statLabel}>Ligas</Text>
+
+        <View style={styles.hero}>
+          <Hex size={72} color={colors.elite}>
+            <Text style={{ fontSize: 26 }}>👑</Text>
+          </Hex>
+          <Text style={styles.title}>Panel de control</Text>
+          <Pill label="Administrador" color={colors.elite} align="center" />
         </View>
-        <View style={styles.stat}>
-          <Text style={styles.statValue}>{loading ? '—' : matchCount}</Text>
-          <Text style={styles.statLabel}>Matches jugados</Text>
+
+        {/* La disputa es lo único que exige acción del admin: si hay, va primero. */}
+        {openDisputes > 0 && (
+          <Card style={styles.alert}>
+            <Text style={styles.alertTag}>REQUIERE ARBITRAJE</Text>
+            <Text style={styles.alertBig}>
+              {openDisputes}
+              <Text style={styles.alertUnit}> batalla{openDisputes === 1 ? '' : 's'} en disputa</Text>
+            </Text>
+            <Text style={styles.meta}>
+              Los jugadores reportaron resultados distintos. Entra al match y define el ganador.
+            </Text>
+          </Card>
+        )}
+
+        <Card style={styles.stats}>
+          <Stat label="Jugadores" value={n(playerCount)} />
+          <View style={styles.vDiv} />
+          <Stat label="Ligas" value={n(leagueCount)} />
+          <View style={styles.vDiv} />
+          <Stat label="Batallas" value={n(matchCount)} tint={colors.blue} />
+        </Card>
+
+        <View style={styles.block}>
+          <SectionTitle>Gestión</SectionTitle>
+
+          <Link
+            glyph="🧑‍🚀"
+            title="Jugadores"
+            sub="Ver a todos y registrar bladers sin cuenta"
+            onPress={() => navigation.navigate('AdminPlayers')}
+          />
+          <Link
+            glyph="🏅"
+            title="Ligas"
+            sub="Crear ligas y nombrar moderadores"
+            onPress={() => navigation.navigate('Leagues')}
+          />
+          <Link
+            glyph="📊"
+            title="Ranking global"
+            sub="Toda la plataforma ordenada por ELO"
+            onPress={() => navigation.navigate('AdminGlobalRanking')}
+          />
         </View>
       </View>
-
-      <Pressable style={styles.card} onPress={() => navigation.navigate('AdminPlayers')}>
-        <Text style={styles.cardTitle}>Jugadores</Text>
-        <Text style={styles.cardSub}>Ver a todos, registrar jugadores nuevos manualmente</Text>
-      </Pressable>
-
-      <Pressable style={styles.card} onPress={() => navigation.navigate('Leagues')}>
-        <Text style={styles.cardTitle}>Ligas</Text>
-        <Text style={styles.cardSub}>Crear ligas, nombrar moderadores</Text>
-      </Pressable>
-
-      <Pressable style={styles.card} onPress={() => navigation.navigate('AdminGlobalRanking')}>
-        <Text style={styles.cardTitle}>Ranking global</Text>
-        <Text style={styles.cardSub}>Todos los jugadores de la plataforma por ELO</Text>
-      </Pressable>
-
-      <Pressable style={styles.back} onPress={() => navigation.navigate('Profile')}>
-        <Text style={styles.backText}>‹ Volver a mi perfil</Text>
-      </Pressable>
     </Screen>
   );
 }
 
+function Link({
+  glyph,
+  title,
+  sub,
+  onPress,
+}: {
+  glyph: string;
+  title: string;
+  sub: string;
+  onPress: () => void;
+}) {
+  return (
+    <Card style={styles.link} onPress={onPress}>
+      <Text style={styles.linkGlyph}>{glyph}</Text>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.linkTitle}>{title}</Text>
+        <Text style={styles.meta}>{sub}</Text>
+      </View>
+      <IconChevron />
+    </Card>
+  );
+}
+
+function Stat({ label, value, tint }: { label: string; value: string; tint?: string }) {
+  return (
+    <View style={styles.stat}>
+      <Text style={styles.statLabel}>{label.toUpperCase()}</Text>
+      <Text style={[styles.statVal, tint ? { color: tint } : null]}>{value}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: '#fff', gap: 12 },
-  title: { fontSize: 22, fontWeight: '700', marginBottom: 4 },
-  statsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  stat: { alignItems: 'center', flex: 1 },
-  statValue: { fontSize: 24, fontWeight: '700', color: '#2f5ad6' },
-  statLabel: { fontSize: 11, color: '#6b6b64', marginTop: 2 },
-  card: { borderWidth: 1, borderColor: '#eee', borderRadius: 10, padding: 16 },
-  cardTitle: { fontSize: 16, fontWeight: '700' },
-  cardSub: { fontSize: 12, color: '#6b6b64', marginTop: 4 },
-  back: { marginTop: 8 },
-  backText: { color: '#6b6b64' },
+  pad: { paddingHorizontal: space.xl, paddingBottom: space.xxxl, gap: space.sm },
+  headRow: { paddingTop: space.md },
+  back: { color: colors.ink, fontSize: 30, lineHeight: 32, width: 22 },
+
+  hero: { alignItems: 'center', gap: space.sm, paddingVertical: space.md },
+  title: { ...type.display, fontSize: 23, textAlign: 'center' },
+
+  alert: { gap: 4, borderColor: colors.loss, backgroundColor: colors.lossSoft },
+  alertTag: { fontSize: 9, fontWeight: '800', letterSpacing: 1.1, color: colors.loss },
+  alertBig: { fontSize: 22, fontWeight: '800', fontStyle: 'italic', color: colors.ink },
+  alertUnit: { fontSize: 13, fontWeight: '600', fontStyle: 'normal', color: colors.inkSoft },
+
+  stats: { flexDirection: 'row', alignItems: 'center' },
+  stat: { flex: 1, alignItems: 'center', gap: 2 },
+  statLabel: { fontSize: 8.5, fontWeight: '800', letterSpacing: 0.8, color: colors.inkDim },
+  statVal: { fontSize: 19, fontWeight: '800', color: colors.ink },
+  vDiv: { width: 1, height: 28, backgroundColor: colors.line },
+
+  block: { marginTop: space.xl, gap: space.sm },
+  link: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  linkGlyph: { fontSize: 19, width: 26, textAlign: 'center' },
+  linkTitle: { fontSize: 14.5, fontWeight: '700', color: colors.ink },
+  meta: { fontSize: 11.5, color: colors.inkSoft, marginTop: 2 },
 });

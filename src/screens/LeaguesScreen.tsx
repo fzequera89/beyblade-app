@@ -3,7 +3,11 @@ import { View, Text, FlatList, Pressable, StyleSheet, Alert } from 'react-native
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import Screen from '../components/Screen';
+import Screen from '../ui/Screen';
+import Button from '../ui/Button';
+import { Card, Hex, Pill } from '../ui/primitives';
+import { IconChevron } from '../ui/icons';
+import { colors, space, type } from '../theme';
 
 type LeagueRow = {
   id: string;
@@ -21,52 +25,51 @@ export default function LeaguesScreen({ navigation }: any) {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [{ data: allLeagues, error: leaguesError }, { data: memberships }] = await Promise.all([
+    const [{ data: allLeagues, error }, { data: memberships }] = await Promise.all([
       supabase.from('leagues').select('id, name, description').order('created_at', { ascending: false }),
       supabase.from('league_members').select('league_id, role').eq('player_id', playerId),
     ]);
     setLoading(false);
-    if (leaguesError) {
-      Alert.alert('Error', leaguesError.message);
-      return;
-    }
-    const roleByLeague = new Map((memberships ?? []).map((m) => [m.league_id, m.role]));
+    if (error) return Alert.alert('Error', error.message);
 
-    // Multi-liga (5.1): la posición en cada liga se calcula ordenando a sus
-    // miembros por el rating GLOBAL. No hay un ELO por liga — la vista por liga
-    // es un filtro de lectura sobre el mismo rating (decisión 7 de PROGRESS.md).
+    const roleByLeague = new Map((memberships ?? []).map((m: any) => [m.league_id, m.role]));
+
+    // La posición en cada liga se calcula ordenando a sus miembros por el rating
+    // GLOBAL. No hay un ELO por liga — la vista por liga es un filtro de lectura
+    // sobre el mismo rating (decisión 7 de PROGRESS.md).
     const myLeagueIds = [...roleByLeague.keys()];
     const rankByLeague = new Map<string, number>();
     const countByLeague = new Map<string, number>();
 
-    if (myLeagueIds.length > 0) {
-      const { data: rosters } = await supabase
-        .from('league_members')
-        .select('league_id, player_id, players(elo_rating)')
-        .in('league_id', myLeagueIds);
+    // Los conteos se piden para TODAS las ligas, no solo las mías: la lista
+    // muestra cuánta gente tiene cada una aunque no pertenezcas.
+    const { data: rosters } = await supabase
+      .from('league_members')
+      .select('league_id, player_id, players(elo_rating)');
 
-      const byLeague = new Map<string, { player_id: string; elo: number }[]>();
-      for (const row of ((rosters as any[]) ?? [])) {
-        const list = byLeague.get(row.league_id) ?? [];
-        list.push({ player_id: row.player_id, elo: row.players?.elo_rating ?? 1000 });
-        byLeague.set(row.league_id, list);
-      }
-      for (const [leagueId, list] of byLeague) {
-        list.sort((a, b) => b.elo - a.elo);
-        countByLeague.set(leagueId, list.length);
-        const index = list.findIndex((p) => p.player_id === playerId);
-        if (index >= 0) rankByLeague.set(leagueId, index + 1);
-      }
+    const byLeague = new Map<string, { player_id: string; elo: number }[]>();
+    for (const row of ((rosters as any[]) ?? [])) {
+      const list = byLeague.get(row.league_id) ?? [];
+      list.push({ player_id: row.player_id, elo: row.players?.elo_rating ?? 1000 });
+      byLeague.set(row.league_id, list);
+    }
+    for (const [leagueId, list] of byLeague) {
+      countByLeague.set(leagueId, list.length);
+      if (!myLeagueIds.includes(leagueId)) continue;
+      list.sort((a, b) => b.elo - a.elo);
+      const index = list.findIndex((p) => p.player_id === playerId);
+      if (index >= 0) rankByLeague.set(leagueId, index + 1);
     }
 
-    setLeagues(
-      (allLeagues ?? []).map((l) => ({
-        ...l,
-        role: roleByLeague.get(l.id) ?? null,
-        myRank: rankByLeague.get(l.id) ?? null,
-        memberCount: countByLeague.get(l.id) ?? 0,
-      }))
-    );
+    const list = ((allLeagues as any[]) ?? []).map((l) => ({
+      ...l,
+      role: roleByLeague.get(l.id) ?? null,
+      myRank: rankByLeague.get(l.id) ?? null,
+      memberCount: countByLeague.get(l.id) ?? 0,
+    }));
+    // Las tuyas primero: son las que vienes a consultar.
+    list.sort((a, b) => (b.role ? 1 : 0) - (a.role ? 1 : 0));
+    setLeagues(list);
   }, [playerId]);
 
   useFocusEffect(
@@ -79,86 +82,156 @@ export default function LeaguesScreen({ navigation }: any) {
     const { error } = await supabase
       .from('league_members')
       .insert({ league_id: leagueId, player_id: playerId, role: 'member' });
-    if (error) {
-      Alert.alert('Error', error.message);
-      return;
-    }
+    if (error) return Alert.alert('Error', error.message);
     load();
   }
 
   return (
-    <Screen style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Ligas</Text>
-        {isAdmin && (
-          <Pressable style={styles.createButton} onPress={() => navigation.navigate('CreateLeague')}>
-            <Text style={styles.createButtonText}>+ Crear liga</Text>
-          </Pressable>
-        )}
-      </View>
+    <Screen padded={false}>
       <FlatList
         data={leagues}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(l) => l.id}
         refreshing={loading}
         onRefresh={load}
-        contentContainerStyle={{ gap: 10 }}
-        renderItem={({ item }) => (
-          <Pressable style={styles.card} onPress={() => navigation.navigate('LeagueDetail', { leagueId: item.id })}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.cardTitle}>{item.name}</Text>
-              {item.description ? <Text style={styles.cardSub}>{item.description}</Text> : null}
-              {item.myRank ? (
-                <Text style={styles.rankLine}>
-                  Vas #{item.myRank} de {item.memberCount}
-                </Text>
-              ) : null}
-            </View>
-            {item.role ? (
-              <Text style={styles.badge}>{item.role === 'organizer' ? 'Moderador' : 'Miembro'}</Text>
-            ) : (
-              <Pressable style={styles.joinButton} onPress={() => join(item.id)}>
-                <Text style={styles.joinButtonText}>Unirme</Text>
+        contentContainerStyle={styles.list}
+        ListHeaderComponent={
+          <View style={styles.header}>
+            <View style={styles.headRow}>
+              <Pressable onPress={() => navigation.goBack()} hitSlop={8}>
+                <Text style={styles.back}>‹</Text>
               </Pressable>
+              <Text style={styles.title}>Ligas</Text>
+            </View>
+            <Text style={styles.sub}>Compite en una temporada con ranking oficial.</Text>
+            {isAdmin && (
+              <Button
+                label="＋  CREAR LIGA"
+                variant="ghost"
+                onPress={() => navigation.navigate('CreateLeague')}
+              />
             )}
-          </Pressable>
-        )}
+          </View>
+        }
+        renderItem={({ item, index }) => {
+          const mine = !!item.role;
+          // Solo se destaca si es TUYA: en una lista de ligas ajenas, la
+          // primera no vale más que las demás.
+          const hero = index === 0 && mine;
+
+          if (hero) {
+            return (
+              <Card
+                style={styles.hero}
+                onPress={() => navigation.navigate('LeagueDetail', { leagueId: item.id })}
+              >
+                <Text style={styles.heroTag}>TU LIGA</Text>
+                <View style={styles.heroTop}>
+                  <Hex size={60} color={colors.blue}>
+                    <Text style={{ fontSize: 23 }}>🏅</Text>
+                  </Hex>
+                  <View style={{ flex: 1, gap: 3 }}>
+                    <Text style={styles.heroName} numberOfLines={1}>
+                      {item.name}
+                    </Text>
+                    <Text style={styles.meta} numberOfLines={2}>
+                      {item.description ?? 'Sin descripción'}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.heroFoot}>
+                  {item.myRank ? (
+                    <Text style={styles.rankBig}>
+                      #{item.myRank}
+                      <Text style={styles.rankOf}> de {item.memberCount}</Text>
+                    </Text>
+                  ) : (
+                    <Text style={styles.meta}>{item.memberCount} miembros</Text>
+                  )}
+                  {item.role === 'organizer' && <Pill label="Moderador" />}
+                  <Text style={styles.heroCta}>Ver liga ›</Text>
+                </View>
+              </Card>
+            );
+          }
+
+          return (
+            <Card style={styles.row} onPress={() => navigation.navigate('LeagueDetail', { leagueId: item.id })}>
+              <Hex size={44} color={mine ? colors.blue : colors.inkDim}>
+                <Text style={{ fontSize: 17 }}>🏅</Text>
+              </Hex>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.name} numberOfLines={1}>
+                  {item.name}
+                </Text>
+                <Text style={styles.meta} numberOfLines={1}>
+                  {item.memberCount} miembro{item.memberCount === 1 ? '' : 's'}
+                  {item.myRank ? ` · vas #${item.myRank}` : ''}
+                </Text>
+              </View>
+              {mine ? (
+                <IconChevron />
+              ) : (
+                <Pressable style={styles.join} onPress={() => join(item.id)}>
+                  <Text style={styles.joinText}>UNIRME</Text>
+                </Pressable>
+              )}
+            </Card>
+          );
+        }}
         ListEmptyComponent={
           !loading ? (
-            <Text style={styles.empty}>
-              {isAdmin ? 'Todavía no hay ligas. Crea la primera.' : 'Todavía no hay ligas activas.'}
-            </Text>
+            <Card style={styles.empty}>
+              <Hex size={54} color={colors.inkDim}>
+                <Text style={{ fontSize: 20 }}>🏅</Text>
+              </Hex>
+              <Text style={styles.emptyTitle}>Todavía no hay ligas</Text>
+              <Text style={styles.meta}>
+                {isAdmin ? 'Crea la primera.' : 'Las crea el administrador de la plataforma.'}
+              </Text>
+            </Card>
           ) : null
         }
       />
-      <Pressable style={styles.back} onPress={() => navigation.navigate('Profile')}>
-        <Text style={styles.backText}>‹ Volver a mi perfil</Text>
-      </Pressable>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: '#fff' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  title: { fontSize: 22, fontWeight: '700' },
-  createButton: { backgroundColor: '#2f5ad6', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12 },
-  createButtonText: { color: '#fff', fontWeight: '600', fontSize: 13 },
-  card: {
+  list: { paddingHorizontal: space.xl, paddingBottom: space.xxxl, gap: space.sm },
+  header: { gap: space.md, paddingTop: space.md, marginBottom: space.sm },
+  headRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  back: { color: colors.ink, fontSize: 30, lineHeight: 32, width: 22 },
+  title: { ...type.title, fontSize: 20 },
+  sub: { ...type.soft, fontSize: 12.5 },
+
+  hero: { gap: space.md, borderColor: colors.blue },
+  heroTag: { fontSize: 9, fontWeight: '800', letterSpacing: 1, color: colors.blue },
+  heroTop: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  heroName: { ...type.display, fontSize: 20 },
+  heroFoot: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    borderWidth: 1,
-    borderColor: '#eee',
-    borderRadius: 10,
-    padding: 14,
+    gap: space.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
+    paddingTop: space.md,
   },
-  cardTitle: { fontSize: 16, fontWeight: '600' },
-  cardSub: { color: '#6b6b64', fontSize: 13, marginTop: 2 },
-  rankLine: { color: '#2f5ad6', fontSize: 12, fontWeight: '600', marginTop: 4 },
-  badge: { fontSize: 12, color: '#2f5ad6', fontWeight: '600' },
-  joinButton: { backgroundColor: '#2f5ad6', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 10 },
-  joinButtonText: { color: '#fff', fontWeight: '600', fontSize: 12 },
-  empty: { textAlign: 'center', color: '#6b6b64', marginTop: 40 },
-  back: { marginTop: 16 },
-  backText: { color: '#2f5ad6' },
+  rankBig: { flex: 1, fontSize: 20, fontWeight: '800', fontStyle: 'italic', color: colors.blue },
+  rankOf: { fontSize: 12, fontWeight: '400', fontStyle: 'normal', color: colors.inkSoft },
+  heroCta: { fontSize: 12, fontWeight: '800', color: colors.blue },
+
+  row: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  name: { fontSize: 14.5, fontWeight: '700', color: colors.ink },
+  meta: { fontSize: 11.5, color: colors.inkSoft, marginTop: 2 },
+  join: {
+    borderWidth: 1,
+    borderColor: colors.blue,
+    borderRadius: 8,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+  },
+  joinText: { color: colors.blue, fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
+
+  empty: { alignItems: 'center', gap: space.md, paddingVertical: space.xl },
+  emptyTitle: { fontSize: 15, fontWeight: '700', color: colors.ink },
 });

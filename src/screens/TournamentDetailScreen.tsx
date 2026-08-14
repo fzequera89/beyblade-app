@@ -4,18 +4,28 @@ import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { generateRound1Bracket } from '../lib/bracket';
-import Screen from '../components/Screen';
+import Screen from '../ui/Screen';
+import Button from '../ui/Button';
+import Avatar from '../ui/Avatar';
+import { Card, Hex, Pill, SectionTitle } from '../ui/primitives';
+import { colors, space, type } from '../theme';
 
 type Registration = {
   player_id: string;
   checked_in_at: string | null;
-  players: { display_name: string } | null;
+  players: {
+    display_name: string;
+    elo_rating: number;
+    avatar_key: string | null;
+    avatar_url: string | null;
+  } | null;
 };
 
 export default function TournamentDetailScreen({ route, navigation }: any) {
   const { tournamentId, leagueId, isOrganizer } = route.params;
   const { playerId } = useAuth();
   const [name, setName] = useState('');
+  const [status, setStatus] = useState('pending');
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [hasBracket, setHasBracket] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -24,10 +34,10 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
   const load = useCallback(async () => {
     setLoading(true);
     const [{ data: tournament }, { data: regs }, { count: matchCount }] = await Promise.all([
-      supabase.from('tournaments').select('name').eq('id', tournamentId).single(),
+      supabase.from('tournaments').select('name, status').eq('id', tournamentId).single(),
       supabase
         .from('tournament_registrations')
-        .select('player_id, checked_in_at, players(display_name)')
+        .select('player_id, checked_in_at, players(display_name, elo_rating, avatar_key, avatar_url)')
         .eq('tournament_id', tournamentId),
       supabase
         .from('matches')
@@ -36,8 +46,14 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
         .eq('bracket_round', 1),
     ]);
     setLoading(false);
-    setName(tournament?.name ?? '');
-    setRegistrations((regs as any) ?? []);
+    setName((tournament as any)?.name ?? '');
+    setStatus((tournament as any)?.status ?? 'pending');
+    // Se ordena por ELO: es el orden con el que se va a sembrar el bracket.
+    setRegistrations(
+      ((regs as any as Registration[]) ?? []).sort(
+        (a, b) => (b.players?.elo_rating ?? 0) - (a.players?.elo_rating ?? 0)
+      )
+    );
     setHasBracket((matchCount ?? 0) > 0);
   }, [tournamentId]);
 
@@ -47,17 +63,14 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
     }, [load])
   );
 
-  const myRegistration = registrations.find((r) => r.player_id === playerId);
-  const checkedInCount = registrations.filter((r) => r.checked_in_at).length;
+  const mine = registrations.find((r) => r.player_id === playerId);
+  const checkedIn = registrations.filter((r) => r.checked_in_at).length;
 
   async function register() {
     const { error } = await supabase
       .from('tournament_registrations')
       .insert({ tournament_id: tournamentId, player_id: playerId });
-    if (error) {
-      Alert.alert('Error', error.message);
-      return;
-    }
+    if (error) return Alert.alert('Error', error.message);
     load();
   }
 
@@ -67,23 +80,17 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
       .update({ checked_in_at: new Date().toISOString() })
       .eq('tournament_id', tournamentId)
       .eq('player_id', playerId);
-    if (error) {
-      Alert.alert('Error', error.message);
-      return;
-    }
+    if (error) return Alert.alert('Error', error.message);
     load();
   }
 
-  async function toggleCheckIn(targetPlayerId: string, currentlyCheckedIn: boolean) {
+  async function toggleCheckIn(target: string, current: boolean) {
     const { error } = await supabase
       .from('tournament_registrations')
-      .update({ checked_in_at: currentlyCheckedIn ? null : new Date().toISOString() })
+      .update({ checked_in_at: current ? null : new Date().toISOString() })
       .eq('tournament_id', tournamentId)
-      .eq('player_id', targetPlayerId);
-    if (error) {
-      Alert.alert('Error', error.message);
-      return;
-    }
+      .eq('player_id', target);
+    if (error) return Alert.alert('Error', error.message);
     load();
   }
 
@@ -104,99 +111,147 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
   }
 
   return (
-    <Screen style={styles.container}>
+    <Screen padded={false}>
       <FlatList
-        style={{ flex: 1 }}
         data={registrations}
         keyExtractor={(r) => r.player_id}
-        contentContainerStyle={{ gap: 6, paddingBottom: 24 }}
+        refreshing={loading}
+        onRefresh={load}
+        contentContainerStyle={styles.list}
         ListHeaderComponent={
-          <View style={{ marginBottom: 12 }}>
-            <Text style={styles.title}>{name}</Text>
-            <Text style={styles.meta}>
-              {registrations.length} registrado{registrations.length === 1 ? '' : 's'} · {checkedInCount} con check-in
-            </Text>
+          <View style={styles.header}>
+            <Pressable onPress={() => navigation.goBack()} hitSlop={8}>
+              <Text style={styles.back}>‹</Text>
+            </Pressable>
 
-            <View style={styles.actionsRow}>
-              {!myRegistration ? (
-                <Pressable style={styles.button} onPress={register}>
-                  <Text style={styles.buttonText}>Registrarme</Text>
-                </Pressable>
-              ) : myRegistration.checked_in_at ? (
-                <Text style={styles.checkedIn}>✓ Check-in hecho</Text>
-              ) : (
-                <Pressable style={styles.button} onPress={checkIn}>
-                  <Text style={styles.buttonText}>Hacer check-in</Text>
-                </Pressable>
-              )}
+            <View style={styles.hero}>
+              <Hex size={76} color={status === 'pending' ? colors.win : colors.inkDim}>
+                <Text style={{ fontSize: 28 }}>🏆</Text>
+              </Hex>
+              <Text style={styles.title}>{name}</Text>
+              <Pill
+                label={status === 'pending' ? 'Registro abierto' : 'Terminado'}
+                color={status === 'pending' ? colors.win : colors.inkDim}
+                align="center"
+              />
             </View>
 
-            {isOrganizer &&
-              (hasBracket ? (
-                <Pressable
-                  style={[styles.button, styles.secondaryButton]}
-                  onPress={() => navigation.navigate('Bracket', { tournamentId, leagueId, isOrganizer })}
-                >
-                  <Text style={styles.buttonText}>Ver bracket</Text>
-                </Pressable>
-              ) : (
-                <Pressable
-                  style={[styles.button, styles.secondaryButton]}
-                  onPress={generateBracket}
-                  disabled={busy || checkedInCount < 2}
-                >
-                  <Text style={styles.buttonText}>Generar bracket ({checkedInCount} con check-in)</Text>
-                </Pressable>
-              ))}
-            {hasBracket && !isOrganizer && (
-              <Pressable
-                style={[styles.button, styles.secondaryButton]}
-                onPress={() => navigation.navigate('Bracket', { tournamentId, leagueId, isOrganizer })}
-              >
-                <Text style={styles.buttonText}>Ver bracket</Text>
-              </Pressable>
-            )}
+            <Card style={styles.stats}>
+              <Stat label="Inscritos" value={String(registrations.length)} />
+              <View style={styles.vDiv} />
+              <Stat label="Con check-in" value={String(checkedIn)} tint={colors.win} />
+            </Card>
 
-            <Text style={styles.sectionTitle}>Jugadores{isOrganizer ? ' (toca para check-in)' : ''}</Text>
+            <View style={{ gap: space.sm }}>
+              {!mine ? (
+                <Button label="INSCRIBIRME" onPress={register} />
+              ) : mine.checked_in_at ? (
+                <Card style={styles.done}>
+                  <Text style={styles.doneText}>✓ Ya hiciste check-in</Text>
+                </Card>
+              ) : (
+                <Button label="HACER CHECK-IN" onPress={checkIn} />
+              )}
+
+              {hasBracket ? (
+                <Button
+                  label="VER BRACKET"
+                  variant="ghost"
+                  onPress={() => navigation.navigate('Bracket', { tournamentId, leagueId, isOrganizer })}
+                />
+              ) : isOrganizer ? (
+                <>
+                  <Button
+                    label={`GENERAR BRACKET (${checkedIn} listos)`}
+                    variant="ghost"
+                    onPress={generateBracket}
+                    disabled={busy || checkedIn < 2}
+                    loading={busy}
+                  />
+                  {checkedIn < 2 && (
+                    <Text style={styles.hint}>
+                      Hacen falta al menos 2 jugadores con check-in para armar el bracket.
+                    </Text>
+                  )}
+                </>
+              ) : null}
+            </View>
+
+            <SectionTitle>
+              {isOrganizer ? 'Jugadores · toca para dar check-in' : 'Jugadores inscritos'}
+            </SectionTitle>
           </View>
         }
-        renderItem={({ item }) => {
+        renderItem={({ item, index }) => {
+          const p = item.players;
+          const here = !!item.checked_in_at;
+          const me = item.player_id === playerId;
           const row = (
-            <View style={styles.playerRow}>
-              <Text>{item.players?.display_name ?? '—'}</Text>
-              {item.checked_in_at ? <Text style={styles.badge}>check-in</Text> : null}
-            </View>
+            <Card style={[styles.row, me && { borderColor: colors.blue }]}>
+              <Text style={styles.seed}>{index + 1}</Text>
+              <Avatar
+                uri={p?.avatar_url}
+                avatarKey={p?.avatar_key}
+                size={40}
+                ring={here ? colors.win : undefined}
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.name} numberOfLines={1}>
+                  {me ? 'Tú' : p?.display_name ?? '—'}
+                </Text>
+                <Text style={styles.meta}>{Math.round(p?.elo_rating ?? 1000)} ELO</Text>
+              </View>
+              {here ? <Pill label="Presente" color={colors.win} /> : <Text style={styles.waiting}>Falta</Text>}
+            </Card>
           );
+
           return isOrganizer ? (
-            <Pressable onPress={() => toggleCheckIn(item.player_id, !!item.checked_in_at)}>{row}</Pressable>
+            <Pressable onPress={() => toggleCheckIn(item.player_id, here)}>{row}</Pressable>
           ) : (
             row
           );
         }}
-        ListEmptyComponent={!loading ? <Text style={styles.empty}>Nadie registrado todavía.</Text> : null}
-        ListFooterComponent={
-          <Pressable style={styles.back} onPress={() => navigation.goBack()}>
-            <Text style={styles.backText}>‹ Volver a torneos</Text>
-          </Pressable>
+        ListEmptyComponent={
+          !loading ? (
+            <Card>
+              <Text style={type.soft}>Nadie inscrito todavía. Sé el primero.</Text>
+            </Card>
+          ) : null
         }
       />
     </Screen>
   );
 }
 
+function Stat({ label, value, tint }: { label: string; value: string; tint?: string }) {
+  return (
+    <View style={styles.stat}>
+      <Text style={styles.statLabel}>{label.toUpperCase()}</Text>
+      <Text style={[styles.statVal, tint ? { color: tint } : null]}>{value}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: '#fff' },
-  title: { fontSize: 22, fontWeight: '700' },
-  meta: { color: '#6b6b64', fontSize: 12, marginTop: 6, marginBottom: 12 },
-  actionsRow: { marginBottom: 8 },
-  checkedIn: { color: '#1f7a4d', fontWeight: '600' },
-  button: { backgroundColor: '#2f5ad6', borderRadius: 8, padding: 12, alignItems: 'center', marginTop: 8 },
-  secondaryButton: { backgroundColor: '#444' },
-  buttonText: { color: '#fff', fontWeight: '600' },
-  sectionTitle: { fontSize: 16, fontWeight: '700', marginTop: 20, marginBottom: 8 },
-  playerRow: { flexDirection: 'row', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: '#eee', paddingVertical: 8 },
-  badge: { color: '#2f5ad6', fontSize: 12, fontWeight: '600' },
-  empty: { color: '#6b6b64' },
-  back: { marginTop: 20 },
-  backText: { color: '#6b6b64' },
+  list: { paddingHorizontal: space.xl, paddingBottom: space.xxxl, gap: space.sm },
+  header: { gap: space.md, paddingTop: space.md, marginBottom: space.sm },
+  back: { color: colors.ink, fontSize: 30, lineHeight: 32, width: 22 },
+  hero: { alignItems: 'center', gap: space.sm, paddingVertical: space.md },
+  title: { ...type.display, fontSize: 22, textAlign: 'center' },
+
+  stats: { flexDirection: 'row', alignItems: 'center' },
+  stat: { flex: 1, alignItems: 'center', gap: 2 },
+  statLabel: { fontSize: 8.5, fontWeight: '800', letterSpacing: 0.8, color: colors.inkDim },
+  statVal: { fontSize: 18, fontWeight: '800', color: colors.ink },
+  vDiv: { width: 1, height: 28, backgroundColor: colors.line },
+
+  done: { alignItems: 'center', borderColor: colors.win },
+  doneText: { color: colors.win, fontWeight: '700', fontSize: 13.5 },
+  hint: { fontSize: 11, color: colors.inkDim, textAlign: 'center' },
+
+  row: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  seed: { width: 20, fontSize: 12, fontWeight: '800', color: colors.inkDim, textAlign: 'center' },
+  name: { fontSize: 14, fontWeight: '700', color: colors.ink },
+  meta: { fontSize: 11, color: colors.inkSoft, marginTop: 2 },
+  waiting: { fontSize: 11, color: colors.inkDim },
 });

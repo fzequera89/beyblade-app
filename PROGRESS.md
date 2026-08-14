@@ -108,8 +108,7 @@ Lo que quedó:
 
 ## Pendientes conocidos
 
-- **✅ Las migraciones 0001–0026 ya corrieron en Supabase** (verificado desde fuera con la anon key el 2026-08-14: `tournaments.mode` responde y filtra por `casual` → 0026; `judge_assignments` y `arbitrable_match_ids` existen → 0024/0025; `penalty_codes`/`penalties` → 0022; las funciones internas —incluida `apply_match_confirmation` tras el `create or replace` de 0026— devuelven 42501 → 0023 sigue firme; `photo_url`/bucket `venues` → 0021; y todas las tablas rechazan lectura anónima). El esquema hasta 0026 está al día con el repo.
-- **⬜ 0027 (retos = casual) — CONSTRUIDA, SIN CORRER.** `accept_challenge` fija `mode='casual'` para que los retos "Find a Battle" no muevan el ELO. Pegar en el SQL Editor. Ver sección "0027" abajo.
+- **✅ Las migraciones 0001–0027 ya corrieron en Supabase** (verificado el 2026-08-14: `tournaments.mode` responde y filtra por `casual` → 0026; `accept_challenge` contiene la lógica `casual` → 0027; `judge_assignments` y `arbitrable_match_ids` existen → 0024/0025; `penalty_codes`/`penalties` → 0022; las funciones internas devuelven 42501 → 0023 sigue firme; `photo_url`/bucket `venues` → 0021; y todas las tablas rechazan lectura anónima). El esquema está completo y al día con el repo. La 0027 se corrió vía Management API (`/database/query`); las anteriores, a mano en el SQL Editor.
 - **Build de EAS pendiente de generar** desde la sub-etapa 1.1 (fix de placeholders) — el usuario pidió explícitamente esperar y acumular cambios de varias fases antes de generar el próximo build real, para no gastar builds en cada cambio chico.
 - Configurar el cliente OAuth de Google en Supabase (para que el botón "Continuar con Google" funcione en producción).
 - Cambiar `is_admin` del correo de prueba de Farid al correo real del cliente cuando se decida.
@@ -326,7 +325,7 @@ de 40 (su primer ranked mueve un poco menos). Se decidió que está bien.
 **Sin probar con datos reales.** Verificado: typecheck limpio con el código de
 salida real, el bundle compila (757 módulos) y la app monta sin errores de consola.
 
-### ⬜ 0027 — los retos "Find a Battle" son casual (construida, SIN CORRER)
+### ✅ 0027 — los retos "Find a Battle" son casual (CORRIDA 2026-08-14)
 
 Decisión del cliente (2026-08-14): un reto directo 1-a-1 no debe mover el ELO.
 `accept_challenge` ahora fija `mode='casual'` en el match que crea, así que el
@@ -338,7 +337,7 @@ toca la UI: `MatchDetailScreen` ya lee `match.mode` y se adapta solo.
 
 1. `git clone` / `git pull` del repo.
 2. Copiar `.env.example` a `.env` y llenar `EXPO_PUBLIC_SUPABASE_URL` y `EXPO_PUBLIC_SUPABASE_ANON_KEY` (Supabase → Settings → API del proyecto "CML Beyblade").
-3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-14 las 0001–0026 están corridas; la 0027 (retos casual) está SIN CORRER** — si se agrega una nueva, actualizar esta línea.
+3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-14 las 0001–0027 están corridas** — si se agrega una nueva, actualizar esta línea.
 4. `npm install`, luego `npm run web` para verificar rápido en el preview del navegador (no requiere emulador Android).
 5. Para un build real: `npx eas-cli build --platform android --profile preview --non-interactive` (requiere `eas login` ya hecho en la máquina).
 

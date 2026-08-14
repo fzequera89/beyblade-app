@@ -1,0 +1,239 @@
+import { useCallback, useEffect, useState } from 'react';
+import { View, Text, Pressable, StyleSheet, FlatList } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../context/AuthContext';
+import Screen from '../ui/Screen';
+import Avatar from '../ui/Avatar';
+import { Card, Chip } from '../ui/primitives';
+import { colors, space, type, radius } from '../theme';
+
+// Rankings solo consulta posiciones. Nada que se juegue vive aquí — eso está en
+// Batallas. La diferencia es de intención: aquí vienes a ver dónde vas.
+//
+// Antes esta pestaña abría en la pantalla del panel de administrador, que se
+// estaba usando de relleno.
+
+type Scope = 'global' | 'ciudad' | 'liga';
+
+type Row = {
+  id: string;
+  display_name: string;
+  city: string | null;
+  elo_rating: number;
+  matches_played: number;
+  avatar_key: string | null;
+  avatar_url: string | null;
+};
+
+const SCOPES: { key: Scope; label: string }[] = [
+  { key: 'global', label: 'Global' },
+  { key: 'ciudad', label: 'Mi ciudad' },
+  { key: 'liga', label: 'Liga' },
+];
+
+// El podio se marca con color, no solo con el número: en una lista larga el
+// primero tiene que reconocerse sin leer.
+function rankColor(pos: number) {
+  if (pos === 1) return colors.streak;
+  if (pos === 2) return '#C3CDDD';
+  if (pos === 3) return '#C77B45';
+  return colors.inkDim;
+}
+
+export default function RankingsScreen({ navigation }: any) {
+  const { playerId } = useAuth();
+  const [scope, setScope] = useState<Scope>('global');
+  const [rows, setRows] = useState<Row[]>([]);
+  const [myCity, setMyCity] = useState<string | null>(null);
+  const [leagues, setLeagues] = useState<{ id: string; name: string }[]>([]);
+  const [leagueId, setLeagueId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Se cargan una vez: definen qué puede consultar este jugador.
+  useEffect(() => {
+    (async () => {
+      const [{ data: me }, { data: mem }] = await Promise.all([
+        supabase.from('players').select('city').eq('id', playerId).maybeSingle(),
+        supabase.from('league_members').select('league_id, leagues(id, name)').eq('player_id', playerId),
+      ]);
+      setMyCity((me as any)?.city ?? null);
+      const ls = ((mem as any[]) ?? []).map((m) => m.leagues).filter(Boolean);
+      setLeagues(ls);
+      if (ls.length > 0) setLeagueId(ls[0].id);
+    })();
+  }, [playerId]);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const cols = 'id, display_name, city, elo_rating, matches_played, avatar_key, avatar_url';
+
+    if (scope === 'liga') {
+      if (!leagueId) {
+        setRows([]);
+        setLoading(false);
+        return;
+      }
+      const { data } = await supabase
+        .from('league_members')
+        .select(`player_id, players(${cols})`)
+        .eq('league_id', leagueId);
+      const list = ((data as any[]) ?? []).map((m) => m.players).filter(Boolean) as Row[];
+      list.sort((a, b) => b.elo_rating - a.elo_rating);
+      setRows(list);
+      setLoading(false);
+      return;
+    }
+
+    let q = supabase.from('players').select(cols).order('elo_rating', { ascending: false }).limit(100);
+    if (scope === 'ciudad' && myCity) q = q.eq('city', myCity);
+    const { data } = await q;
+    setRows((data as any) ?? []);
+    setLoading(false);
+  }, [scope, myCity, leagueId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load])
+  );
+
+  const myPos = rows.findIndex((r) => r.id === playerId) + 1;
+
+  return (
+    <Screen padded={false}>
+      <View style={styles.head}>
+        <Text style={styles.title}>Rankings</Text>
+        <Text style={styles.sub}>Un solo ELO global. Las vistas son filtros sobre él.</Text>
+      </View>
+
+      <View style={styles.scopes}>
+        {SCOPES.map((s) => (
+          <Pressable
+            key={s.key}
+            onPress={() => setScope(s.key)}
+            style={[styles.scope, scope === s.key && styles.scopeOn]}
+          >
+            <Text style={[styles.scopeText, scope === s.key && styles.scopeTextOn]}>{s.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {scope === 'liga' && leagues.length > 1 && (
+        <View style={styles.leagueRow}>
+          {leagues.map((l) => (
+            <Chip key={l.id} label={l.name} selected={leagueId === l.id} onPress={() => setLeagueId(l.id)} />
+          ))}
+        </View>
+      )}
+
+      {myPos > 0 && (
+        <View style={styles.myBox}>
+          <Text style={styles.myLabel}>TU POSICIÓN</Text>
+          <Text style={styles.myPos}>#{myPos}</Text>
+          <Text style={styles.myOf}>de {rows.length}</Text>
+        </View>
+      )}
+
+      <FlatList
+        data={rows}
+        keyExtractor={(r) => r.id}
+        refreshing={loading}
+        onRefresh={load}
+        contentContainerStyle={styles.list}
+        renderItem={({ item, index }) => {
+          const pos = index + 1;
+          const me = item.id === playerId;
+          return (
+            <Card
+              style={[styles.row, me && styles.rowMe]}
+              onPress={() => navigation.navigate('PlayerProfile', { playerId: item.id })}
+            >
+              <Text style={[styles.pos, { color: rankColor(pos) }]}>{pos}</Text>
+              <Avatar
+                uri={item.avatar_url}
+                avatarKey={item.avatar_key}
+                size={38}
+                ring={pos <= 3 ? rankColor(pos) : undefined}
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.name} numberOfLines={1}>
+                  {item.display_name}
+                </Text>
+                <Text style={styles.meta}>
+                  {item.city ?? 'Sin ciudad'} · {item.matches_played} PJ
+                </Text>
+              </View>
+              <Text style={styles.elo}>{Math.round(item.elo_rating).toLocaleString()}</Text>
+            </Card>
+          );
+        }}
+        ListEmptyComponent={
+          !loading ? (
+            <Text style={styles.empty}>
+              {scope === 'ciudad' && !myCity
+                ? 'Define tu ciudad en tu perfil para ver este ranking.'
+                : scope === 'liga' && leagues.length === 0
+                ? 'No perteneces a ninguna liga todavía.'
+                : 'Sin jugadores todavía.'}
+            </Text>
+          ) : null
+        }
+      />
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  head: { paddingHorizontal: space.xl, paddingTop: space.xl, paddingBottom: space.lg },
+  title: { ...type.display, fontSize: 28 },
+  sub: { ...type.soft, marginTop: 4, fontSize: 12.5 },
+
+  scopes: { flexDirection: 'row', gap: space.sm, paddingHorizontal: space.xl, marginBottom: space.md },
+  scope: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.card,
+    alignItems: 'center',
+  },
+  scopeOn: { borderColor: colors.blue, backgroundColor: colors.blueDeep },
+  scopeText: { fontSize: 12.5, fontWeight: '700', color: colors.inkSoft },
+  scopeTextOn: { color: colors.ink },
+
+  leagueRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: space.sm,
+    paddingHorizontal: space.xl,
+    marginBottom: space.md,
+  },
+
+  myBox: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: space.sm,
+    marginHorizontal: space.xl,
+    marginBottom: space.md,
+    paddingVertical: space.md,
+    paddingHorizontal: space.lg,
+    backgroundColor: colors.blueDeep,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.blue,
+  },
+  myLabel: { ...type.label, fontSize: 9, color: colors.blueHi, flex: 1 },
+  myPos: { fontSize: 22, fontWeight: '800', fontStyle: 'italic', color: colors.ink },
+  myOf: { fontSize: 12, color: colors.inkSoft },
+
+  list: { paddingHorizontal: space.xl, paddingBottom: space.xxxl, gap: space.sm },
+  row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md },
+  rowMe: { borderColor: colors.blue },
+  pos: { width: 26, fontSize: 15, fontWeight: '800', textAlign: 'center' },
+  name: { fontSize: 14, fontWeight: '700', color: colors.ink },
+  meta: { fontSize: 11, color: colors.inkSoft, marginTop: 2 },
+  elo: { fontSize: 15, fontWeight: '800', color: colors.blue },
+  empty: { textAlign: 'center', color: colors.inkSoft, marginTop: space.xxl, paddingHorizontal: space.xl },
+});

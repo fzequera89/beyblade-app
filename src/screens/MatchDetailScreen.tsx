@@ -1,15 +1,25 @@
 import { useCallback, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Alert, ScrollView } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import Screen from '../components/Screen';
-import { FINISH_TYPES, FinishCode, finishLabel } from '../lib/finishTypes';
+import Screen from '../ui/Screen';
+import Button from '../ui/Button';
+import Avatar from '../ui/Avatar';
+import { Card, Pill, SectionTitle } from '../ui/primitives';
+import { colors, space, type, radius } from '../theme';
+import {
+  finishesFor,
+  finishLabel,
+  finishPoints,
+  FinishCode,
+  MatchMode,
+} from '../lib/finishTypes';
 
 type Match = {
   id: string;
-  league_id: string;
-  tournament_id: string;
+  league_id: string | null;
+  tournament_id: string | null;
   player_a_id: string;
   player_b_id: string;
   score_a: number;
@@ -19,26 +29,29 @@ type Match = {
   reported_by: string | null;
   elo_a_change: number | null;
   elo_b_change: number | null;
-  player_a: { display_name: string } | null;
-  player_b: { display_name: string } | null;
+  points_to_win: number;
+  mode: MatchMode;
+  player_a: { display_name: string; avatar_key: string | null; avatar_url: string | null } | null;
+  player_b: { display_name: string; avatar_key: string | null; avatar_url: string | null } | null;
 };
 
 type Round = { winner_id: string; finish_type: FinishCode };
-
-type SavedRound = { id: string; round_number: number; winner_id: string | null; finish_type: string | null };
-
-type Combo = { id: string; name: string };
-
-// Al mejor de 5: el primero que llega a 3 rounds gana el match.
-const ROUNDS_TO_WIN = 3;
+type SavedRound = {
+  id: string;
+  round_number: number;
+  winner_id: string | null;
+  finish_type: string | null;
+  points: number;
+};
 
 export default function MatchDetailScreen({ route, navigation }: any) {
   const { matchId } = route.params;
   const { playerId } = useAuth();
   const [match, setMatch] = useState<Match | null>(null);
   const [savedRounds, setSavedRounds] = useState<SavedRound[]>([]);
-  const [combos, setCombos] = useState<Combo[]>([]);
+  const [combos, setCombos] = useState<{ id: string; name: string }[]>([]);
   const [isOrganizer, setIsOrganizer] = useState(false);
+
   const [rounds, setRounds] = useState<Round[]>([]);
   const [pickedWinner, setPickedWinner] = useState<'a' | 'b' | null>(null);
   const [pickedFinish, setPickedFinish] = useState<FinishCode | null>(null);
@@ -51,7 +64,7 @@ export default function MatchDetailScreen({ route, navigation }: any) {
     const { data, error } = await supabase
       .from('matches')
       .select(
-        'id, league_id, tournament_id, player_a_id, player_b_id, score_a, score_b, winner_id, status, reported_by, elo_a_change, elo_b_change, player_a:players!matches_player_a_id_fkey(display_name), player_b:players!matches_player_b_id_fkey(display_name)'
+        'id, league_id, tournament_id, player_a_id, player_b_id, score_a, score_b, winner_id, status, reported_by, elo_a_change, elo_b_change, points_to_win, mode, player_a:players!matches_player_a_id_fkey(display_name, avatar_key, avatar_url), player_b:players!matches_player_b_id_fkey(display_name, avatar_key, avatar_url)'
       )
       .eq('id', matchId)
       .single();
@@ -63,20 +76,23 @@ export default function MatchDetailScreen({ route, navigation }: any) {
     setMatch(data as any);
 
     const [{ data: membership }, { data: roundRows }, { data: comboRows }] = await Promise.all([
-      supabase
-        .from('league_members')
-        .select('role')
-        .eq('league_id', data.league_id)
-        .eq('player_id', playerId)
-        .maybeSingle(),
+      data.league_id
+        ? supabase
+            .from('league_members')
+            .select('role')
+            .eq('league_id', data.league_id)
+            .eq('player_id', playerId)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
       supabase
         .from('match_rounds')
-        .select('id, round_number, winner_id, finish_type')
+        .select('id, round_number, winner_id, finish_type, points')
         .eq('match_id', matchId)
         .order('round_number'),
       supabase.from('combos').select('id, name').eq('player_id', playerId).order('created_at'),
     ]);
-    setIsOrganizer(membership?.role === 'organizer');
+
+    setIsOrganizer((membership as any)?.role === 'organizer');
     setSavedRounds((roundRows as any) ?? []);
     setCombos((comboRows as any) ?? []);
     setLoading(false);
@@ -91,9 +107,15 @@ export default function MatchDetailScreen({ route, navigation }: any) {
   const isParticipant = match && (match.player_a_id === playerId || match.player_b_id === playerId);
   const isReporter = match && match.reported_by === playerId;
 
-  const tallyA = match ? rounds.filter((r) => r.winner_id === match.player_a_id).length : 0;
-  const tallyB = match ? rounds.filter((r) => r.winner_id === match.player_b_id).length : 0;
-  const matchDecided = tallyA >= ROUNDS_TO_WIN || tallyB >= ROUNDS_TO_WIN;
+  // El marcador se calcula sumando el valor de cada finish, NO contando rounds.
+  const tallyA = match
+    ? rounds.filter((r) => r.winner_id === match.player_a_id).reduce((s, r) => s + finishPoints(r.finish_type), 0)
+    : 0;
+  const tallyB = match
+    ? rounds.filter((r) => r.winner_id === match.player_b_id).reduce((s, r) => s + finishPoints(r.finish_type), 0)
+    : 0;
+  const target = match?.points_to_win ?? 4;
+  const decided = tallyA >= target || tallyB >= target;
 
   function addRound() {
     if (!match || pickedWinner === null || pickedFinish === null) return;
@@ -103,12 +125,8 @@ export default function MatchDetailScreen({ route, navigation }: any) {
     setPickedFinish(null);
   }
 
-  function undoRound() {
-    setRounds(rounds.slice(0, -1));
-  }
-
   async function submitReport() {
-    if (!match || !matchDecided) return;
+    if (!match || !decided) return;
     setBusy(true);
     const { error } = await supabase.rpc('report_match_result', {
       p_match_id: match.id,
@@ -116,10 +134,7 @@ export default function MatchDetailScreen({ route, navigation }: any) {
       p_combo_id: pickedCombo,
     });
     setBusy(false);
-    if (error) {
-      Alert.alert('Error', error.message);
-      return;
-    }
+    if (error) return Alert.alert('No se pudo registrar', error.message);
     setRounds([]);
     setPickedCombo(null);
     load();
@@ -129,10 +144,7 @@ export default function MatchDetailScreen({ route, navigation }: any) {
     setBusy(true);
     const { error } = await supabase.rpc('confirm_match_result', { p_match_id: matchId });
     setBusy(false);
-    if (error) {
-      Alert.alert('Error', error.message);
-      return;
-    }
+    if (error) return Alert.alert('Error', error.message);
     load();
   }
 
@@ -140,24 +152,18 @@ export default function MatchDetailScreen({ route, navigation }: any) {
     setBusy(true);
     const { error } = await supabase.from('matches').update({ status: 'disputed' }).eq('id', matchId);
     setBusy(false);
-    if (error) {
-      Alert.alert('Error', error.message);
-      return;
-    }
+    if (error) return Alert.alert('Error', error.message);
     load();
   }
 
-  async function resolveDispute() {
+  async function reopen() {
     setBusy(true);
     const { error } = await supabase
       .from('matches')
       .update({ status: 'pending', score_a: 0, score_b: 0, winner_id: null, reported_by: null, reported_at: null })
       .eq('id', matchId);
     setBusy(false);
-    if (error) {
-      Alert.alert('Error', error.message);
-      return;
-    }
+    if (error) return Alert.alert('Error', error.message);
     load();
   }
 
@@ -168,211 +174,313 @@ export default function MatchDetailScreen({ route, navigation }: any) {
 
   if (loading || !match) {
     return (
-      <Screen style={styles.container}>
-        <Text>Cargando…</Text>
+      <Screen>
+        <View style={styles.center}>
+          <Text style={type.soft}>Cargando…</Text>
+        </View>
       </Screen>
     );
   }
 
+  const finishes = finishesFor(match.mode);
+  const liveA = match.status === 'pending' ? tallyA : match.score_a;
+  const liveB = match.status === 'pending' ? tallyB : match.score_b;
+
   return (
-    <Screen>
-    <ScrollView contentContainerStyle={styles.container}>
-      <View style={styles.vsRow}>
-        <Text style={styles.playerName}>{match.player_a?.display_name}</Text>
-        <Text style={styles.vs}>vs</Text>
-        <Text style={styles.playerName}>{match.player_b?.display_name}</Text>
+    <Screen scroll>
+      <View style={styles.head}>
+        <Pressable onPress={() => navigation.goBack()} hitSlop={8}>
+          <Text style={styles.back}>‹</Text>
+        </Pressable>
+        <Pill
+          label={match.mode === 'casual' ? 'Casual' : 'Ranking'}
+          color={match.mode === 'casual' ? colors.streak : colors.blue}
+        />
       </View>
 
+      {/* Marcador */}
+      <View style={styles.scoreboard}>
+        <View style={styles.side}>
+          <Avatar
+            uri={match.player_a?.avatar_url}
+            avatarKey={match.player_a?.avatar_key}
+            size={58}
+            ring={match.winner_id === match.player_a_id ? colors.win : colors.line}
+          />
+          <Text style={styles.sideName} numberOfLines={1}>
+            {match.player_a?.display_name}
+          </Text>
+        </View>
+
+        <View style={styles.scoreMid}>
+          <View style={styles.scoreRow}>
+            <Text style={[styles.score, liveA > liveB && styles.scoreLead]}>{liveA}</Text>
+            <Text style={styles.dash}>–</Text>
+            <Text style={[styles.score, liveB > liveA && styles.scoreLead]}>{liveB}</Text>
+          </View>
+          <Text style={styles.target}>a {target} puntos</Text>
+        </View>
+
+        <View style={styles.side}>
+          <Avatar
+            uri={match.player_b?.avatar_url}
+            avatarKey={match.player_b?.avatar_key}
+            size={58}
+            ring={match.winner_id === match.player_b_id ? colors.win : colors.line}
+          />
+          <Text style={styles.sideName} numberOfLines={1}>
+            {match.player_b?.display_name}
+          </Text>
+        </View>
+      </View>
+
+      {/* Registro round a round */}
       {match.status === 'pending' && isParticipant && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Reportar resultado</Text>
-          <Text style={styles.meta}>
-            Registra los rounds uno por uno. El match se cierra cuando alguien llega a {ROUNDS_TO_WIN}.
+        <View style={styles.block}>
+          <SectionTitle>Registrar la batalla</SectionTitle>
+          <Text style={styles.hint}>
+            Cada round vale distinto según cómo terminó. Gana quien acumule {target} puntos.
           </Text>
 
-          <View style={styles.tallyRow}>
-            <Text style={styles.tally}>{tallyA}</Text>
-            <Text style={styles.vs}>–</Text>
-            <Text style={styles.tally}>{tallyB}</Text>
-          </View>
-
           {rounds.length > 0 && (
-            <View style={styles.roundList}>
+            <Card style={{ gap: 8 }}>
               {rounds.map((r, i) => (
-                <Text key={i} style={styles.roundLine}>
-                  Round {i + 1}: ganó {nameFor(r.winner_id)} · {finishLabel(r.finish_type)}
-                </Text>
+                <View key={i} style={styles.roundLine}>
+                  <Text style={styles.roundNum}>R{i + 1}</Text>
+                  <Text style={styles.roundText} numberOfLines={1}>
+                    {nameFor(r.winner_id)} · {finishLabel(r.finish_type)}
+                  </Text>
+                  <Text style={styles.roundPts}>+{finishPoints(r.finish_type)}</Text>
+                </View>
               ))}
-              <Pressable onPress={undoRound}>
+              <Pressable onPress={() => setRounds(rounds.slice(0, -1))} hitSlop={6}>
                 <Text style={styles.undo}>Deshacer último round</Text>
               </Pressable>
-            </View>
+            </Card>
           )}
 
-          {!matchDecided && (
+          {!decided && (
             <>
-              <Text style={styles.label}>¿Quién ganó el round?</Text>
-              <View style={styles.rowGap}>
-                <Pressable
-                  style={[styles.choice, pickedWinner === 'a' && styles.choiceSelected]}
-                  onPress={() => setPickedWinner('a')}
-                >
-                  <Text>{match.player_a?.display_name}</Text>
-                </Pressable>
-                <Pressable
-                  style={[styles.choice, pickedWinner === 'b' && styles.choiceSelected]}
-                  onPress={() => setPickedWinner('b')}
-                >
-                  <Text>{match.player_b?.display_name}</Text>
-                </Pressable>
-              </View>
-
-              <Text style={styles.label}>¿Cómo terminó?</Text>
-              <View style={styles.rowGap}>
-                {FINISH_TYPES.map((f) => (
+              <Text style={type.label}>¿Quién ganó el round?</Text>
+              <View style={styles.row}>
+                {(['a', 'b'] as const).map((s) => (
                   <Pressable
-                    key={f.code}
-                    style={[styles.choice, pickedFinish === f.code && styles.choiceSelected]}
-                    onPress={() => setPickedFinish(f.code)}
+                    key={s}
+                    onPress={() => setPickedWinner(s)}
+                    style={[styles.choice, { flex: 1 }, pickedWinner === s && styles.choiceOn]}
                   >
-                    <Text>{f.label}</Text>
+                    <Text style={[styles.choiceText, pickedWinner === s && styles.choiceTextOn]} numberOfLines={1}>
+                      {s === 'a' ? match.player_a?.display_name : match.player_b?.display_name}
+                    </Text>
                   </Pressable>
                 ))}
               </View>
 
-              <Pressable
-                style={styles.button}
+              <Text style={type.label}>¿Cómo terminó?</Text>
+              <View style={styles.finishGrid}>
+                {finishes.map((f) => (
+                  <Pressable
+                    key={f.code}
+                    onPress={() => setPickedFinish(f.code)}
+                    style={[styles.finish, pickedFinish === f.code && styles.choiceOn]}
+                  >
+                    <View style={styles.finishTop}>
+                      <Text style={[styles.finishName, pickedFinish === f.code && styles.choiceTextOn]}>
+                        {f.label}
+                      </Text>
+                      <Text style={styles.finishPts}>{f.points} pt{f.points > 1 ? 's' : ''}</Text>
+                    </View>
+                    <Text style={styles.finishDesc} numberOfLines={2}>
+                      {f.description}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              <Button
+                label="AGREGAR ROUND"
+                variant="ghost"
                 onPress={addRound}
                 disabled={pickedWinner === null || pickedFinish === null}
-              >
-                <Text style={styles.buttonText}>Agregar round</Text>
-              </Pressable>
+              />
             </>
           )}
 
           {combos.length > 0 && (
             <>
-              <Text style={styles.label}>¿Con qué combo jugaste? (opcional)</Text>
-              <View style={styles.rowGap}>
+              <Text style={type.label}>¿Con qué combo jugaste?</Text>
+              <View style={styles.row}>
                 {combos.map((c) => (
                   <Pressable
                     key={c.id}
-                    style={[styles.choice, pickedCombo === c.id && styles.choiceSelected]}
                     onPress={() => setPickedCombo(pickedCombo === c.id ? null : c.id)}
+                    style={[styles.choice, pickedCombo === c.id && styles.choiceOn]}
                   >
-                    <Text>{c.name}</Text>
+                    <Text style={[styles.choiceText, pickedCombo === c.id && styles.choiceTextOn]}>{c.name}</Text>
                   </Pressable>
                 ))}
               </View>
             </>
           )}
 
-          {combos.length === 0 && (
-            <Pressable onPress={() => navigation.navigate('Combos')}>
-              <Text style={styles.link}>Registra tus combos para medir cuál te funciona mejor →</Text>
-            </Pressable>
-          )}
-
-          <Pressable style={styles.button} onPress={submitReport} disabled={busy || !matchDecided}>
-            <Text style={styles.buttonText}>
-              {matchDecided ? 'Enviar resultado' : `Faltan rounds para llegar a ${ROUNDS_TO_WIN}`}
-            </Text>
-          </Pressable>
+          <Button
+            label={decided ? 'ENVIAR RESULTADO' : `FALTAN PUNTOS PARA LLEGAR A ${target}`}
+            onPress={submitReport}
+            disabled={!decided}
+            loading={busy}
+          />
         </View>
       )}
 
-      {match.status === 'pending' && !isParticipant && <Text style={styles.meta}>Esperando a que jueguen.</Text>}
+      {match.status === 'pending' && !isParticipant && (
+        <Card style={styles.block}>
+          <Text style={type.soft}>Esperando a que jueguen.</Text>
+        </Card>
+      )}
 
+      {/* Confirmación */}
       {match.status === 'reported' && (
-        <View style={styles.section}>
-          <Text style={styles.meta}>
-            Reportado: {match.score_a} – {match.score_b}, ganó {nameFor(match.winner_id)}
-          </Text>
-          {(isOrganizer || (isParticipant && !isReporter)) && (
-            <View style={styles.rowGap}>
-              <Pressable style={styles.button} onPress={confirm} disabled={busy}>
-                <Text style={styles.buttonText}>Confirmar</Text>
-              </Pressable>
-              <Pressable style={[styles.button, styles.dangerButton]} onPress={dispute} disabled={busy}>
-                <Text style={styles.buttonText}>Disputar</Text>
-              </Pressable>
-            </View>
+        <View style={styles.block}>
+          <Card>
+            <Text style={styles.reported}>
+              Reportado: ganó {nameFor(match.winner_id)} por {match.score_a}–{match.score_b}
+            </Text>
+          </Card>
+          {isOrganizer || (isParticipant && !isReporter) ? (
+            <>
+              <Button label="CONFIRMAR RESULTADO" onPress={confirm} loading={busy} />
+              <Button label="Disputar" variant="danger" onPress={dispute} disabled={busy} />
+            </>
+          ) : (
+            <Text style={styles.hint}>Esperando que tu rival confirme el resultado.</Text>
           )}
-          {isReporter && !isOrganizer && <Text style={styles.meta}>Esperando confirmación del rival.</Text>}
         </View>
       )}
 
       {match.status === 'disputed' && (
-        <View style={styles.section}>
-          <Text style={styles.metaDanger}>Resultado en disputa.</Text>
-          {isOrganizer && (
-            <Pressable style={styles.button} onPress={resolveDispute} disabled={busy}>
-              <Text style={styles.buttonText}>Reabrir para reportar de nuevo</Text>
-            </Pressable>
-          )}
+        <View style={styles.block}>
+          <Card style={{ borderColor: colors.loss }}>
+            <Text style={styles.disputed}>Resultado en disputa</Text>
+            <Text style={styles.hint}>Un moderador de la liga tiene que reabrirlo.</Text>
+          </Card>
+          {isOrganizer && <Button label="REABRIR PARA REPORTAR DE NUEVO" onPress={reopen} loading={busy} />}
         </View>
       )}
 
       {match.status === 'confirmed' && (
-        <View style={styles.section}>
-          <Text style={styles.meta}>
-            Resultado final: {match.score_a} – {match.score_b}
-          </Text>
-          <View style={styles.rowGap}>
-            <Text style={styles.eloChange}>
-              {match.player_a?.display_name}: {(match.elo_a_change ?? 0) >= 0 ? '+' : ''}
-              {match.elo_a_change}
-            </Text>
-            <Text style={styles.eloChange}>
-              {match.player_b?.display_name}: {(match.elo_b_change ?? 0) >= 0 ? '+' : ''}
-              {match.elo_b_change}
-            </Text>
-          </View>
+        <View style={styles.block}>
+          <Card style={styles.eloCard}>
+            <EloDelta name={match.player_a?.display_name} delta={match.elo_a_change} />
+            <View style={styles.eloDiv} />
+            <EloDelta name={match.player_b?.display_name} delta={match.elo_b_change} />
+          </Card>
         </View>
       )}
 
-      {savedRounds.length > 0 && match.status !== 'pending' && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Rounds</Text>
-          {savedRounds.map((r) => (
-            <Text key={r.id} style={styles.roundLine}>
-              Round {r.round_number}: ganó {nameFor(r.winner_id)} · {finishLabel(r.finish_type)}
-            </Text>
-          ))}
+      {/* Rounds guardados */}
+      {savedRounds.length > 0 && (
+        <View style={styles.block}>
+          <SectionTitle>Rounds</SectionTitle>
+          <Card style={{ gap: 8 }}>
+            {savedRounds.map((r) => (
+              <View key={r.id} style={styles.roundLine}>
+                <Text style={styles.roundNum}>R{r.round_number}</Text>
+                <Text style={styles.roundText} numberOfLines={1}>
+                  {nameFor(r.winner_id)} · {finishLabel(r.finish_type)}
+                </Text>
+                <Text style={styles.roundPts}>+{r.points}</Text>
+              </View>
+            ))}
+          </Card>
         </View>
       )}
-
-      <Pressable style={styles.back} onPress={() => navigation.goBack()}>
-        <Text style={styles.backText}>‹ Volver al bracket</Text>
-      </Pressable>
-    </ScrollView>
     </Screen>
   );
 }
 
+function EloDelta({ name, delta }: { name?: string; delta: number | null }) {
+  const up = (delta ?? 0) >= 0;
+  return (
+    <View style={styles.eloSide}>
+      <Text style={styles.eloName} numberOfLines={1}>
+        {name}
+      </Text>
+      <Text style={[styles.eloVal, { color: up ? colors.win : colors.loss }]}>
+        {up ? '+' : ''}
+        {delta}
+      </Text>
+      <Text style={styles.eloLabel}>ELO</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, padding: 20, backgroundColor: '#fff' },
-  vsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 20 },
-  playerName: { fontSize: 18, fontWeight: '700' },
-  vs: { color: '#6b6b64' },
-  section: { gap: 10, marginBottom: 10 },
-  sectionTitle: { fontSize: 15, fontWeight: '700' },
-  label: { fontSize: 13, fontWeight: '600', marginTop: 4 },
-  tallyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12 },
-  tally: { fontSize: 32, fontWeight: '700', color: '#2f5ad6' },
-  roundList: { gap: 4, backgroundColor: '#f6f7fb', borderRadius: 8, padding: 10 },
-  roundLine: { fontSize: 12, color: '#333' },
-  undo: { fontSize: 12, color: '#b00020', marginTop: 4 },
-  link: { fontSize: 12, color: '#2f5ad6', fontWeight: '600' },
-  rowGap: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
-  choice: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 10 },
-  choiceSelected: { borderColor: '#2f5ad6', backgroundColor: '#e8edfd' },
-  button: { backgroundColor: '#2f5ad6', borderRadius: 8, padding: 12, alignItems: 'center', flex: 1 },
-  dangerButton: { backgroundColor: '#b00020' },
-  buttonText: { color: '#fff', fontWeight: '600' },
-  meta: { color: '#6b6b64' },
-  metaDanger: { color: '#b00020', fontWeight: '600' },
-  eloChange: { fontWeight: '600' },
-  back: { marginTop: 24 },
-  backText: { color: '#6b6b64' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: space.md },
+  back: { color: colors.ink, fontSize: 30, lineHeight: 32, width: 22 },
+
+  scoreboard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginTop: space.lg,
+    marginBottom: space.xl,
+  },
+  side: { alignItems: 'center', gap: 8, width: 92 },
+  sideName: { fontSize: 12.5, fontWeight: '700', color: colors.ink, textAlign: 'center' },
+  scoreMid: { alignItems: 'center', paddingTop: 8 },
+  scoreRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  score: { fontSize: 40, fontWeight: '800', fontStyle: 'italic', color: colors.inkDim, letterSpacing: -1 },
+  scoreLead: { color: colors.ink },
+  dash: { fontSize: 24, color: colors.inkDim },
+  target: { fontSize: 10.5, color: colors.inkDim, marginTop: 2, letterSpacing: 0.4 },
+
+  block: { gap: space.md, marginBottom: space.xl },
+  hint: { fontSize: 12.5, color: colors.inkSoft, lineHeight: 17 },
+  row: { flexDirection: 'row', gap: space.sm, flexWrap: 'wrap' },
+
+  choice: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.card,
+    borderRadius: radius.sm,
+    paddingVertical: 11,
+    paddingHorizontal: space.md,
+    alignItems: 'center',
+  },
+  choiceOn: { borderColor: colors.blue, backgroundColor: colors.blueDeep },
+  choiceText: { fontSize: 13, fontWeight: '600', color: colors.inkSoft },
+  choiceTextOn: { color: colors.ink },
+
+  finishGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  finish: {
+    flexGrow: 1,
+    minWidth: 150,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.card,
+    borderRadius: radius.sm,
+    padding: space.md,
+    gap: 3,
+  },
+  finishTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  finishName: { fontSize: 13.5, fontWeight: '700', color: colors.ink },
+  finishPts: { fontSize: 11, fontWeight: '800', color: colors.blue },
+  finishDesc: { fontSize: 11, color: colors.inkSoft, lineHeight: 15 },
+
+  roundLine: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  roundNum: { fontSize: 11, fontWeight: '800', color: colors.inkDim, width: 24 },
+  roundText: { flex: 1, fontSize: 13, color: colors.ink },
+  roundPts: { fontSize: 12, fontWeight: '800', color: colors.blue },
+  undo: { fontSize: 12, color: colors.loss, fontWeight: '600', marginTop: 2 },
+
+  reported: { fontSize: 14, color: colors.ink, fontWeight: '600' },
+  disputed: { fontSize: 15, fontWeight: '800', color: colors.loss, marginBottom: 4 },
+
+  eloCard: { flexDirection: 'row', alignItems: 'center' },
+  eloSide: { flex: 1, alignItems: 'center', gap: 2 },
+  eloDiv: { width: 1, height: 40, backgroundColor: colors.line },
+  eloName: { fontSize: 12, color: colors.inkSoft },
+  eloVal: { fontSize: 22, fontWeight: '800' },
+  eloLabel: { fontSize: 9, color: colors.inkDim, letterSpacing: 1 },
 });

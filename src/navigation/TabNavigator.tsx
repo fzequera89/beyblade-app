@@ -5,6 +5,7 @@ import { colors } from '../theme';
 
 import HomeScreen from '../screens/HomeScreen';
 import BattlesScreen from '../screens/BattlesScreen';
+import RankingsScreen from '../screens/RankingsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import EditProfileScreen from '../screens/EditProfileScreen';
 import LeaguesScreen from '../screens/LeaguesScreen';
@@ -125,7 +126,7 @@ const RankingsStack = createNativeStackNavigator();
 function Rankings() {
   return (
     <RankingsStack.Navigator screenOptions={stackOptions}>
-      <RankingsStack.Screen name="GlobalRanking" component={AdminGlobalRankingScreen} />
+      <RankingsStack.Screen name="Ranking" component={RankingsScreen} />
       <RankingsStack.Screen name="LeagueStandings" component={LeagueStandingsScreen} />
       <RankingsStack.Screen name="PlayerProfile" component={PlayerProfileScreen} />
       <RankingsStack.Screen name="Passport" component={PassportScreen} />

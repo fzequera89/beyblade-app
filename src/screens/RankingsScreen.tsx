@@ -99,6 +99,8 @@ export default function RankingsScreen({ navigation }: any) {
   );
 
   const myPos = rows.findIndex((r) => r.id === playerId) + 1;
+  const podium = rows.slice(0, 3);
+  const rest = rows.slice(3);
 
   return (
     <Screen padded={false}>
@@ -136,26 +138,24 @@ export default function RankingsScreen({ navigation }: any) {
       )}
 
       <FlatList
-        data={rows}
+        data={rest}
         keyExtractor={(r) => r.id}
         refreshing={loading}
         onRefresh={load}
         contentContainerStyle={styles.list}
+        ListHeaderComponent={podium.length > 0 ? <Podium rows={podium} navigation={navigation} /> : null}
         renderItem={({ item, index }) => {
-          const pos = index + 1;
+          // El índice arranca en 0 para el cuarto lugar, porque los tres
+          // primeros salieron de la lista hacia el podio.
+          const pos = index + 4;
           const me = item.id === playerId;
           return (
             <Card
               style={[styles.row, me && styles.rowMe]}
               onPress={() => navigation.navigate('PlayerProfile', { playerId: item.id })}
             >
-              <Text style={[styles.pos, { color: rankColor(pos) }]}>{pos}</Text>
-              <Avatar
-                uri={item.avatar_url}
-                avatarKey={item.avatar_key}
-                size={38}
-                ring={pos <= 3 ? rankColor(pos) : undefined}
-              />
+              <Text style={styles.pos}>{pos}</Text>
+              <Avatar uri={item.avatar_url} avatarKey={item.avatar_key} size={38} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.name} numberOfLines={1}>
                   {item.display_name}
@@ -184,8 +184,94 @@ export default function RankingsScreen({ navigation }: any) {
   );
 }
 
+// El podio se separa de la lista porque el 1º no compite con el 2º y 3º por
+// atención: es el que hay que reconocer de un vistazo. Por eso va en tarjeta
+// propia, a lo ancho y con el avatar grande, mientras que 2º y 3º comparten
+// una fila con tratamiento intermedio.
+function Podium({ rows, navigation }: { rows: Row[]; navigation: any }) {
+  const [first, second, third] = rows;
+
+  return (
+    <View style={styles.podium}>
+      {first && (
+        <Pressable
+          style={styles.champion}
+          onPress={() => navigation.navigate('PlayerProfile', { playerId: first.id })}
+        >
+          <View style={styles.crownRow}>
+            <Text style={styles.crown}>👑</Text>
+            <Text style={styles.championLabel}>LÍDER</Text>
+          </View>
+          <Avatar uri={first.avatar_url} avatarKey={first.avatar_key} size={92} ring={colors.streak} />
+          <Text style={styles.championName} numberOfLines={1}>
+            {first.display_name}
+          </Text>
+          <Text style={styles.championMeta}>
+            {first.city ?? 'Sin ciudad'} · {first.matches_played} PJ
+          </Text>
+          <Text style={styles.championElo}>{Math.round(first.elo_rating).toLocaleString()}</Text>
+        </Pressable>
+      )}
+
+      <View style={styles.runners}>
+        {[second, third].map((p, i) =>
+          p ? (
+            <Pressable
+              key={p.id}
+              style={[styles.runner, { borderColor: rankColor(i + 2) + '77' }]}
+              onPress={() => navigation.navigate('PlayerProfile', { playerId: p.id })}
+            >
+              <Text style={[styles.runnerPos, { color: rankColor(i + 2) }]}>{i + 2}</Text>
+              <Avatar uri={p.avatar_url} avatarKey={p.avatar_key} size={54} ring={rankColor(i + 2)} />
+              <Text style={styles.runnerName} numberOfLines={1}>
+                {p.display_name}
+              </Text>
+              <Text style={styles.runnerElo}>{Math.round(p.elo_rating).toLocaleString()}</Text>
+            </Pressable>
+          ) : (
+            <View key={i} style={{ flex: 1 }} />
+          )
+        )}
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   head: { paddingHorizontal: space.xl, paddingTop: space.xl, paddingBottom: space.lg },
+
+  podium: { gap: space.md, marginBottom: space.lg },
+  champion: {
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.streak,
+    borderRadius: radius.lg,
+    paddingVertical: space.xl,
+    paddingHorizontal: space.lg,
+  },
+  crownRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
+  crown: { fontSize: 16 },
+  championLabel: { ...type.label, fontSize: 10, color: colors.streak },
+  championName: { ...type.display, fontSize: 22, marginTop: 6 },
+  championMeta: { fontSize: 11.5, color: colors.inkSoft },
+  championElo: { fontSize: 26, fontWeight: '800', color: colors.streak, marginTop: 4 },
+
+  runners: { flexDirection: 'row', gap: space.md },
+  runner: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingVertical: space.lg,
+    paddingHorizontal: space.sm,
+  },
+  runnerPos: { fontSize: 13, fontWeight: '800' },
+  runnerName: { fontSize: 13, fontWeight: '700', color: colors.ink, marginTop: 2 },
+  runnerElo: { fontSize: 15, fontWeight: '800', color: colors.ink },
   title: { ...type.display, fontSize: 28 },
   sub: { ...type.soft, marginTop: 4, fontSize: 12.5 },
 

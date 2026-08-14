@@ -41,7 +41,7 @@ export default function BattlesScreen({ navigation }: any) {
         supabase
           .from('challenges')
           .select(
-            'id, match_id, status, challenger:players!challenges_challenger_id_fkey(id, display_name, avatar_key, avatar_url), challenged:players!challenges_challenged_id_fkey(id, display_name, avatar_key, avatar_url), match:matches(id, status)'
+            'id, match_id, status, responded_at, challenger:players!challenges_challenger_id_fkey(id, display_name, elo_rating, city, avatar_key, avatar_url), challenged:players!challenges_challenged_id_fkey(id, display_name, elo_rating, city, avatar_key, avatar_url), match:matches(id, status, score_a, score_b, player_a_id, mode, points_to_win, reported_by)'
           )
           .or(`challenger_id.eq.${playerId},challenged_id.eq.${playerId}`)
           .eq('status', 'accepted')
@@ -165,18 +165,55 @@ export default function BattlesScreen({ navigation }: any) {
                 pending.map((c) => {
                   const rival = c.challenger?.id === playerId ? c.challenged : c.challenger;
                   const st = matchState(c.match?.status);
+                  const m = c.match;
+                  const reported = m?.status === 'reported' || m?.status === 'disputed';
+                  const iAmA = m?.player_a_id === playerId;
+                  const mine = iAmA ? m?.score_a : m?.score_b;
+                  const theirs = iAmA ? m?.score_b : m?.score_a;
+                  // Si ya se reportó y no fui yo, la pelota está de mi lado.
+                  const myTurn = m?.status === 'reported' && m?.reported_by !== playerId;
+
                   return (
                     <Card
                       key={c.id}
-                      style={styles.row}
+                      style={[styles.battle, { borderColor: st.color + '55' }]}
                       onPress={() => navigation.navigate('MatchDetail', { matchId: c.match_id })}
                     >
-                      <Avatar uri={rival?.avatar_url} avatarKey={rival?.avatar_key} size={44} ring={st.color} />
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.name}>vs {rival?.display_name ?? '—'}</Text>
-                        <Text style={[styles.meta, { color: st.color }]}>{st.label}</Text>
+                      <View style={styles.battleTop}>
+                        <Avatar uri={rival?.avatar_url} avatarKey={rival?.avatar_key} size={48} ring={st.color} />
+                        <View style={{ flex: 1, gap: 3 }}>
+                          <Text style={styles.name} numberOfLines={1}>
+                            {rival?.display_name ?? '—'}
+                          </Text>
+                          <Text style={styles.meta}>
+                            ELO {Math.round(rival?.elo_rating ?? 1000)}
+                            {rival?.city ? ` · ${rival.city}` : ''}
+                          </Text>
+                        </View>
+
+                        {reported ? (
+                          <View style={styles.scoreBox}>
+                            <Text style={[styles.score, (mine ?? 0) > (theirs ?? 0) && { color: colors.win }]}>
+                              {mine}
+                            </Text>
+                            <Text style={styles.scoreDash}>–</Text>
+                            <Text style={[styles.score, (theirs ?? 0) > (mine ?? 0) && { color: colors.loss }]}>
+                              {theirs}
+                            </Text>
+                          </View>
+                        ) : (
+                          <IconChevron />
+                        )}
                       </View>
-                      <IconChevron />
+
+                      <View style={styles.battleFoot}>
+                        <View style={[styles.dot, { backgroundColor: st.color }]} />
+                        <Text style={[styles.state, { color: st.color }]}>{st.label}</Text>
+                        <Text style={styles.footMeta}>
+                          {m?.mode === 'casual' ? 'Casual' : 'Ranking'} · a {m?.points_to_win ?? 4} puntos
+                        </Text>
+                        {myTurn && <Pill label="Te toca" color={colors.streak} />}
+                      </View>
                     </Card>
                   );
                 })
@@ -297,6 +334,23 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   name: { fontSize: 14.5, fontWeight: '700', color: colors.ink },
   meta: { fontSize: 11.5, color: colors.inkSoft, marginTop: 2 },
+
+  battle: { gap: space.md },
+  battleTop: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  scoreBox: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  score: { fontSize: 21, fontWeight: '800', fontStyle: 'italic', color: colors.inkSoft },
+  scoreDash: { fontSize: 14, color: colors.inkDim },
+  battleFoot: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
+    paddingTop: space.md,
+  },
+  dot: { width: 7, height: 7, borderRadius: 4 },
+  state: { fontSize: 11.5, fontWeight: '700' },
+  footMeta: { flex: 1, fontSize: 11, color: colors.inkDim },
 
   accept: {
     backgroundColor: colors.blue,

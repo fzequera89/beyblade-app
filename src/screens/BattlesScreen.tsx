@@ -162,10 +162,96 @@ export default function BattlesScreen({ navigation }: any) {
                   </Text>
                 </Card>
               ) : (
-                pending.map((c) => {
+                pending.map((c, idx) => {
                   const rival = c.challenger?.id === playerId ? c.challenged : c.challenger;
+                  const me = c.challenger?.id === playerId ? c.challenger : c.challenged;
                   const st = matchState(c.match?.status);
                   const m = c.match;
+
+                  // La primera tarjeta de la lista lleva tratamiento de héroe:
+                  // es la batalla más urgente y la que la gente mira primero.
+                  if (idx === 0) {
+                    const iAmA0 = m?.player_a_id === playerId;
+                    const mine0 = iAmA0 ? m?.score_a : m?.score_b;
+                    const theirs0 = iAmA0 ? m?.score_b : m?.score_a;
+                    const shown = m?.status === 'reported' || m?.status === 'disputed';
+                    const turn = m?.status === 'reported' && m?.reported_by !== playerId;
+
+                    return (
+                      <Card
+                        key={c.id}
+                        style={[styles.hero, { borderColor: st.color }]}
+                        onPress={() => navigation.navigate('MatchDetail', { matchId: c.match_id })}
+                      >
+                        <View style={styles.heroTop}>
+                          <View style={[styles.dot, { backgroundColor: st.color }]} />
+                          <Text style={[styles.heroState, { color: st.color }]}>
+                            {turn ? 'TE TOCA CONFIRMAR' : st.label.toUpperCase()}
+                          </Text>
+                          <Text style={styles.footMeta}>
+                            {m?.mode === 'casual' ? 'Casual' : 'Ranking'} · a {m?.points_to_win ?? 4} pts
+                          </Text>
+                        </View>
+
+                        <View style={styles.versus}>
+                          <View style={styles.vsSide}>
+                            <Avatar uri={me?.avatar_url} avatarKey={me?.avatar_key} size={64} ring={colors.blue} />
+                            <Text style={styles.vsName} numberOfLines={1}>
+                              Tú
+                            </Text>
+                          </View>
+
+                          <View style={styles.vsMid}>
+                            {shown ? (
+                              <View style={styles.heroScoreRow}>
+                                <Text
+                                  style={[
+                                    styles.heroScore,
+                                    (mine0 ?? 0) > (theirs0 ?? 0) && { color: colors.win },
+                                  ]}
+                                >
+                                  {mine0}
+                                </Text>
+                                <Text style={styles.scoreDash}>–</Text>
+                                <Text
+                                  style={[
+                                    styles.heroScore,
+                                    (theirs0 ?? 0) > (mine0 ?? 0) && { color: colors.loss },
+                                  ]}
+                                >
+                                  {theirs0}
+                                </Text>
+                              </View>
+                            ) : (
+                              <IconSwords size={30} color={st.color} />
+                            )}
+                          </View>
+
+                          <View style={styles.vsSide}>
+                            <Avatar
+                              uri={rival?.avatar_url}
+                              avatarKey={rival?.avatar_key}
+                              size={64}
+                              ring={colors.loss}
+                            />
+                            <Text style={styles.vsName} numberOfLines={1}>
+                              {rival?.display_name ?? '—'}
+                            </Text>
+                          </View>
+                        </View>
+
+                        <View style={styles.heroFoot}>
+                          <Text style={styles.footMeta}>
+                            ELO {Math.round(rival?.elo_rating ?? 1000)}
+                            {rival?.city ? ` · ${rival.city}` : ''}
+                          </Text>
+                          <Text style={styles.heroCta}>
+                            {m?.status === 'pending' ? 'Registrar resultado ›' : 'Ver detalle ›'}
+                          </Text>
+                        </View>
+                      </Card>
+                    );
+                  }
                   const reported = m?.status === 'reported' || m?.status === 'disputed';
                   const iAmA = m?.player_a_id === playerId;
                   const mine = iAmA ? m?.score_a : m?.score_b;
@@ -334,6 +420,25 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   name: { fontSize: 14.5, fontWeight: '700', color: colors.ink },
   meta: { fontSize: 11.5, color: colors.inkSoft, marginTop: 2 },
+
+  hero: { gap: space.lg, paddingVertical: space.lg },
+  heroTop: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  heroState: { fontSize: 10.5, fontWeight: '800', letterSpacing: 0.8 },
+  versus: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  vsSide: { alignItems: 'center', gap: 6, width: 92 },
+  vsName: { fontSize: 12.5, fontWeight: '700', color: colors.ink, textAlign: 'center' },
+  vsMid: { flex: 1, alignItems: 'center' },
+  heroScoreRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  heroScore: { fontSize: 32, fontWeight: '800', fontStyle: 'italic', color: colors.inkSoft },
+  heroFoot: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
+    paddingTop: space.md,
+  },
+  heroCta: { fontSize: 12, fontWeight: '800', color: colors.blue },
 
   battle: { gap: space.md },
   battleTop: { flexDirection: 'row', alignItems: 'center', gap: space.md },

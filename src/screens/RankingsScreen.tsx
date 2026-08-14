@@ -6,7 +6,27 @@ import { useAuth } from '../context/AuthContext';
 import Screen from '../ui/Screen';
 import Avatar from '../ui/Avatar';
 import { Card, Chip } from '../ui/primitives';
+import { FINISH_TYPES } from '../lib/finishTypes';
 import { colors, space, type, radius } from '../theme';
+
+// Un color por tipo de finish. Se repite en la barra y en la leyenda, y es lo
+// que permite leer la mezcla sin contar números.
+const FINISH_COLOR: Record<string, string> = {
+  spin: '#5BA8FF',
+  over: '#35C46A',
+  burst: '#F5A524',
+  xtreme: '#9B6BFF',
+  aerial: '#FF7AC8',
+};
+
+function ChampStat({ label, value, tint }: { label: string; value: string; tint?: string }) {
+  return (
+    <View style={styles.champStat}>
+      <Text style={styles.champStatLabel}>{label.toUpperCase()}</Text>
+      <Text style={[styles.champStatVal, tint ? { color: tint } : null]}>{value}</Text>
+    </View>
+  );
+}
 
 // Rankings solo consulta posiciones. Nada que se juegue vive aquí — eso está en
 // Batallas. La diferencia es de intención: aquí vienes a ver dónde vas.
@@ -24,6 +44,15 @@ type Row = {
   matches_played: number;
   avatar_key: string | null;
   avatar_url: string | null;
+};
+
+// Solo se calcula para el líder. Es la única tarjeta que justifica consultas
+// extra: es la que la gente mira.
+type ChampStats = {
+  wins: number;
+  winRate: number;
+  finishes: { code: string; label: string; pct: number; n: number }[];
+  combo: string | null;
 };
 
 const SCOPES: { key: Scope; label: string }[] = [
@@ -49,6 +78,7 @@ export default function RankingsScreen({ navigation }: any) {
   const [leagues, setLeagues] = useState<{ id: string; name: string }[]>([]);
   const [leagueId, setLeagueId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [champ, setChamp] = useState<ChampStats | null>(null);
 
   // Se cargan una vez: definen qué puede consultar este jugador.
   useEffect(() => {
@@ -98,6 +128,65 @@ export default function RankingsScreen({ navigation }: any) {
     }, [load])
   );
 
+  // Estadísticas del líder. Va aparte de `load` porque depende de quién quedó
+  // primero, y solo se pide para ese jugador: hacerlo para los 100 sería
+  // absurdo cuando solo se muestra uno.
+  const loadChampion = useCallback(async (id: string, matchesPlayed: number) => {
+    const [{ count: wins }, { data: roundRows }, { data: played }] = await Promise.all([
+      supabase.from('matches').select('*', { count: 'exact', head: true }).eq('status', 'confirmed').eq('winner_id', id),
+      supabase
+        .from('match_rounds')
+        .select('finish_type, matches!inner(status)')
+        .eq('winner_id', id)
+        .eq('matches.status', 'confirmed'),
+      supabase
+        .from('matches')
+        .select('player_a_id, combo_a_id, combo_b_id')
+        .eq('status', 'confirmed')
+        .or(`player_a_id.eq.${id},player_b_id.eq.${id}`),
+    ]);
+
+    // Cómo gana sus rounds
+    const counts: Record<string, number> = {};
+    for (const r of ((roundRows as any[]) ?? [])) {
+      counts[r.finish_type] = (counts[r.finish_type] ?? 0) + 1;
+    }
+    const total = Object.values(counts).reduce((a, b) => a + b, 0);
+    const finishes = FINISH_TYPES.map((f) => ({
+      code: f.code,
+      label: f.label,
+      n: counts[f.code] ?? 0,
+      pct: total > 0 ? Math.round(((counts[f.code] ?? 0) / total) * 100) : 0,
+    }))
+      .filter((f) => f.n > 0)
+      .sort((a, b) => b.n - a.n);
+
+    // Combo más usado
+    const usage: Record<string, number> = {};
+    for (const m of ((played as any[]) ?? [])) {
+      const c = m.player_a_id === id ? m.combo_a_id : m.combo_b_id;
+      if (c) usage[c] = (usage[c] ?? 0) + 1;
+    }
+    const topComboId = Object.entries(usage).sort((a, b) => b[1] - a[1])[0]?.[0];
+    let combo: string | null = null;
+    if (topComboId) {
+      const { data: c } = await supabase.from('combos').select('name').eq('id', topComboId).maybeSingle();
+      combo = (c as any)?.name ?? null;
+    }
+
+    setChamp({
+      wins: wins ?? 0,
+      winRate: matchesPlayed > 0 ? Math.round(((wins ?? 0) / matchesPlayed) * 100) : 0,
+      finishes,
+      combo,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (rows.length > 0) loadChampion(rows[0].id, rows[0].matches_played);
+    else setChamp(null);
+  }, [rows, loadChampion]);
+
   const myPos = rows.findIndex((r) => r.id === playerId) + 1;
   const podium = rows.slice(0, 3);
   const rest = rows.slice(3);
@@ -143,7 +232,9 @@ export default function RankingsScreen({ navigation }: any) {
         refreshing={loading}
         onRefresh={load}
         contentContainerStyle={styles.list}
-        ListHeaderComponent={podium.length > 0 ? <Podium rows={podium} navigation={navigation} /> : null}
+        ListHeaderComponent={
+          podium.length > 0 ? <Podium rows={podium} champ={champ} navigation={navigation} /> : null
+        }
         renderItem={({ item, index }) => {
           // El índice arranca en 0 para el cuarto lugar, porque los tres
           // primeros salieron de la lista hacia el podio.
@@ -188,7 +279,15 @@ export default function RankingsScreen({ navigation }: any) {
 // atención: es el que hay que reconocer de un vistazo. Por eso va en tarjeta
 // propia, a lo ancho y con el avatar grande, mientras que 2º y 3º comparten
 // una fila con tratamiento intermedio.
-function Podium({ rows, navigation }: { rows: Row[]; navigation: any }) {
+function Podium({
+  rows,
+  champ,
+  navigation,
+}: {
+  rows: Row[];
+  champ: ChampStats | null;
+  navigation: any;
+}) {
   const [first, second, third] = rows;
 
   return (
@@ -200,16 +299,66 @@ function Podium({ rows, navigation }: { rows: Row[]; navigation: any }) {
         >
           <View style={styles.crownRow}>
             <Text style={styles.crown}>👑</Text>
-            <Text style={styles.championLabel}>LÍDER</Text>
+            <Text style={styles.championLabel}>LÍDER DEL RANKING</Text>
           </View>
-          <Avatar uri={first.avatar_url} avatarKey={first.avatar_key} size={92} ring={colors.streak} />
-          <Text style={styles.championName} numberOfLines={1}>
-            {first.display_name}
-          </Text>
-          <Text style={styles.championMeta}>
-            {first.city ?? 'Sin ciudad'} · {first.matches_played} PJ
-          </Text>
-          <Text style={styles.championElo}>{Math.round(first.elo_rating).toLocaleString()}</Text>
+
+          <View style={styles.championTop}>
+            <Avatar uri={first.avatar_url} avatarKey={first.avatar_key} size={86} ring={colors.streak} />
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text style={styles.championName} numberOfLines={1}>
+                {first.display_name}
+              </Text>
+              <Text style={styles.championMeta}>{first.city ?? 'Sin ciudad'}</Text>
+              <Text style={styles.championElo}>{Math.round(first.elo_rating).toLocaleString()}</Text>
+              <Text style={styles.championEloLabel}>ELO</Text>
+            </View>
+          </View>
+
+          <View style={styles.championStats}>
+            <ChampStat label="Jugados" value={String(first.matches_played)} />
+            <View style={styles.vDiv} />
+            <ChampStat label="Ganados" value={champ ? String(champ.wins) : '—'} />
+            <View style={styles.vDiv} />
+            <ChampStat
+              label="Win rate"
+              value={champ ? `${champ.winRate}%` : '—'}
+              tint={colors.streak}
+            />
+          </View>
+
+          {champ && champ.finishes.length > 0 && (
+            <View style={styles.finishBlock}>
+              <Text style={styles.blockLabel}>CÓMO GANA SUS ROUNDS</Text>
+              {/* Barra apilada: se lee la mezcla de un vistazo, sin contar. */}
+              <View style={styles.stack}>
+                {champ.finishes.map((f) => (
+                  <View
+                    key={f.code}
+                    style={{ width: `${f.pct}%`, backgroundColor: FINISH_COLOR[f.code] ?? colors.blue }}
+                  />
+                ))}
+              </View>
+              <View style={styles.legend}>
+                {champ.finishes.map((f) => (
+                  <View key={f.code} style={styles.legendItem}>
+                    <View style={[styles.legendDot, { backgroundColor: FINISH_COLOR[f.code] ?? colors.blue }]} />
+                    <Text style={styles.legendText}>
+                      {f.label} {f.pct}%
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {champ?.combo && (
+            <View style={styles.comboRow}>
+              <Text style={styles.blockLabel}>COMBO MÁS USADO</Text>
+              <Text style={styles.comboName} numberOfLines={1}>
+                {champ.combo}
+              </Text>
+            </View>
+          )}
         </Pressable>
       )}
 
@@ -243,7 +392,7 @@ const styles = StyleSheet.create({
   podium: { gap: space.md, marginBottom: space.lg },
   champion: {
     alignItems: 'center',
-    gap: 6,
+    gap: space.md,
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.streak,
@@ -251,12 +400,38 @@ const styles = StyleSheet.create({
     paddingVertical: space.xl,
     paddingHorizontal: space.lg,
   },
-  crownRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
-  crown: { fontSize: 16 },
-  championLabel: { ...type.label, fontSize: 10, color: colors.streak },
-  championName: { ...type.display, fontSize: 22, marginTop: 6 },
+  crownRow: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start' },
+  crown: { fontSize: 15 },
+  championLabel: { ...type.label, fontSize: 9.5, color: colors.streak },
+  championTop: { flexDirection: 'row', alignItems: 'center', gap: space.lg, alignSelf: 'stretch' },
+  championName: { ...type.display, fontSize: 22 },
   championMeta: { fontSize: 11.5, color: colors.inkSoft },
-  championElo: { fontSize: 26, fontWeight: '800', color: colors.streak, marginTop: 4 },
+  championElo: { fontSize: 28, fontWeight: '800', color: colors.streak, marginTop: 4 },
+  championEloLabel: { fontSize: 9, letterSpacing: 1.4, color: colors.inkDim, marginTop: -4 },
+
+  championStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
+    paddingTop: space.md,
+  },
+  champStat: { flex: 1, alignItems: 'center', gap: 2 },
+  champStatLabel: { fontSize: 8.5, fontWeight: '800', letterSpacing: 0.7, color: colors.inkDim },
+  champStatVal: { fontSize: 16, fontWeight: '800', color: colors.ink },
+  vDiv: { width: 1, height: 26, backgroundColor: colors.line },
+
+  finishBlock: { alignSelf: 'stretch', gap: 8, marginTop: space.xs },
+  blockLabel: { fontSize: 8.5, fontWeight: '800', letterSpacing: 0.9, color: colors.inkDim },
+  stack: { flexDirection: 'row', height: 8, borderRadius: 4, overflow: 'hidden', backgroundColor: colors.line },
+  legend: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  legendDot: { width: 7, height: 7, borderRadius: 4 },
+  legendText: { fontSize: 10.5, color: colors.inkSoft, fontWeight: '600' },
+
+  comboRow: { alignSelf: 'stretch', gap: 3 },
+  comboName: { fontSize: 13.5, fontWeight: '700', color: colors.ink },
 
   runners: { flexDirection: 'row', gap: space.md },
   runner: {

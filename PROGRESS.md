@@ -108,8 +108,7 @@ Lo que quedó:
 
 ## Pendientes conocidos
 
-- **✅ Las migraciones 0001–0027 ya corrieron en Supabase** (verificado el 2026-08-14: `tournaments.mode` responde y filtra por `casual` → 0026; `accept_challenge` contiene la lógica `casual` → 0027; `judge_assignments` y `arbitrable_match_ids` existen → 0024/0025; `penalty_codes`/`penalties` → 0022; las funciones internas devuelven 42501 → 0023 sigue firme; `photo_url`/bucket `venues` → 0021; y todas las tablas rechazan lectura anónima). El esquema hasta 0027 está al día con el repo. La 0027 se corrió vía Management API (`/database/query`); las anteriores, a mano en el SQL Editor.
-- **⬜ 0028 (reglas de ronda) — CONSTRUIDA, SIN CORRER.** Agrega los resultados de ronda `launch_fail` (1 punto por falla de lanzamiento) y `void` (empate / lanzamiento nulo, se repite) a `finish_points` y `report_match_result`. Ver sección "0028" abajo.
+- **✅ Las migraciones 0001–0028 ya corrieron en Supabase** (verificado el 2026-08-14: `finish_points('launch_fail')=1`/`('void')=0` y `report_match_result` reconoce ambos → 0028; `tournaments.mode` filtra por `casual` → 0026; `accept_challenge` es casual → 0027; `judge_assignments`/`arbitrable_match_ids` → 0024/0025; `penalty_codes`/`penalties` → 0022; las funciones internas devuelven 42501 → 0023 sigue firme; `photo_url`/bucket `venues` → 0021; y todas las tablas rechazan lectura anónima). El esquema está completo y al día con el repo. Las 0027 y 0028 se corrieron vía Management API (`/database/query`); las anteriores, a mano en el SQL Editor.
 - **Build de EAS pendiente de generar** desde la sub-etapa 1.1 (fix de placeholders) — el usuario pidió explícitamente esperar y acumular cambios de varias fases antes de generar el próximo build real, para no gastar builds en cada cambio chico.
 - Configurar el cliente OAuth de Google en Supabase (para que el botón "Continuar con Google" funcione en producción).
 - Cambiar `is_admin` del correo de prueba de Farid al correo real del cliente cuando se decida.
@@ -334,7 +333,7 @@ reto se registra entero (incluido `matches_played`) pero deja el rating quieto,
 y de paso admite Aerial. Es la misma función de 0013 con ese único cambio. No
 toca la UI: `MatchDetailScreen` ya lee `match.mode` y se adapta solo.
 
-### ⬜ 0028 — reglas de ronda: puntuación SIN contacto válido (construida, SIN CORRER)
+### ✅ 0028 — reglas de ronda: puntuación SIN contacto válido (CORRIDA 2026-08-14)
 
 El reglamento (sección "Puntuación") dice que no toda salida da puntos: hace
 falta **contacto válido** (ambos Beys tocaron el suelo y hubo colisión). Sin él:
@@ -371,7 +370,7 @@ salida real, el bundle compila (756 módulos) y la app monta sin errores de cons
 
 1. `git clone` / `git pull` del repo.
 2. Copiar `.env.example` a `.env` y llenar `EXPO_PUBLIC_SUPABASE_URL` y `EXPO_PUBLIC_SUPABASE_ANON_KEY` (Supabase → Settings → API del proyecto "CML Beyblade").
-3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-14 las 0001–0027 están corridas; la 0028 (reglas de ronda) está SIN CORRER** — si se agrega una nueva, actualizar esta línea.
+3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-14 las 0001–0028 están corridas** — si se agrega una nueva, actualizar esta línea.
 4. `npm install`, luego `npm run web` para verificar rápido en el preview del navegador (no requiere emulador Android).
 5. Para un build real: `npx eas-cli build --platform android --profile preview --non-interactive` (requiere `eas login` ya hecho en la máquina).
 

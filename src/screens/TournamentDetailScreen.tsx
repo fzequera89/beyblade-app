@@ -26,6 +26,7 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
   const { playerId } = useAuth();
   const [name, setName] = useState('');
   const [status, setStatus] = useState('pending');
+  const [mode, setMode] = useState<'ranking' | 'casual'>('ranking');
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [hasBracket, setHasBracket] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -34,7 +35,7 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
   const load = useCallback(async () => {
     setLoading(true);
     const [{ data: tournament }, { data: regs }, { count: matchCount }] = await Promise.all([
-      supabase.from('tournaments').select('name, status').eq('id', tournamentId).single(),
+      supabase.from('tournaments').select('name, status, mode').eq('id', tournamentId).single(),
       supabase
         .from('tournament_registrations')
         .select('player_id, checked_in_at, players(display_name, elo_rating, avatar_key, avatar_url)')
@@ -48,7 +49,10 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
     setLoading(false);
     setName((tournament as any)?.name ?? '');
     setStatus((tournament as any)?.status ?? 'pending');
-    // Se ordena por ELO: es el orden con el que se va a sembrar el bracket.
+    setMode((tournament as any)?.mode === 'casual' ? 'casual' : 'ranking');
+    // Se ordena por ELO: es el orden con el que se va a sembrar el bracket
+    // ranking. En casual el emparejamiento es al azar, pero mostrarlos por ELO
+    // sigue siendo el orden más útil para leer la lista de inscritos.
     setRegistrations(
       ((regs as any as Registration[]) ?? []).sort(
         (a, b) => (b.players?.elo_rating ?? 0) - (a.players?.elo_rating ?? 0)
@@ -129,11 +133,21 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
                 <Text style={{ fontSize: 28 }}>🏆</Text>
               </Hex>
               <Text style={styles.title}>{name}</Text>
-              <Pill
-                label={status === 'pending' ? 'Registro abierto' : 'Terminado'}
-                color={status === 'pending' ? colors.win : colors.inkDim}
-                align="center"
-              />
+              <View style={styles.pills}>
+                <Pill
+                  label={status === 'pending' ? 'Registro abierto' : 'Terminado'}
+                  color={status === 'pending' ? colors.win : colors.inkDim}
+                />
+                <Pill
+                  label={mode === 'casual' ? 'Casual' : 'Ranking'}
+                  color={mode === 'casual' ? colors.streak : colors.blue}
+                />
+              </View>
+              {mode === 'casual' && (
+                <Text style={styles.modeNote}>
+                  Emparejamiento al azar · Aerial permitido · no mueve el ELO
+                </Text>
+              )}
             </View>
 
             <Card style={styles.stats}>
@@ -175,6 +189,14 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
                   )}
                 </>
               ) : null}
+
+              {/* Un cuerpo arbitral se convoca para el evento: sin jueces
+                  nombrados, los resultados de este torneo se quedan esperando. */}
+              <Button
+                label="⚖️  CUERPO DE JUECES"
+                variant="ghost"
+                onPress={() => navigation.navigate('Judges', { tournamentId, title: 'Este torneo' })}
+              />
             </View>
 
             <SectionTitle>
@@ -238,6 +260,8 @@ const styles = StyleSheet.create({
   back: { color: colors.ink, fontSize: 30, lineHeight: 32, width: 22 },
   hero: { alignItems: 'center', gap: space.sm, paddingVertical: space.md },
   title: { ...type.display, fontSize: 22, textAlign: 'center' },
+  pills: { flexDirection: 'row', gap: space.sm },
+  modeNote: { fontSize: 11, color: colors.streak, textAlign: 'center' },
 
   stats: { flexDirection: 'row', alignItems: 'center' },
   stat: { flex: 1, alignItems: 'center', gap: 2 },

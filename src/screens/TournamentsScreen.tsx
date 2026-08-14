@@ -16,10 +16,18 @@ type Tournament = {
   tournament_registrations: { count: number }[];
 };
 
+// Las dos modalidades del reglamento. La elección baja a cada combate del
+// bracket y decide el emparejamiento, el Aerial y si mueve el ELO.
+const MODES = [
+  { value: 'ranking' as const, label: 'Ranking', desc: 'Cuenta para el ELO · sin Aerial' },
+  { value: 'casual' as const, label: 'Casual', desc: 'Al azar · Aerial vale · no toca el ELO' },
+];
+
 export default function TournamentsScreen({ route, navigation }: any) {
   const { leagueId, isOrganizer } = route.params;
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [name, setName] = useState('');
+  const [mode, setMode] = useState<'ranking' | 'casual'>('ranking');
   const [creating, setCreating] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -48,9 +56,12 @@ export default function TournamentsScreen({ route, navigation }: any) {
 
   async function create() {
     if (!name.trim()) return;
-    const { error } = await supabase.from('tournaments').insert({ league_id: leagueId, name: name.trim() });
+    const { error } = await supabase
+      .from('tournaments')
+      .insert({ league_id: leagueId, name: name.trim(), mode });
     if (error) return Alert.alert('Error', error.message);
     setName('');
+    setMode('ranking');
     setCreating(false);
     load();
   }
@@ -81,6 +92,26 @@ export default function TournamentsScreen({ route, navigation }: any) {
                     value={name}
                     onChangeText={setName}
                   />
+
+                  <View style={{ gap: space.xs }}>
+                    <Text style={styles.fieldLabel}>MODALIDAD</Text>
+                    <View style={styles.modeRow}>
+                      {MODES.map((m) => {
+                        const on = mode === m.value;
+                        return (
+                          <Pressable
+                            key={m.value}
+                            onPress={() => setMode(m.value)}
+                            style={[styles.modeCard, on && styles.modeCardOn]}
+                          >
+                            <Text style={[styles.modeName, on && styles.modeNameOn]}>{m.label}</Text>
+                            <Text style={styles.modeDesc}>{m.desc}</Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+
                   <Button label="CREAR TORNEO" onPress={create} />
                   <Button label="Cancelar" variant="ghost" onPress={() => setCreating(false)} />
                 </Card>
@@ -173,6 +204,22 @@ const styles = StyleSheet.create({
   headRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   back: { color: colors.ink, fontSize: 30, lineHeight: 32, width: 22 },
   title: { ...type.title, fontSize: 20 },
+
+  fieldLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 0.8, color: colors.inkDim },
+  modeRow: { flexDirection: 'row', gap: space.sm },
+  modeCard: {
+    flex: 1,
+    gap: 3,
+    padding: space.md,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.card,
+  },
+  modeCardOn: { borderColor: colors.blue, backgroundColor: colors.blueDeep },
+  modeName: { fontSize: 14, fontWeight: '800', color: colors.inkSoft },
+  modeNameOn: { color: colors.ink },
+  modeDesc: { fontSize: 10.5, color: colors.inkSoft, lineHeight: 14 },
 
   hero: { gap: space.md, borderColor: colors.win },
   heroTop: { flexDirection: 'row', alignItems: 'center', gap: space.md },

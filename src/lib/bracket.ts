@@ -1,22 +1,59 @@
 import { supabase } from './supabase';
 
 type SeedPlayer = { id: string; display_name: string; elo_rating: number };
+type Mode = 'ranking' | 'casual';
 
-// Simplificación de MVP: cada ronda se re-empareja por ELO actual (1 vs último, 2 vs
-// penúltimo...) en vez de mantener posiciones fijas de bracket como un torneo oficial.
-// Es determinista y justo, pero no es seeding profesional de bracket.
-export function buildPairs(players: SeedPlayer[]) {
-  const sorted = [...players].sort((a, b) => b.elo_rating - a.elo_rating);
-  let bye: SeedPlayer | null = null;
-  if (sorted.length % 2 === 1) {
-    bye = sorted.shift() ?? null;
+// Baraja Fisher-Yates: emparejamiento al azar de la modalidad casual.
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
   }
+  return a;
+}
+
+// Ranking: cada ronda se re-empareja por ELO actual (1 vs último, 2 vs penúltimo...).
+//   Simplificación de MVP: es determinista y justo, pero no es seeding profesional.
+// Casual (Arcade): el reglamento pide emparejar AL AZAR entre los presentes, sin
+//   mirar el ranking — así que se baraja y se empareja consecutivo. El bye también
+//   sale al azar, no se lo lleva siempre el de más ELO.
+export function buildPairs(players: SeedPlayer[], mode: Mode = 'ranking') {
+  const ordered =
+    mode === 'casual'
+      ? shuffle(players)
+      : [...players].sort((a, b) => b.elo_rating - a.elo_rating);
+
+  let bye: SeedPlayer | null = null;
+  if (ordered.length % 2 === 1) {
+    bye = ordered.shift() ?? null;
+  }
+
   const pairs: [SeedPlayer, SeedPlayer][] = [];
-  const half = sorted.length / 2;
-  for (let i = 0; i < half; i++) {
-    pairs.push([sorted[i], sorted[sorted.length - 1 - i]]);
+  if (mode === 'casual') {
+    // Ya barajado: emparejar consecutivos es aleatorio.
+    for (let i = 0; i < ordered.length; i += 2) {
+      pairs.push([ordered[i], ordered[i + 1]]);
+    }
+  } else {
+    const half = ordered.length / 2;
+    for (let i = 0; i < half; i++) {
+      pairs.push([ordered[i], ordered[ordered.length - 1 - i]]);
+    }
   }
   return { pairs, bye };
+}
+
+// La modalidad del torneo baja a cada combate: decide qué finishes valen (Aerial
+// solo en casual) y si el combate mueve el ELO (casual no).
+async function tournamentMode(tournamentId: string): Promise<Mode> {
+  const { data, error } = await supabase
+    .from('tournaments')
+    .select('mode')
+    .eq('id', tournamentId)
+    .single();
+  if (error) throw error;
+  return (data as any)?.mode === 'casual' ? 'casual' : 'ranking';
 }
 
 export async function generateRound1Bracket(tournamentId: string, leagueId: string) {
@@ -36,7 +73,8 @@ export async function generateRound1Bracket(tournamentId: string, leagueId: stri
     throw new Error('Se necesitan al menos 2 jugadores con check-in para generar el bracket.');
   }
 
-  const { pairs, bye } = buildPairs(players);
+  const mode = await tournamentMode(tournamentId);
+  const { pairs, bye } = buildPairs(players, mode);
 
   const rows = pairs.map(([a, b]) => ({
     tournament_id: tournamentId,
@@ -44,6 +82,7 @@ export async function generateRound1Bracket(tournamentId: string, leagueId: stri
     player_a_id: a.id,
     player_b_id: b.id,
     bracket_round: 1,
+    mode,
   }));
 
   const { error: insertError } = await supabase.from('matches').insert(rows);
@@ -96,7 +135,8 @@ export async function generateNextRound(tournamentId: string, leagueId: string, 
     .in('id', advancingIds);
   if (playersError) throw playersError;
 
-  const { pairs, bye } = buildPairs((playerRows ?? []) as SeedPlayer[]);
+  const mode = await tournamentMode(tournamentId);
+  const { pairs, bye } = buildPairs((playerRows ?? []) as SeedPlayer[], mode);
   const nextRound = currentRound + 1;
 
   const rows = pairs.map(([a, b]) => ({
@@ -105,6 +145,7 @@ export async function generateNextRound(tournamentId: string, leagueId: string, 
     player_a_id: a.id,
     player_b_id: b.id,
     bracket_round: nextRound,
+    mode,
   }));
 
   const { error: insertError } = await supabase.from('matches').insert(rows);

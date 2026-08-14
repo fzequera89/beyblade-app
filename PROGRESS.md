@@ -108,7 +108,8 @@ Lo que quedó:
 
 ## Pendientes conocidos
 
-- **✅ Las 21 migraciones ya corrieron en Supabase** (la 0021, fotos de locación, el 2026-08-14 — verificado desde fuera: la columna `photo_url` responde y el bucket `venues` existe). Verificado desde fuera: `report_match_result` y `award_badges` responden, las columnas nuevas de `events` y `clubs` existen, y todas las tablas rechazan lectura anónima. El esquema está completo y al día con el repo.
+- **✅ Las migraciones 0001–0026 ya corrieron en Supabase** (verificado desde fuera con la anon key el 2026-08-14: `tournaments.mode` responde y filtra por `casual` → 0026; `judge_assignments` y `arbitrable_match_ids` existen → 0024/0025; `penalty_codes`/`penalties` → 0022; las funciones internas —incluida `apply_match_confirmation` tras el `create or replace` de 0026— devuelven 42501 → 0023 sigue firme; `photo_url`/bucket `venues` → 0021; y todas las tablas rechazan lectura anónima). El esquema hasta 0026 está al día con el repo.
+- **⬜ 0027 (retos = casual) — CONSTRUIDA, SIN CORRER.** `accept_challenge` fija `mode='casual'` para que los retos "Find a Battle" no muevan el ELO. Pegar en el SQL Editor. Ver sección "0027" abajo.
 - **Build de EAS pendiente de generar** desde la sub-etapa 1.1 (fix de placeholders) — el usuario pidió explícitamente esperar y acumular cambios de varias fases antes de generar el próximo build real, para no gastar builds en cada cambio chico.
 - Configurar el cliente OAuth de Google en Supabase (para que el botón "Continuar con Google" funcione en producción).
 - Cambiar `is_admin` del correo de prueba de Farid al correo real del cliente cuando se decida.
@@ -137,19 +138,19 @@ Medido el 2026-08-14 cruzando `Reglamento DML Beyblade actualizado pro.docx` con
 **Tres hallazgos verificados en el código, importantes:**
 1. `RANKS` existe en `src/theme.ts` pero **no lo usa ninguna pantalla** — es decoración, no un escalafón.
 2. **La disputa es un callejón sin salida:** un jugador la marca (`MatchDetailScreen`), el panel de admin la cuenta, pero **no hay RPC ni pantalla para resolverla**. Entra y se queda ahí. Es lo único de esta lista que ya está roto en producción.
-3. `matches.mode` y `matches.points_to_win` existen desde 0020, pero **nadie los escribe**: `src/lib/bracket.ts` y `accept_challenge` crean todo como `ranking`/4. En la práctica el Aerial nunca se puede usar y no hay torneos a 5/7/10.
+3. ~~`matches.mode` y `matches.points_to_win` existen desde 0020, pero nadie los escribe~~ — **`mode` resuelto en 0026**: el torneo tiene modalidad y baja a cada combate del bracket, así que el Aerial ya es alcanzable en casual. Sigue pendiente `points_to_win` (torneos a 5/7/10, nadie lo escribe). Los retos ya se resolvieron: `accept_challenge` los crea como `casual` desde 0027 (no mueven ELO).
 
 **Decisiones del cliente ya cerradas:**
 - **Challenger y Contender son lo mismo** (2026-08-14): confundió los nombres. Una sola categoría élite.
 - El ELO se queda, pero como ranking **completamente aparte** de la escalera de categorías.
-- Arbitraje **por excepción**: si ambos jugadores marcan el mismo resultado no hace falta juez; solo entra si difieren o alguien disputa, y le llega alerta.
+- ~~Arbitraje **por excepción**~~ — **revertido el 2026-08-14**, ver 0025: ahora **todo** resultado lo aprueba un juez, coincidan los jugadores o no.
 - Sin GPS. Rondas suizas y modalidad por equipos (~15x) son pedido aparte, no están en el reglamento.
 
 Orden recomendado: **arbitraje + penalizaciones (24x)** primero, porque la disputa ya está rota; después categorías + ascenso + VP (45x), que es lo que le da sentido competitivo a la liga.
 
-### 🔴 Arbitraje y penalizaciones — construido, PENDIENTE DE CORRER (2026-08-14)
+### ✅ Arbitraje y penalizaciones — construido y CORRIDO (2026-08-14)
 
-**Lo primero al retomar: correr `supabase/migrations/0022_arbitration_and_penalties.sql` en el SQL Editor de Supabase.** El código de la app ya está en `main` y espera esas funciones. Mientras no corra, el panel del juez simplemente no aparece (`can_arbitrate` no existe) y el resto de la app sigue funcionando igual — no rompe nada, pero la función nueva no se puede usar.
+La 0022 ya corrió en Supabase. Verificado desde fuera con la anon key: `can_arbitrate` responde `false`, las tablas `penalty_codes` y `penalties` existen, las columnas `judge_role`/`suspended_until`/`penalty_points_a`/`arbitrated_by` están, y `resolve_dispute`, `register_penalty`, `set_judge_role` y `suspend_player` llegan a su lógica de negocio y rechazan a quien no debe.
 
 Lo que trae 0022: rol de juez (`players.judge_role`), `can_arbitrate`, `resolve_dispute`, catálogo `penalty_codes` con las 12 infracciones del reglamento, `register_penalty` con su efecto en el marcador, `suspend_player`, `set_judge_role`, y `apply_match_confirmation` (el cierre del match — ELO, snapshots, rivalidad, logros — extraído a un solo lugar en vez de copiado en dos funciones).
 
@@ -159,13 +160,185 @@ En la app quedó: panel del juez dentro del match (resolver o sancionar), bandej
 
 **Sin probar con datos reales.** Verificado: typecheck limpio, 0 rutas de navegación muertas, la bandeja monta en el preview.
 
-**Lo que sigue de este bloque:** el reglamento pide que los DOS jugadores marquen el resultado y que el juez entre solo si difieren (hoy uno reporta y el otro acepta o disputa), y las notificaciones para avisarle al juez. Faltan también las reglas de ronda: lanzamiento nulo, empate y self-over (8x).
+### 🔒 0023 — las funciones internas estaban abiertas a cualquiera (2026-08-14)
+
+Al verificar la 0022 se encontró que **`grant_badge`, `award_badges` y
+`apply_match_confirmation` eran ejecutables por un anónimo con solo la anon
+key** — las dos primeras devolvían 204 (ejecutaban de verdad), la tercera
+entraba a su cuerpo. Contradecía de frente la decisión 6.
+
+`apply_match_confirmation` era el peor caso: no valida permisos a propósito
+(está pensada para que la llamen otras funciones), **y tampoco revisa que el
+match no esté ya confirmado**. Un jugador con sesión podía cerrar un match
+saltándose la regla de "quien reporta no puede confirmar", y llamarla en bucle
+sobre el mismo match para inflar ELO y `matches_played`.
+
+**Causa:** la 0022 hacía `revoke ... from public`, pero Supabase le da EXECUTE
+**directo** a `anon` y `authenticated` con su propio `alter default privileges`.
+Revocarle a `PUBLIC` no les quita ese grant. La `award_badges` además tenía un
+`grant execute ... to authenticated` explícito de sobra, escrito en la 0015.
+
+La 0023 revoca a los tres roles por nombre y además cambia el default para el
+rol `postgres`, para que la próxima función no vuelva a nacer abierta. Corrida y
+verificada: las tres devuelven ahora **42501 permission denied**, y las nueve
+funciones que la app sí usa siguen respondiendo igual.
+
+**Regla para lo que venga:** toda función nueva necesita su `grant execute ...
+to authenticated` explícito, o la app no la va a poder llamar.
+
+**Lo que sigue de este bloque:** faltan las reglas de ronda — lanzamiento nulo, empate y self-over (8x) — y las notificaciones push. La doble marca ya está hecha, ver abajo.
+
+### ✅ 0024 — doble marca a ciegas y bandeja del juez filtrada (2026-08-14)
+
+**El problema del flujo viejo no era que faltara un paso, era que el paso que
+había no verificaba nada.** A reportaba round a round y a B se le mostraba
+"ganó A por 4–2" con un botón grande de CONFIRMAR. Eso es ratificar, no
+verificar: B veía la respuesta antes de opinar, y el camino de menor esfuerzo
+era aceptar. Un error de A —o una mentira— pasaba derecho.
+
+**Cómo quedó.** B marca **a ciegas**: registra quién ganó y el marcador sin ver
+lo de A. Si coinciden, el combate se cierra solo y no se molesta a ningún juez.
+Si no coinciden, recién ahí se le revela la versión de A, lado a lado con la
+suya, y B elige: aceptarla o disputar dejando escrito el motivo.
+
+**Dos decisiones de diseño que importan:**
+
+1. **B marca el RESULTADO, no los rounds.** Pedirle reingresar los 5 rounds
+   duplicaría el trabajo en el 95% de los casos en que están de acuerdo. El
+   cliente cerró la decisión como "si ambos marcan el mismo resultado no hace
+   falta juez" — resultado, no rounds. Ganador + marcador es lo que un jugador
+   sí recuerda al terminar.
+2. **Una diferencia NO abre disputa automática.** El marcador sale de sumar
+   puntos por tipo de finish; es fácil recordar bien quién ganó y errarle al
+   total. Mandar eso a un juez sería fabricar disputas de aritmética.
+
+**Que la marca sea de verdad a ciegas costó más que la lógica:** el marcador de
+arriba, el anillo del avatar del ganador y la lista de rounds guardados ya le
+enseñaban a B toda la versión de A. Los tres se ocultan mientras le toque
+marcar (`mustMarkBlind` en `MatchDetailScreen`). **Si se agrega algo nuevo a esa
+pantalla, hay que preguntarse si delata el resultado.**
+
+**El aviso al juez estaba inflado.** `BattlesScreen` contaba
+`matches where status='disputed'` **sin ningún filtro**: cada juez veía las
+disputas de toda la plataforma, incluidas las de combates que él mismo estaba
+jugando, donde `can_arbitrate` le devuelve `false` y no puede hacer nada. Ahora
+el conteo y la bandeja salen de `arbitrable_match_ids()`, que filtra en el
+servidor con la misma función que después acepta o rechaza el fallo. **Había que
+arreglarlo antes de conectar notificaciones**, no después: ese conteo es el que
+las va a disparar.
+
+**El juez ya no llega a ciegas:** la pantalla del combate disputado le muestra
+qué marcó cada uno, lado a lado, y el motivo que escribió quien disputó
+(`disputed_by`, `dispute_reason`).
+
+**De paso se cerraron dos escrituras directas** que ya no hacían falta:
+`matches_update_report_by_participant` (0007) dejaba a un participante escribir
+`score_a=9, winner_id=él mismo` con un UPDATE crudo y saltarse
+`report_match_result` entera — sin rounds, sin validar `points_to_win` y sin la
+regla de que el Aerial no vale en ranking. Y `matches_update_dispute` quedó
+reemplazada por `dispute_match()`, que además registra quién, cuándo y por qué.
+
+**Sin probar con datos reales.** Verificado: typecheck limpio con el código de
+salida real, y el bundle compila.
+
+### ✅ 0025 — todo resultado lo aprueba un juez, y jueces por liga/torneo (2026-08-14)
+
+**Cambio de regla del cliente que revierte una decisión anterior.** Estaba
+cerrado como "arbitraje por excepción" (si los dos coinciden, no hace falta
+juez). Ahora: **ningún resultado queda firme sin que un juez lo apruebe**,
+coincidan o no.
+
+**La doble marca de 0024 no se tiró: cambió de papel.** Dejó de ser el mecanismo
+que cerraba el combate y pasó a ser la EVIDENCIA con la que el juez decide. Si
+los dos marcaron igual, el panel se lo dice y aprobar es un toque.
+
+**El costo, que conviene tener presente:** en una noche con 30 combates hay 30
+aprobaciones en cola, y el ELO de todos se queda quieto hasta que alguien las
+atienda. Por eso `approve_match_result` es deliberadamente barata — no pide
+motivo ni reescribir el marcador. Para CAMBIAR un resultado sigue estando
+`resolve_dispute`, que sí exige dejar escrito el porqué. **Si en la práctica la
+cola se atasca, el lugar a mirar es este, no el reglamento.**
+
+**Jueces asignables (`judge_assignments`).** Antes ser juez era global
+(`players.judge_role`) o salía de ser moderador de la liga. Ahora se nombra
+gente PARA una liga o PARA un torneo, que es como funciona un cuerpo arbitral
+real: se convoca para el evento. `can_arbitrate` reconoce los cuatro caminos —
+admin, juez global, juez asignado (liga o torneo), moderador de la liga — y
+sigue rechazando que alguien arbitre su propio combate, nombramiento o no. De
+paso ahora también rechaza a un jugador suspendido.
+
+Pantalla nueva `JudgesScreen`, reutilizable: recibe `leagueId` o `tournamentId`.
+Se llega desde el detalle de liga y desde el detalle de torneo. **Ojo con la
+navegación:** `TournamentDetail` está registrada en DOS pilas (Inicio y
+Batallas), así que `Judges` tuvo que registrarse en las dos — es exactamente la
+trampa de los 10 enlaces muertos documentada arriba.
+
+**Los jugadores ya no confirman.** `confirm_match_result` se dejó viva pero
+lanzando una excepción con un mensaje entendible, en vez de revocarle el
+permiso: si queda un APK viejo instalado, su botón da un mensaje que se lee en
+lugar de un "permission denied". Lo reemplazan `accept_reported_result` (B se da
+por convencido tras ver la diferencia, sin cerrar nada) y `approve_match_result`
+(el juez cierra).
+
+**La bandeja dejó de ser solo de disputas.** Ahora cae ahí todo lo reportado,
+etiquetado de un vistazo: EN DISPUTA / NO COINCIDEN / COINCIDEN / FALTA LA 2ª
+MARCA, con lo trabado primero. El tratamiento de héroe solo se aplica si lo
+primero de verdad está trabado — destacar algo que solo hay que aprobar le
+inventaría urgencia.
+
+**Sin probar con datos reales.** Verificado: typecheck limpio con el código de
+salida real, el bundle compila y la app monta sin errores de consola.
+
+### ✅ 0026 — modalidad Casual / Ranking en el torneo (CORRIDA 2026-08-14)
+
+El reglamento (sección "Modalidades de juego y competición") define dos
+modalidades que no son un matiz, son reglas distintas: **Casual (Arcade)** —al
+azar entre los presentes, Aerial vale, "sin presión de ranking"— y **Ranking
+(Estructura de Temporada)** —bracket por ELO, sin Aerial, alimenta el ranking.
+
+Lo que ya existía y NO había que tocar: la marca `matches.mode` (desde 0020), la
+validación del Aerial por modo en `report_match_result`, y el cliente ofreciendo
+el finish Aerial solo en casual (`finishesFor`). **El único hueco era que nadie
+escribía `mode='casual'`, y que el cierre del combate no lo miraba.**
+
+Lo que quedó:
+
+- **`tournaments.mode`** (`ranking`/`casual`, default `ranking`). Se elige al
+  crear el torneo (`TournamentsScreen`) y baja a cada combate que genera el
+  bracket (`src/lib/bracket.ts`). Columna nueva propia en vez de reusar `format`
+  (texto libre sin usar), para que el valor esté acotado igual que en `matches`.
+- **`apply_match_confirmation` consciente del modo.** En casual el delta de ELO
+  es 0 y no se inserta punto en `ranking_snapshots` (la curva). Todo lo demás se
+  registra igual que ranking.
+- **Bracket casual al azar.** `buildPairs` baraja (Fisher-Yates) en vez de sembrar
+  por ELO, y el bye también sale al azar. Ranking sigue exactamente igual.
+- **UI:** selector de modalidad en crear-torneo, y el detalle del torneo muestra
+  la modalidad con la nota "al azar · Aerial · no mueve el ELO".
+
+**Decisión de diseño (opción 1, confirmada por el cliente 2026-08-14):** un
+combate casual registra el resultado ENTERO —marcador, rounds, finishes,
+estadísticas por combo, rivalidad, logros y `matches_played`— y lo único que NO
+hace es mover el rating de ELO ni su curva. Farid lo cerró explícito: **"ELO no
+sube, matches_played sí sube".** Efecto lateral aceptado: como `matches_played`
+sube, quien juegue ≥10 casuales antes de su primer ranked entra con K=24 en vez
+de 40 (su primer ranked mueve un poco menos). Se decidió que está bien.
+
+**Sin probar con datos reales.** Verificado: typecheck limpio con el código de
+salida real, el bundle compila (757 módulos) y la app monta sin errores de consola.
+
+### ⬜ 0027 — los retos "Find a Battle" son casual (construida, SIN CORRER)
+
+Decisión del cliente (2026-08-14): un reto directo 1-a-1 no debe mover el ELO.
+`accept_challenge` ahora fija `mode='casual'` en el match que crea, así que el
+reto se registra entero (incluido `matches_played`) pero deja el rating quieto,
+y de paso admite Aerial. Es la misma función de 0013 con ese único cambio. No
+toca la UI: `MatchDetailScreen` ya lee `match.mode` y se adapta solo.
 
 ## Cómo retomar el proyecto (checklist para una sesión nueva)
 
 1. `git clone` / `git pull` del repo.
 2. Copiar `.env.example` a `.env` y llenar `EXPO_PUBLIC_SUPABASE_URL` y `EXPO_PUBLIC_SUPABASE_ANON_KEY` (Supabase → Settings → API del proyecto "CML Beyblade").
-3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-14 las 21 primeras ya están corridas; la 0022 (arbitraje) está escrita y PENDIENTE de correr** — si se agrega una nueva, actualizar esta línea.
+3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-14 las 0001–0026 están corridas; la 0027 (retos casual) está SIN CORRER** — si se agrega una nueva, actualizar esta línea.
 4. `npm install`, luego `npm run web` para verificar rápido en el preview del navegador (no requiere emulador Android).
 5. Para un build real: `npx eas-cli build --platform android --profile preview --non-interactive` (requiere `eas login` ya hecho en la máquina).
 

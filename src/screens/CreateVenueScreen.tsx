@@ -1,77 +1,104 @@
 import { useState } from 'react';
-import { Text, TextInput, Pressable, StyleSheet, Alert } from 'react-native';
+import { Text, View, Pressable, StyleSheet, Alert } from 'react-native';
 import { supabase } from '../lib/supabase';
-import Screen from '../components/Screen';
+import Screen from '../ui/Screen';
+import Button from '../ui/Button';
+import { Field } from '../ui/Field';
+import { Card, Hex } from '../ui/primitives';
+import { IconPin } from '../ui/icons';
+import { colors, space, type } from '../theme';
+
+// La ciudad se normaliza igual que en el perfil: el matchmaking la compara
+// letra por letra, así que "monterrey " y "Monterrey" serían lugares distintos.
+function normalizeCity(v: string) {
+  return v
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/(^|\s)\p{L}/gu, (c) => c.toUpperCase());
+}
 
 export default function CreateVenueScreen({ navigation }: any) {
-  const [name, setName] = useState('');
-  const [address, setAddress] = useState('');
-  const [city, setCity] = useState('');
+  const [form, setForm] = useState({ name: '', address: '', city: '' });
   const [loading, setLoading] = useState(false);
 
   async function create() {
-    if (!name.trim()) {
-      Alert.alert('Falta el nombre del venue');
+    if (!form.name.trim()) {
+      Alert.alert('Falta el nombre', 'Ponle el nombre del lugar.');
       return;
     }
     setLoading(true);
     const { data, error } = await supabase
       .from('venues')
       .insert({
-        name: name.trim(),
-        address: address.trim() || null,
-        city: city.trim() || null,
+        name: form.name.trim(),
+        address: form.address.trim() || null,
+        city: form.city.trim() ? normalizeCity(form.city) : null,
+        // El código del QR se genera aquí y es único: es lo que se escanea
+        // para hacer check-in.
         qr_code: `venue-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       })
       .select('id')
       .single();
     setLoading(false);
-    if (error) {
-      Alert.alert('Error', error.message);
-      return;
-    }
+    if (error) return Alert.alert('No se pudo crear', error.message);
     navigation.replace('VenueDetail', { venueId: data.id });
   }
 
   return (
-    <Screen style={styles.container}>
-      <Text style={styles.title}>Nuevo venue</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Nombre (tienda, club, plaza...)"
-        placeholderTextColor="#8a8a8a"
-        value={name}
-        onChangeText={setName}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Dirección (opcional)"
-        placeholderTextColor="#8a8a8a"
-        value={address}
-        onChangeText={setAddress}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Ciudad (opcional)"
-        placeholderTextColor="#8a8a8a"
-        value={city}
-        onChangeText={setCity}
-      />
-      <Pressable style={styles.button} onPress={create} disabled={loading}>
-        <Text style={styles.buttonText}>Crear venue</Text>
-      </Pressable>
-      <Pressable onPress={() => navigation.goBack()}>
-        <Text style={styles.link}>Cancelar</Text>
-      </Pressable>
+    <Screen scroll>
+      <View style={styles.head}>
+        <Pressable onPress={() => navigation.goBack()} hitSlop={8}>
+          <Text style={styles.back}>‹</Text>
+        </Pressable>
+        <Text style={styles.title}>Nuevo venue</Text>
+      </View>
+
+      <View style={styles.hero}>
+        <Hex size={72} color={colors.blue}>
+          <IconPin size={26} color={colors.blue} />
+        </Hex>
+        <Text style={styles.lead}>
+          Un venue es un lugar donde se batalla: una tienda, un club, una plaza. Al crearlo se genera
+          su código QR para los check-ins.
+        </Text>
+      </View>
+
+      <View style={styles.form}>
+        <Field
+          label="Nombre del lugar"
+          placeholder="Hobby Center Cumbres"
+          value={form.name}
+          onChangeText={(v) => setForm({ ...form, name: v })}
+        />
+        <Field
+          label="Dirección"
+          placeholder="Av. Paseo de los Leones 2500"
+          value={form.address}
+          onChangeText={(v) => setForm({ ...form, address: v })}
+        />
+        <Field
+          label="Ciudad"
+          placeholder="Monterrey"
+          value={form.city}
+          onChangeText={(v) => setForm({ ...form, city: v })}
+          hint="Con ella aparece para los bladers de esa ciudad."
+        />
+
+        <Button label="CREAR VENUE" onPress={create} loading={loading} />
+        <Pressable onPress={() => navigation.goBack()} hitSlop={8} style={{ alignSelf: 'center' }}>
+          <Text style={styles.cancel}>Cancelar</Text>
+        </Pressable>
+      </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', padding: 24, gap: 12, backgroundColor: '#fff' },
-  title: { fontSize: 22, fontWeight: '700', textAlign: 'center', marginBottom: 16 },
-  input: { color: '#1a1a20', borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12 },
-  button: { backgroundColor: '#2f5ad6', borderRadius: 8, padding: 14, alignItems: 'center' },
-  buttonText: { color: '#fff', fontWeight: '600' },
-  link: { textAlign: 'center', color: '#6b6b64', marginTop: 8 },
+  head: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingTop: space.md },
+  back: { color: colors.ink, fontSize: 30, lineHeight: 32, width: 22 },
+  title: { ...type.title, fontSize: 20 },
+  hero: { alignItems: 'center', gap: space.md, paddingVertical: space.xl },
+  lead: { ...type.soft, fontSize: 13, textAlign: 'center', lineHeight: 19 },
+  form: { gap: space.lg },
+  cancel: { color: colors.inkSoft, fontSize: 13 },
 });

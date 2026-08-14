@@ -1,6 +1,6 @@
 # Beyblade League App — Estado del proyecto
 
-> Última actualización: 2026-08-13. Este archivo es la fuente de verdad para retomar el proyecto desde cualquier máquina/sesión — está versionado en git, a diferencia de las notas de memoria de Claude Code (que solo viven localmente en la PC donde se desarrolló).
+> Última actualización: 2026-08-14. Este archivo es la fuente de verdad para retomar el proyecto desde cualquier máquina/sesión — está versionado en git, a diferencia de las notas de memoria de Claude Code (que solo viven localmente en la PC donde se desarrolló).
 
 **Este documento cubre el ESTADO del proyecto.** Para lo demás:
 > - [`README.md`](README.md) — qué es, cómo correrlo, arquitectura y modelo de seguridad
@@ -28,7 +28,32 @@ App de gestión de liga de Beyblade: torneos, brackets, ELO real, descubrimiento
 | Fase 5 — Multi-liga y League Passport | 9% | ✅ Completa |
 | QA, pulido y publicación en tiendas | 11% | ⬜ Pendiente |
 
-**Todas las fases de producto están construidas.** Lo único que falta es la última línea: QA con datos reales, pulido y publicación en tiendas — ver "Qué falta para el 100%" al final.
+**Todas las fases de producto están construidas.** Lo único que falta del roadmap ORIGINAL es la última línea: QA con datos reales, pulido y publicación en tiendas — ver "Qué falta para el 100%" al final.
+
+⚠️ **El roadmap original no es todo el trabajo.** Después de escribirlo aparecieron dos frentes grandes que no estaban contemplados: el **rediseño de identidad** (terminado, ver abajo) y la **brecha contra el reglamento real de la liga** (~110x, sin empezar, ver "Brecha contra el reglamento DML").
+
+## Rediseño de identidad — ✅ completo (2026-08-14)
+
+No fue un recolor. El estado original tenía 329 colores escritos a mano en 34 pantallas, 3 componentes compartidos y cero iconos.
+
+Lo que quedó:
+- `src/theme.ts` — paleta, espaciado, tipografía y `glow()`. Todo color sale de aquí.
+- `src/ui/` — Screen, Button, Field/PasswordField, Card, Pill, Hex, Chip, Stepper, Checkbox, OptionCard, Avatar, Logo, icons, EloChart, VenueCover. **Todo SVG propio, sin dependencia nativa nueva** (`react-native-svg` ya estaba por los QR).
+- Navegación de **5 pestañas** (Inicio/Batallas/Play/Rankings/Perfil), cada una con su pila independiente, y botón Play hexagonal elevado.
+- **Las 34 pantallas convertidas.** Cero pantallas con el estilo viejo — verificable buscando quién importa `components/Screen` (debe dar 0).
+- 12 avatares ilustrados en `assets/avatars/c1..c12.png`; el código guarda solo la llave.
+- Portada por locación (`VenueCover`): usa la foto real si existe, si no dibuja una arena derivada del id del lugar.
+
+**Principio de diseño del cliente:** en una lista de tarjetas apiladas, la primera lleva tratamiento de héroe — pero **solo si de verdad es la más relevante** (la liga que es tuya, el torneo que sigue abierto, la locación donde hay gente ahora). Destacar por posición y no por relevancia le inventa importancia a algo que no la tiene.
+
+**Trampas técnicas encontradas** (no repetirlas):
+- `react-native-svg`: usar `transform="rotate(...)"`, NO las props `rotation`/`origin` — truenan en web.
+- React Navigation necesita tema oscuro explícito o pinta `#f2f2f2` detrás y destella blanco en cada transición.
+- `glow()` es un box-shadow: pinta la CAJA rectangular. Detrás de un hexágono se ve un cuadro negro. El halo va dentro del SVG.
+- `StyleSheet.absoluteFillObject` no existe en los tipos de RN 0.86.
+- Verificar el typecheck con el código de salida real. `npx tsc --noEmit | head` **siempre** sale 0 aunque falle, y así se commiteó una vez código roto.
+
+**Enlaces de navegación:** cada pestaña es una pila aparte, así que un `navigate('X')` a una pantalla no registrada en ESA pila no hace nada — sin error visible. Se encontraron 10 así. Para revisarlo, cruzar cada `navigate()` de cada pantalla contra las pantallas registradas en cada pila de `TabNavigator.tsx`. Para saltar de pestaña: `navigate('Batallas', { screen: 'Leagues' })`.
 
 ## Qué existe hoy (funcional)
 
@@ -83,18 +108,50 @@ App de gestión de liga de Beyblade: torneos, brackets, ELO real, descubrimiento
 
 ## Pendientes conocidos
 
-- **✅ Las 18 migraciones ya corrieron en Supabase** (2026-08-13). Verificado desde fuera: `report_match_result` y `award_badges` responden, las columnas nuevas de `events` y `clubs` existen, y todas las tablas rechazan lectura anónima. El esquema está completo y al día con el repo.
+- **✅ Las 21 migraciones ya corrieron en Supabase** (la 0021, fotos de locación, el 2026-08-14 — verificado desde fuera: la columna `photo_url` responde y el bucket `venues` existe). Verificado desde fuera: `report_match_result` y `award_badges` responden, las columnas nuevas de `events` y `clubs` existen, y todas las tablas rechazan lectura anónima. El esquema está completo y al día con el repo.
 - **Build de EAS pendiente de generar** desde la sub-etapa 1.1 (fix de placeholders) — el usuario pidió explícitamente esperar y acumular cambios de varias fases antes de generar el próximo build real, para no gastar builds en cada cambio chico.
 - Configurar el cliente OAuth de Google en Supabase (para que el botón "Continuar con Google" funcione en producción).
 - Cambiar `is_admin` del correo de prueba de Farid al correo real del cliente cuando se decida.
 - Mapa visual (MapLibre) si el cliente lo pide de verdad — no está en el MVP actual.
 - Avatar de perfil (selector de imagen + Supabase Storage) — pospuesto.
 
+## Brecha contra el reglamento DML (~110x, sin empezar)
+
+Medido el 2026-08-14 cruzando `Reglamento DML Beyblade actualizado pro.docx` contra el código y el esquema.
+
+**Ya cumple:** puntuación por finish (Spin 1, Over 2, Burst 2, Xtreme 3, Aerial 3) calculada en el servidor, gana el primero a 4 puntos, Aerial prohibido en ranking, ELO como ranking aparte de las ligas, bracket de eliminación directa con byes, logros permanentes.
+
+**Falta:**
+
+| Bloque | x | Qué implica |
+|---|---|---|
+| Categorías | 25 | Los 8 estratos (Porcelana→Challenger), cupo 2-10, divisiones A/B, Porcelana al doble, nuevos entran en Porcelana |
+| Ascenso y VP | 20 | Round robin por categoría, reto de ascenso 1º↔último de la superior, VP 3/2/1 por nivel, 4 criterios de desempate |
+| Deck 3+1 | 15 | Modelar Blade/Ratchet/Bit por separado, deck card registrada y bloqueada durante el torneo, validar "no repetir piezas" |
+| Arbitraje | 12 | Rol de juez (Principal / Apoyo), resolución de disputa, un Challenger/Diamante nunca arbitra su categoría |
+| Penalizaciones | 12 | Tabla leves/graves/críticas; 2 leves iguales = 1 punto al rival, graves = pierde el combate, críticas = expulsión |
+| Temporadas | 10 | Reseteo a los 3 meses, torneo inicial G3, asistencia (sin ella no hay eliminación por inasistencia ni reingreso) |
+| Reglas de ronda | 8 | Lanzamiento nulo (advertencia → 1 punto al rival), empate = repetir ronda, self-over sin contacto |
+| Sueltos | 8 | Elegir modalidad casual, torneos a 5/7/10, temática por votación, premios, checklist de desgaste |
+
+**Tres hallazgos verificados en el código, importantes:**
+1. `RANKS` existe en `src/theme.ts` pero **no lo usa ninguna pantalla** — es decoración, no un escalafón.
+2. **La disputa es un callejón sin salida:** un jugador la marca (`MatchDetailScreen`), el panel de admin la cuenta, pero **no hay RPC ni pantalla para resolverla**. Entra y se queda ahí. Es lo único de esta lista que ya está roto en producción.
+3. `matches.mode` y `matches.points_to_win` existen desde 0020, pero **nadie los escribe**: `src/lib/bracket.ts` y `accept_challenge` crean todo como `ranking`/4. En la práctica el Aerial nunca se puede usar y no hay torneos a 5/7/10.
+
+**Decisiones del cliente ya cerradas:**
+- **Challenger y Contender son lo mismo** (2026-08-14): confundió los nombres. Una sola categoría élite.
+- El ELO se queda, pero como ranking **completamente aparte** de la escalera de categorías.
+- Arbitraje **por excepción**: si ambos jugadores marcan el mismo resultado no hace falta juez; solo entra si difieren o alguien disputa, y le llega alerta.
+- Sin GPS. Rondas suizas y modalidad por equipos (~15x) son pedido aparte, no están en el reglamento.
+
+Orden recomendado: **arbitraje + penalizaciones (24x)** primero, porque la disputa ya está rota; después categorías + ascenso + VP (45x), que es lo que le da sentido competitivo a la liga.
+
 ## Cómo retomar el proyecto (checklist para una sesión nueva)
 
 1. `git clone` / `git pull` del repo.
 2. Copiar `.env.example` a `.env` y llenar `EXPO_PUBLIC_SUPABASE_URL` y `EXPO_PUBLIC_SUPABASE_ANON_KEY` (Supabase → Settings → API del proyecto "CML Beyblade").
-3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-13 las 18 ya están corridas** — si se agrega una nueva, actualizar esta línea.
+3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-14 las 21 ya están corridas** — si se agrega una nueva, actualizar esta línea.
 4. `npm install`, luego `npm run web` para verificar rápido en el preview del navegador (no requiere emulador Android).
 5. Para un build real: `npx eas-cli build --platform android --profile preview --non-interactive` (requiere `eas login` ya hecho en la máquina).
 

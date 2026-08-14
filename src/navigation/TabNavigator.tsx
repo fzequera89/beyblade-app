@@ -5,6 +5,7 @@ import { colors } from '../theme';
 
 import HomeScreen from '../screens/HomeScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import EditProfileScreen from '../screens/EditProfileScreen';
 import LeaguesScreen from '../screens/LeaguesScreen';
 import CreateLeagueScreen from '../screens/CreateLeagueScreen';
 import LeagueDetailScreen from '../screens/LeagueDetailScreen';
@@ -132,6 +133,7 @@ function Perfil() {
   return (
     <PerfilStack.Navigator screenOptions={stackOptions}>
       <PerfilStack.Screen name="Profile" component={ProfileScreen} />
+      <PerfilStack.Screen name="EditProfile" component={EditProfileScreen} />
       <PerfilStack.Screen name="Stats" component={StatsScreen} />
       <PerfilStack.Screen name="Combos" component={CombosScreen} />
       <PerfilStack.Screen name="Rivalries" component={RivalriesScreen} />

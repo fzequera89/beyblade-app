@@ -1,11 +1,14 @@
-import { useEffect, useState } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, Alert, ScrollView } from 'react-native';
+import { useCallback, useState } from 'react';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import Screen from '../components/Screen';
+import Screen from '../ui/Screen';
+import Avatar from '../ui/Avatar';
+import { Card, Pill, SectionTitle, Hex } from '../ui/primitives';
+import { IconChevron, IconFlame } from '../ui/icons';
 import { badgeIcon } from '../lib/badges';
-
-type EarnedBadge = { code: string; name: string };
+import { colors, space, type, radius } from '../theme';
 
 type Player = {
   id: string;
@@ -16,266 +19,292 @@ type Player = {
   play_style: string | null;
   elo_rating: number;
   matches_played: number;
+  avatar_key: string | null;
+  avatar_url: string | null;
+  experience_level: string | null;
 };
 
-type HistoryMatch = {
-  id: string;
-  score_a: number;
-  score_b: number;
-  player_a_id: string;
-  winner_id: string | null;
-  elo_a_change: number | null;
-  elo_b_change: number | null;
-  confirmed_at: string | null;
-  player_a: { display_name: string } | null;
-  player_b: { display_name: string } | null;
+const EXPERIENCE_LABEL: Record<string, string> = {
+  rookie: 'Rookie Blader',
+  blader: 'Blader',
+  pro: 'Pro Blader',
+  elite: 'Elite Blader',
 };
+
+// El perfil ya no es un menú de secciones: eso ahora lo resuelven las pestañas.
+// Aquí solo vive lo que ES el jugador — su identidad, sus números y su vitrina —
+// más los accesos a las vistas personales que no merecen pestaña propia.
+const LINKS = [
+  { key: 'Stats', label: 'Mis estadísticas', desc: 'Win rate, rachas y finishes', glyph: '📊' },
+  { key: 'Combos', label: 'Mis combos', desc: 'Tus beyblades y su rendimiento', glyph: '🌀' },
+  { key: 'Rivalries', label: 'Rivalidades', desc: 'Tu récord contra cada rival', glyph: '⚔️' },
+  { key: 'Passport', label: 'League Passport', desc: 'Toda tu trayectoria', glyph: '🛂' },
+  { key: 'Leagues', label: 'Mis ligas', desc: 'Ligas y tu posición', glyph: '🏅' },
+  { key: 'Clubs', label: 'Clubes', desc: 'Tu equipo', glyph: '🛡️' },
+];
 
 export default function ProfileScreen({ navigation }: any) {
-  const { session, isAdmin } = useAuth();
+  const { session, playerId, isAdmin } = useAuth();
   const [player, setPlayer] = useState<Player | null>(null);
-  const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState({ display_name: '', city: '', main_beyblade: '', play_style: '' });
-  const [history, setHistory] = useState<HistoryMatch[]>([]);
-  const [earnedBadges, setEarnedBadges] = useState<EarnedBadge[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [badges, setBadges] = useState<{ code: string; name: string }[]>([]);
+  const [wins, setWins] = useState(0);
+  const [streak, setStreak] = useState(0);
+  const [rank, setRank] = useState<number | null>(null);
 
-  useEffect(() => {
-    load();
-  }, []);
-
-  async function load() {
-    setLoading(true);
-    const { data, error } = await supabase
+  const load = useCallback(async () => {
+    const { data: me } = await supabase
       .from('players')
-      .select('id, display_name, city, country, main_beyblade, play_style, elo_rating, matches_played')
-      .eq('auth_user_id', session!.user.id)
-      .single();
-    setLoading(false);
-    if (error) {
-      Alert.alert('Error', error.message);
-      return;
-    }
-    setPlayer(data);
-    setForm({
-      display_name: data.display_name ?? '',
-      city: data.city ?? '',
-      main_beyblade: data.main_beyblade ?? '',
-      play_style: data.play_style ?? '',
-    });
-
-    const { data: matches } = await supabase
-      .from('matches')
       .select(
-        'id, score_a, score_b, player_a_id, winner_id, elo_a_change, elo_b_change, confirmed_at, player_a:players!matches_player_a_id_fkey(display_name), player_b:players!matches_player_b_id_fkey(display_name)'
+        'id, display_name, city, country, main_beyblade, play_style, elo_rating, matches_played, avatar_key, avatar_url, experience_level'
       )
-      .or(`player_a_id.eq.${data.id},player_b_id.eq.${data.id}`)
-      .eq('status', 'confirmed')
-      .order('confirmed_at', { ascending: false })
-      .limit(20);
-    setHistory((matches as any) ?? []);
+      .eq('id', playerId)
+      .single();
+    if (!me) return;
+    setPlayer(me as any);
 
-    const { data: earned } = await supabase
-      .from('player_badges')
-      .select('badges(code, name)')
-      .eq('player_id', data.id)
-      .order('earned_at', { ascending: false });
-    setEarnedBadges(((earned as any[]) ?? []).map((row) => row.badges).filter(Boolean));
-  }
+    const [{ count: winCount }, { count: above }, { data: earned }, { data: recent }] = await Promise.all([
+      supabase.from('matches').select('*', { count: 'exact', head: true }).eq('status', 'confirmed').eq('winner_id', playerId),
+      supabase.from('players').select('*', { count: 'exact', head: true }).gt('elo_rating', (me as any).elo_rating),
+      supabase.from('player_badges').select('badges(code, name)').eq('player_id', playerId),
+      supabase
+        .from('matches')
+        .select('winner_id, confirmed_at')
+        .or(`player_a_id.eq.${playerId},player_b_id.eq.${playerId}`)
+        .eq('status', 'confirmed')
+        .order('confirmed_at', { ascending: false })
+        .limit(30),
+    ]);
 
-  async function save() {
-    if (!player) return;
-    const { error } = await supabase
-      .from('players')
-      .update({
-        display_name: form.display_name.trim(),
-        city: form.city.trim() || null,
-        main_beyblade: form.main_beyblade.trim() || null,
-        play_style: form.play_style.trim() || null,
-      })
-      .eq('id', player.id);
-    if (error) {
-      Alert.alert('Error', error.message);
-      return;
+    setWins(winCount ?? 0);
+    setRank((above ?? 0) + 1);
+    setBadges(((earned as any[]) ?? []).map((r) => r.badges).filter(Boolean));
+
+    let s = 0;
+    for (const m of ((recent as any[]) ?? [])) {
+      if (m.winner_id === playerId) s += 1;
+      else break;
     }
-    setEditing(false);
-    load();
-  }
+    setStreak(s);
+  }, [playerId]);
 
-  if (loading || !player) {
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load])
+  );
+
+  if (!player) {
     return (
-      <Screen style={styles.container}>
-        <Text>Cargando…</Text>
+      <Screen>
+        <View style={styles.loading}>
+          <Text style={type.soft}>Cargando…</Text>
+        </View>
       </Screen>
     );
   }
 
+  const losses = player.matches_played - wins;
+  const winRate = player.matches_played > 0 ? Math.round((wins / player.matches_played) * 100) : 0;
+
   return (
-    <Screen>
-    <ScrollView contentContainerStyle={styles.container}>
-      <View style={styles.avatar} />
-      {editing ? (
-        <>
-          <TextInput
-            style={styles.input}
-            value={form.display_name}
-            onChangeText={(v) => setForm({ ...form, display_name: v })}
-            placeholder="Nombre"
-            placeholderTextColor="#8a8a8a"
-          />
-          <TextInput
-            style={styles.input}
-            value={form.city}
-            onChangeText={(v) => setForm({ ...form, city: v })}
-            placeholder="Ciudad"
-            placeholderTextColor="#8a8a8a"
-          />
-          <TextInput
-            style={styles.input}
-            value={form.main_beyblade}
-            onChangeText={(v) => setForm({ ...form, main_beyblade: v })}
-            placeholder="Main Beyblade"
-            placeholderTextColor="#8a8a8a"
-          />
-          <TextInput
-            style={styles.input}
-            value={form.play_style}
-            onChangeText={(v) => setForm({ ...form, play_style: v })}
-            placeholder="Estilo de juego"
-            placeholderTextColor="#8a8a8a"
-          />
-          <Pressable style={styles.button} onPress={save}>
-            <Text style={styles.buttonText}>Guardar</Text>
-          </Pressable>
-        </>
-      ) : (
-        <>
-          <Text style={styles.name}>{player.display_name}</Text>
-          <Text style={styles.sub}>
-            {[player.city, player.country].filter(Boolean).join(', ') || 'Ubicación no definida'}
-          </Text>
-          <View style={styles.statsRow}>
-            <View style={styles.stat}>
-              <Text style={styles.statValue}>{player.elo_rating}</Text>
-              <Text style={styles.statLabel}>ELO</Text>
-            </View>
-            <View style={styles.stat}>
-              <Text style={styles.statValue}>{player.matches_played}</Text>
-              <Text style={styles.statLabel}>Matches</Text>
-            </View>
-          </View>
-          {player.main_beyblade ? <Text style={styles.field}>Main: {player.main_beyblade}</Text> : null}
-          {player.play_style ? <Text style={styles.field}>Estilo: {player.play_style}</Text> : null}
+    <Screen scroll padded={false}>
+      {/* Identidad */}
+      <View style={styles.hero}>
+        <Hex size={112} color={colors.blue}>
+          <Avatar uri={player.avatar_url} avatarKey={player.avatar_key} size={78} />
+        </Hex>
 
-          {earnedBadges.length > 0 && (
-            <Pressable style={styles.badgeStrip} onPress={() => navigation.navigate('Badges')}>
-              {earnedBadges.slice(0, 8).map((b) => (
-                <Text key={b.code} style={styles.badgeIcon}>
-                  {badgeIcon(b.code)}
-                </Text>
+        <Text style={styles.name}>{player.display_name}</Text>
+        <Pill label={EXPERIENCE_LABEL[player.experience_level ?? ''] ?? 'Blader'} />
+        <Text style={styles.city}>
+          {[player.city, player.country].filter(Boolean).join(', ') || 'Sin ubicación'}
+        </Text>
+
+        <Pressable style={styles.edit} onPress={() => navigation.navigate('EditProfile')}>
+          <Text style={styles.editText}>EDITAR PERFIL</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.pad}>
+        {/* Números */}
+        <Card style={styles.stats}>
+          <Stat label="ELO" value={Math.round(player.elo_rating).toLocaleString()} tint={colors.blue} />
+          <View style={styles.div} />
+          <Stat label="Récord" value={`${wins}–${losses}`} sub={`${winRate}%`} />
+          <View style={styles.div} />
+          <Stat
+            label="Racha"
+            value={String(streak)}
+            tint={streak > 0 ? colors.streak : undefined}
+            icon={streak > 0 ? <IconFlame size={14} /> : undefined}
+          />
+          <View style={styles.div} />
+          <Stat label="Rank" value={rank ? `#${rank}` : '—'} sub="Global" />
+        </Card>
+
+        {/* Equipo */}
+        {(player.main_beyblade || player.play_style) && (
+          <Card style={styles.gear}>
+            {player.main_beyblade ? (
+              <GearRow label="Beyblade principal" value={player.main_beyblade} />
+            ) : null}
+            {player.play_style ? <GearRow label="Estilo" value={player.play_style} /> : null}
+          </Card>
+        )}
+
+        {/* Vitrina */}
+        <View style={styles.block}>
+          <SectionTitle
+            right={
+              <Pressable onPress={() => navigation.navigate('Badges')} hitSlop={6}>
+                <Text style={styles.link}>Ver todos</Text>
+              </Pressable>
+            }
+          >
+            Logros
+          </SectionTitle>
+          {badges.length === 0 ? (
+            <Card>
+              <Text style={type.soft}>
+                Sin logros todavía. Se desbloquean solos conforme compitas.
+              </Text>
+            </Card>
+          ) : (
+            <Card style={styles.badgeStrip}>
+              {badges.slice(0, 10).map((b) => (
+                <View key={b.code} style={styles.badge}>
+                  <Text style={styles.badgeGlyph}>{badgeIcon(b.code)}</Text>
+                </View>
               ))}
-              {earnedBadges.length > 8 && <Text style={styles.badgeMore}>+{earnedBadges.length - 8}</Text>}
-            </Pressable>
+              {badges.length > 10 && <Text style={styles.more}>+{badges.length - 10}</Text>}
+            </Card>
           )}
+        </View>
 
-          <Pressable style={styles.button} onPress={() => navigation.navigate('Stats')}>
-            <Text style={styles.buttonText}>Mis estadísticas</Text>
-          </Pressable>
-          <Pressable style={styles.button} onPress={() => navigation.navigate('Passport')}>
-            <Text style={styles.buttonText}>Mi League Passport</Text>
-          </Pressable>
-          <Pressable style={[styles.button, styles.secondaryButton]} onPress={() => navigation.navigate('Feed')}>
-            <Text style={styles.buttonText}>Actividad</Text>
-          </Pressable>
-          <Pressable style={[styles.button, styles.secondaryButton]} onPress={() => navigation.navigate('Events')}>
-            <Text style={styles.buttonText}>Eventos</Text>
-          </Pressable>
-          <Pressable style={[styles.button, styles.secondaryButton]} onPress={() => navigation.navigate('Clubs')}>
-            <Text style={styles.buttonText}>Clubes</Text>
-          </Pressable>
-          <Pressable style={[styles.button, styles.secondaryButton]} onPress={() => setEditing(true)}>
-            <Text style={styles.buttonText}>Editar perfil</Text>
-          </Pressable>
-          <Pressable style={[styles.button, styles.secondaryButton]} onPress={() => navigation.navigate('Leagues')}>
-            <Text style={styles.buttonText}>Mis ligas</Text>
-          </Pressable>
-          <Pressable style={[styles.button, styles.secondaryButton]} onPress={() => navigation.navigate('Venues')}>
-            <Text style={styles.buttonText}>Venues</Text>
-          </Pressable>
-          <Pressable style={[styles.button, styles.secondaryButton]} onPress={() => navigation.navigate('NearMe')}>
-            <Text style={styles.buttonText}>Bladers Near Me</Text>
-          </Pressable>
+        {/* Accesos */}
+        <View style={styles.block}>
+          {LINKS.map((l) => (
+            <Card key={l.key} style={styles.row} onPress={() => navigation.navigate(l.key)}>
+              <Text style={styles.rowGlyph}>{l.glyph}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rowLabel}>{l.label}</Text>
+                <Text style={styles.rowDesc}>{l.desc}</Text>
+              </View>
+              <IconChevron />
+            </Card>
+          ))}
+
           {isAdmin && (
-            <Pressable style={[styles.button, styles.secondaryButton]} onPress={() => navigation.navigate('Admin')}>
-              <Text style={styles.buttonText}>Panel de administrador</Text>
-            </Pressable>
+            <Card style={[styles.row, styles.adminRow]} onPress={() => navigation.navigate('Admin')}>
+              <Text style={styles.rowGlyph}>🛠️</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.rowLabel, { color: colors.elite }]}>Panel de administrador</Text>
+                <Text style={styles.rowDesc}>Jugadores, ligas y ranking global</Text>
+              </View>
+              <IconChevron color={colors.elite} />
+            </Card>
           )}
+        </View>
 
-          {history.length > 0 && (
-            <View style={{ width: '100%', marginTop: 20 }}>
-              <Text style={styles.sectionTitle}>Historial</Text>
-              {history.map((m) => {
-                const isA = m.player_a_id === player.id;
-                const opponent = isA ? m.player_b?.display_name : m.player_a?.display_name;
-                const won = m.winner_id === player.id;
-                const myChange = isA ? m.elo_a_change : m.elo_b_change;
-                return (
-                  <View key={m.id} style={styles.historyRow}>
-                    <Text style={won ? styles.win : styles.loss}>{won ? 'W' : 'L'}</Text>
-                    <Text style={styles.historyOpponent}>vs {opponent ?? '—'}</Text>
-                    <Text style={styles.historyScore}>
-                      {m.score_a}-{m.score_b}
-                    </Text>
-                    <Text style={won ? styles.win : styles.loss}>
-                      {(myChange ?? 0) >= 0 ? '+' : ''}
-                      {myChange}
-                    </Text>
-                  </View>
-                );
-              })}
-            </View>
-          )}
-        </>
-      )}
-      <Pressable style={styles.signOut} onPress={() => supabase.auth.signOut()}>
-        <Text style={styles.signOutText}>Cerrar sesión</Text>
-      </Pressable>
-    </ScrollView>
+        <Text style={styles.account}>{session?.user.email}</Text>
+        <Pressable style={styles.signOut} onPress={() => supabase.auth.signOut()}>
+          <Text style={styles.signOutText}>Cerrar sesión</Text>
+        </Pressable>
+      </View>
     </Screen>
   );
 }
 
+function Stat({
+  label,
+  value,
+  sub,
+  tint,
+  icon,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  tint?: string;
+  icon?: React.ReactNode;
+}) {
+  return (
+    <View style={styles.stat}>
+      <Text style={styles.statLabel}>{label.toUpperCase()}</Text>
+      <View style={styles.statRow}>
+        {icon}
+        <Text style={[styles.statVal, tint ? { color: tint } : null]}>{value}</Text>
+      </View>
+      {sub ? <Text style={styles.statSub}>{sub}</Text> : null}
+    </View>
+  );
+}
+
+function GearRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.gearRow}>
+      <Text style={styles.gearLabel}>{label}</Text>
+      <Text style={styles.gearValue} numberOfLines={1}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, alignItems: 'center', padding: 24, gap: 10, backgroundColor: '#fff' },
-  avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#e8edfd', marginBottom: 8 },
-  name: { fontSize: 22, fontWeight: '700' },
-  sub: { color: '#6b6b64' },
-  statsRow: { flexDirection: 'row', gap: 24, marginVertical: 12 },
-  stat: { alignItems: 'center' },
-  statValue: { fontSize: 20, fontWeight: '700' },
-  statLabel: { fontSize: 12, color: '#6b6b64' },
-  field: { fontSize: 14, color: '#333' },
-  badgeStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
-  badgeIcon: { fontSize: 22 },
-  badgeMore: { fontSize: 12, color: '#6b6b64', fontWeight: '600' },
-  sectionTitle: { fontSize: 16, fontWeight: '700', marginBottom: 8 },
-  historyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+  loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  pad: { paddingHorizontal: space.xl },
+
+  hero: { alignItems: 'center', gap: space.sm, paddingTop: space.xl, paddingBottom: space.lg },
+  name: { ...type.display, fontSize: 26, marginTop: space.sm },
+  city: { fontSize: 13, color: colors.inkSoft },
+  edit: {
+    marginTop: space.md,
+    borderWidth: 1,
+    borderColor: colors.blue,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.lg,
     paddingVertical: 8,
-    width: '100%',
   },
-  historyOpponent: { flex: 1, fontSize: 13 },
-  historyScore: { fontSize: 12, color: '#6b6b64' },
-  win: { color: '#1f7a4d', fontWeight: '700' },
-  loss: { color: '#b00020', fontWeight: '700' },
-  input: { color: '#1a1a20', borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12, width: '100%' },
-  button: { backgroundColor: '#2f5ad6', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 12, width: '100%' },
-  secondaryButton: { backgroundColor: '#444' },
-  buttonText: { color: '#fff', fontWeight: '600' },
-  signOut: { marginTop: 24 },
-  signOutText: { color: '#b00020' },
+  editText: { color: colors.blue, fontSize: 11, fontWeight: '800', letterSpacing: 0.8 },
+
+  stats: { flexDirection: 'row', alignItems: 'center', paddingVertical: space.md },
+  stat: { flex: 1, alignItems: 'center', gap: 3 },
+  div: { width: 1, height: 32, backgroundColor: colors.line },
+  statLabel: { fontSize: 8.5, fontWeight: '800', letterSpacing: 0.7, color: colors.inkDim },
+  statRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  statVal: { fontSize: 17, fontWeight: '800', color: colors.ink },
+  statSub: { fontSize: 9.5, color: colors.inkDim },
+
+  gear: { marginTop: space.md, gap: space.sm },
+  gearRow: { flexDirection: 'row', justifyContent: 'space-between', gap: space.lg },
+  gearLabel: { fontSize: 12, color: colors.inkSoft },
+  gearValue: { fontSize: 13, color: colors.ink, fontWeight: '600', flexShrink: 1 },
+
+  block: { marginTop: space.xxl, gap: space.sm },
+  link: { color: colors.blue, fontSize: 12, fontWeight: '700' },
+
+  badgeStrip: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space.sm },
+  badge: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeGlyph: { fontSize: 19 },
+  more: { fontSize: 12, color: colors.inkSoft, fontWeight: '700' },
+
+  row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md },
+  adminRow: { borderColor: colors.elite + '66' },
+  rowGlyph: { fontSize: 19, width: 26, textAlign: 'center' },
+  rowLabel: { fontSize: 14.5, fontWeight: '700', color: colors.ink },
+  rowDesc: { fontSize: 11.5, color: colors.inkSoft, marginTop: 1 },
+
+  account: { fontSize: 11, color: colors.inkDim, textAlign: 'center', marginTop: space.xxl },
+  signOut: { alignSelf: 'center', marginTop: space.md, padding: space.sm },
+  signOutText: { color: colors.loss, fontSize: 13, fontWeight: '700' },
 });

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../lib/supabase';
+import { pickAvatarPhoto, uploadAvatar } from '../lib/avatar';
 import { useAuth } from '../context/AuthContext';
 import Screen from '../ui/Screen';
 import Button from '../ui/Button';
@@ -94,19 +94,8 @@ export default function OnboardingScreen() {
   }, [loadCities]);
 
   async function pickPhoto() {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
-      Alert.alert('Sin permiso', 'Necesitamos acceso a tus fotos para poner tu avatar.');
-      return;
-    }
-    const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.7,
-    });
-    if (res.canceled || !res.assets?.length) return;
-    setPhotoUri(res.assets[0].uri);
+    const uri = await pickAvatarPhoto();
+    if (uri) setPhotoUri(uri);
   }
 
   // La foto se sube hasta el final: si el jugador abandona el onboarding, no
@@ -114,23 +103,9 @@ export default function OnboardingScreen() {
   async function uploadPhoto(): Promise<string | null> {
     if (!photoUri) return null;
     setUploading(true);
-    try {
-      const uid = session!.user.id;
-      const response = await fetch(photoUri);
-      const bytes = await response.arrayBuffer();
-      const path = `${uid}/avatar.jpg`;
-      const { error } = await supabase.storage
-        .from('avatars')
-        .upload(path, bytes, { contentType: 'image/jpeg', upsert: true });
-      if (error) throw error;
-      const { data } = supabase.storage.from('avatars').getPublicUrl(path);
-      return data.publicUrl;
-    } catch (e: any) {
-      Alert.alert('No se pudo subir la foto', `${e.message ?? e}. Se guardará tu avatar de la app.`);
-      return null;
-    } finally {
-      setUploading(false);
-    }
+    const url = await uploadAvatar(session!.user.id, photoUri);
+    setUploading(false);
+    return url;
   }
 
   function nextFromProfile() {

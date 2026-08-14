@@ -108,7 +108,7 @@ Lo que quedó:
 
 ## Pendientes conocidos
 
-- **✅ Las migraciones 0001–0028 ya corrieron en Supabase** (verificado el 2026-08-14: `finish_points('launch_fail')=1`/`('void')=0` y `report_match_result` reconoce ambos → 0028; `tournaments.mode` filtra por `casual` → 0026; `accept_challenge` es casual → 0027; `judge_assignments`/`arbitrable_match_ids` → 0024/0025; `penalty_codes`/`penalties` → 0022; las funciones internas devuelven 42501 → 0023 sigue firme; `photo_url`/bucket `venues` → 0021; y todas las tablas rechazan lectura anónima). El esquema está completo y al día con el repo. Las 0027 y 0028 se corrieron vía Management API (`/database/query`); las anteriores, a mano en el SQL Editor.
+- **✅ Las migraciones 0001–0029 ya corrieron en Supabase.** La 0029 (factor K por partidas de ranking) verificada el 2026-08-14: `players.ranked_matches_played` responde donde antes daba `42703`, el backfill dejó a los 21 jugadores con `ranked_matches_played = matches_played` (134 = 134, correcto porque todo lo anterior a 0026 fue de ranking), y `apply_match_confirmation` sigue devolviendo `42501` — el candado de 0023 sobrevivió al `create or replace`. Verificación previa (0001–0028): `finish_points('launch_fail')=1`/`('void')=0` y `report_match_result` reconoce ambos → 0028; `tournaments.mode` filtra por `casual` → 0026; `accept_challenge` es casual → 0027; `judge_assignments`/`arbitrable_match_ids` → 0024/0025; `penalty_codes`/`penalties` → 0022; las funciones internas devuelven 42501 → 0023 sigue firme; `photo_url`/bucket `venues` → 0021; y todas las tablas rechazan lectura anónima). El esquema está completo y al día con el repo. **Ojo con el "vía Management API":** el `SUPABASE_ACCESS_TOKEN` que está en el entorno de esta máquina pertenece a **otra cuenta** de Supabase (`farid.zeq89@gmail.com`, org "Agentes Org", proyectos ROCE / Co-Meta). **No ve el proyecto DML Beyblade**, que vive en la cuenta `fzequera89` — comprobado el 2026-08-14: `/database/query` contra `vgffwqmpiunxzmlfmtyo` devuelve **403**, y `/v1/projects` con ese token no lista el proyecto. Las migraciones de ESTE proyecto se corren a mano en el SQL Editor, salvo que se genere un token de la cuenta correcta.
 - **Build de EAS pendiente de generar** desde la sub-etapa 1.1 (fix de placeholders) — el usuario pidió explícitamente esperar y acumular cambios de varias fases antes de generar el próximo build real, para no gastar builds en cada cambio chico.
 - Configurar el cliente OAuth de Google en Supabase (para que el botón "Continuar con Google" funcione en producción).
 - Cambiar `is_admin` del correo de prueba de Farid al correo real del cliente cuando se decida.
@@ -147,7 +147,69 @@ Medido el 2026-08-14 cruzando `Reglamento DML Beyblade actualizado pro.docx` con
 
 Orden recomendado: **arbitraje + penalizaciones (24x)** primero, porque la disputa ya está rota; después categorías + ascenso + VP (45x), que es lo que le da sentido competitivo a la liga.
 
-### ⏭️ Próximo frente: Categorías + Ascenso + VP (45x) — reglamento extraído, SIN construir
+### ✅ Categorías + Ascenso + VP — CONSTRUIDO y CORRIDO (0030 y 0031, 2026-08-14)
+
+El escalafón del reglamento existe. `RANKS` en `theme.ts` dejó de ser
+decoración: las 8 llaves son las mismas que la tabla `categories`.
+
+**Cómo conviven ELO y VP** (la decisión de fondo, ya cerrada con el cliente y
+ahora implementada): son dos sistemas que miden cosas distintas y ninguno se
+calcula del otro.
+
+| | ELO | VP |
+|---|---|---|
+| Qué mide | Habilidad personal | Posición oficial en la liga |
+| Alcance | Global, cruza ligas | Por temporada |
+| Reset | Nunca | Cada 3 meses |
+| Dónde se ve | Rankings, perfil, passport | Escalafón de la temporada |
+
+Un jugador puede tener ELO alto y estar en Bronce porque acaba de entrar, y
+está bien.
+
+**0030 — categorías y VP:**
+- `categories`: catálogo de los 8 estratos con `tier`, `vp_value` y `max_capacity`. En tabla y no en código, igual que badges y penalizaciones: el cliente corrige un cupo o un valor sin build.
+- `season_standings`: dónde está cada jugador en cada temporada — categoría, división, posición, VP, puntos a favor/en contra, ganados/perdidos y `active` (inasistencia).
+- `enroll_in_season`: los nuevos entran en Porcelana, sin excepción. El Challenger puede elegir categoría; el organizador puede sembrar la tabla inicial.
+- `apply_vp_for_match`: acredita VP al cerrar el combate. **Solo ranking y solo si el torneo tiene temporada** — los casuales quedan fuera solos, y los retos sueltos son casuales desde 0027. El valor lo pone la categoría DE CADA JUGADOR: un Diamante arriesga 3 y un Porcelana 1 en el mismo combate. **La derrota resta lo mismo que la victoria suma** — se puede terminar en negativo.
+- `season_standings_ordered`: la tabla con los 4 criterios de desempate del reglamento.
+
+**0031 — ascenso, divisiones y cierre:**
+- `promotion_challenges` + `open_promotion_challenge`: el 1º de una categoría reta al último de la superior. **Se juega como un combate normal** — reusa reporte, doble marca, aprobación del juez y ELO. Lo único distinto pasa al confirmarse: si gana el retador, intercambian categoría y puesto.
+- `rebalance_divisions`: parte en A/B lo que pasa de cupo, **repartiendo en zigzag por posición** (1º a la A, 2º a la B, 3º a la A…). Cortar por la mitad dejaría una división de élite y otra de relleno.
+- `close_season`: cuenta títulos, otorga Challenger al llegar a 5, siembra la temporada siguiente conservando categoría y reiniciando VP y posiciones. Los inactivos reingresan al último puesto de Porcelana; el Challenger vigente es inmune.
+- `set_season_attendance`: marcar inasistencia.
+
+**Detalle de diseño que importa:** `apply_league_effects` es un punto de
+extensión llamado desde `apply_match_confirmation`. Existe para que lo que
+venga después (contar asistencia, deck cards) se enganche ahí y **no obligue a
+reescribir la función de 150 líneas por quinta vez** — tenerla copiada en
+varios lados es justo lo que 0022 vino a evitar.
+
+**El enfrentamiento directo se generalizó.** No es un valor por jugador, es una
+relación entre dos; resolverlo para un empate de 3+ requeriría un grafo. Se
+implementó como *victorias contra los demás empatados en VP y diferencia*, que
+para el caso de dos —el que el reglamento describe— da el mismo resultado.
+
+**Tres decisiones que tomé y hay que confirmar con el cliente:**
+1. **VP de Challenger = 3.** El reglamento no lo dice; se asumió la banda superior. Está en la tabla `categories`: cambiarlo es un UPDATE, no una migración.
+2. **El reto de ascenso lo abre el organizador**, no es automático. El reglamento dice que el 1º "PUEDE retar" —es un derecho que se ejerce— y hace falta que el round robin haya terminado para saber quién va primero.
+3. **El cierre de temporada es manual.** "Al finalizar se realiza un reinicio" es un acto de la administración, no un reloj: un reset por fecha borraría una tabla en medio de un torneo.
+
+**UI:** `LadderScreen` — escalafón agrupado por categoría con el color de cada
+rango, tu posición destacada arriba, y para la organización el botón de abrir
+reto de ascenso sobre el 1º de cada categoría y el de reorganizar divisiones.
+Se llega tocando una temporada en el detalle de liga.
+
+**Lo que falta de este bloque:** el round robin por categoría (hoy el bracket
+sigue siendo eliminación directa), la UI para cerrar temporada (la función
+existe pero necesita un selector de temporada destino), y el torneo inicial G3.
+
+**Sin probar con datos reales.** Verificado: 0030 y 0031 corridas y comprobadas
+contra la base (catálogo con los 8 tiers, las 3 tablas, las 9 funciones, las
+columnas de Challenger), las internas devuelven 42501, typecheck limpio con el
+código de salida real y el bundle compila.
+
+### Reglamento extraído (referencia, para no releer el .docx)
 
 Investigado el 2026-08-14 leyendo `Reglamento DML Beyblade actualizado pro.docx` (secciones II–V). Reglas textuales para arrancar sin releer el .docx:
 

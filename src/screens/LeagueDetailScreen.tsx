@@ -182,19 +182,28 @@ export default function LeagueDetailScreen({ route, navigation }: any) {
             </Card>
           ) : (
             seasons.map((s) => (
-              <Card key={s.id} style={styles.season}>
+              <Card
+                key={s.id}
+                style={styles.season}
+                onPress={() =>
+                  navigation.navigate('Ladder', { seasonId: s.id, leagueId, seasonName: s.name })
+                }
+              >
                 <Hex size={38} color={colors.blue}>
                   <Text style={{ fontSize: 14 }}>📅</Text>
                 </Hex>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.name}>{s.name}</Text>
-                  {s.start_date ? (
-                    <Text style={styles.meta}>
-                      {new Date(s.start_date).toLocaleDateString()}
-                      {s.end_date ? ` – ${new Date(s.end_date).toLocaleDateString()}` : ''}
-                    </Text>
-                  ) : null}
+                  <Text style={styles.meta}>
+                    {s.start_date
+                      ? `${new Date(s.start_date).toLocaleDateString()}${
+                          s.end_date ? ` – ${new Date(s.end_date).toLocaleDateString()}` : ''
+                        } · `
+                      : ''}
+                    Ver escalafón
+                  </Text>
                 </View>
+                <IconChevron />
               </Card>
             ))
           )}

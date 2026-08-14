@@ -22,6 +22,7 @@ import AdminPlayersScreen from '../screens/AdminPlayersScreen';
 import AdminGlobalRankingScreen from '../screens/AdminGlobalRankingScreen';
 import DisputesScreen from '../screens/DisputesScreen';
 import JudgesScreen from '../screens/JudgesScreen';
+import LadderScreen from '../screens/LadderScreen';
 import VenuesScreen from '../screens/VenuesScreen';
 import CreateVenueScreen from '../screens/CreateVenueScreen';
 import VenueDetailScreen from '../screens/VenueDetailScreen';
@@ -105,6 +106,7 @@ function Batallas() {
       <BatallasStack.Screen name="ClubDetail" component={ClubDetailScreen} />
       <BatallasStack.Screen name="Disputes" component={DisputesScreen} />
       <BatallasStack.Screen name="Judges" component={JudgesScreen} />
+      <BatallasStack.Screen name="Ladder" component={LadderScreen} />
     </BatallasStack.Navigator>
   );
 }

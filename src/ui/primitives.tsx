@@ -44,26 +44,39 @@ export function Hex({
   size = 96,
   color = colors.blue,
   children,
+  solid = false,
 }: {
   size?: number;
   color?: string;
   children?: ReactNode;
+  // Relleno opaco. Solo se usa cuando el hexágono tiene que TAPAR algo que
+  // pasa por detrás (la línea de la barra de pestañas). En una tarjeta se ve
+  // como un hexágono oscuro fuera de lugar, así que va apagado por defecto.
+  solid?: boolean;
 }) {
   const w = size;
   const h = size * 1.08;
-  // Hexágono de punta arriba, en coordenadas de 0 a 100.
-  const pts = '50,2 95,26 95,74 50,98 5,74 5,26';
+  // Hexágono metido hacia adentro del viewBox para que quepa el halo sin cortarse.
+  const pts = '50,8 88,29 88,71 50,92 12,71 12,29';
+  const id = `hex-${color.replace('#', '')}`;
 
+  // OJO: nada de glow() aquí. Esa sombra es un box-shadow y pinta la CAJA
+  // rectangular del elemento, así que se ve un cuadro detrás del hexágono.
+  // El halo tiene que ir dentro del SVG para seguir la forma.
   return (
-    <View style={[{ width: w, height: h, alignItems: 'center', justifyContent: 'center' }, glow(color, 20)]}>
+    <View style={{ width: w, height: h, alignItems: 'center', justifyContent: 'center' }}>
       <Svg width={w} height={h} viewBox="0 0 100 100" style={StyleSheet.absoluteFill}>
         <Defs>
-          <LinearGradient id="hexfill" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0%" stopColor={color} stopOpacity="0.22" />
-            <Stop offset="100%" stopColor={color} stopOpacity="0.04" />
+          <LinearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0%" stopColor={color} stopOpacity="0.24" />
+            <Stop offset="100%" stopColor={color} stopOpacity="0.05" />
           </LinearGradient>
         </Defs>
-        <Polygon points={pts} fill="url(#hexfill)" stroke={color} strokeWidth="2.5" />
+        {/* Halo: trazo ancho y tenue por fuera del contorno. */}
+        <Polygon points={pts} fill="none" stroke={color} strokeOpacity="0.16" strokeWidth="10" />
+        <Polygon points={pts} fill="none" stroke={color} strokeOpacity="0.3" strokeWidth="5" />
+        {solid && <Polygon points={pts} fill={colors.bg} />}
+        <Polygon points={pts} fill={`url(#${id})`} stroke={color} strokeWidth="2.5" />
       </Svg>
       {children}
     </View>
@@ -72,17 +85,27 @@ export function Hex({
 
 /* ─────────────── Etiquetas ─────────────── */
 
+// `align` existe porque la píldora tiene que abrazar su texto, y para eso
+// necesita un alignSelf propio. Si se deja fijo en flex-start, pisa el centrado
+// del contenedor y la píldora se va al borde de la pantalla.
 export function Pill({
   label,
   color = colors.blue,
   bg,
+  align = 'flex-start',
 }: {
   label: string;
   color?: string;
   bg?: string;
+  align?: 'flex-start' | 'center' | 'flex-end';
 }) {
   return (
-    <View style={[styles.pill, { borderColor: color, backgroundColor: bg ?? 'transparent' }]}>
+    <View
+      style={[
+        styles.pill,
+        { borderColor: color, backgroundColor: bg ?? 'transparent', alignSelf: align },
+      ]}
+    >
       <Text style={[styles.pillText, { color }]}>{label}</Text>
     </View>
   );

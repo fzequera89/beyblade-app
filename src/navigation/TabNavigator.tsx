@@ -4,6 +4,7 @@ import TabBar from './TabBar';
 import { colors } from '../theme';
 
 import HomeScreen from '../screens/HomeScreen';
+import BattlesScreen from '../screens/BattlesScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import EditProfileScreen from '../screens/EditProfileScreen';
 import LeaguesScreen from '../screens/LeaguesScreen';
@@ -73,16 +74,25 @@ function Inicio() {
   );
 }
 
+// Batallas es el centro competitivo: todo lo que se juega vive aquí — retos,
+// matches, torneos y ligas. Antes los torneos estaban en Rankings, escondidos
+// detrás del detalle de una liga, a cuatro toques de la barra.
 const BatallasStack = createNativeStackNavigator();
 function Batallas() {
   return (
     <BatallasStack.Navigator screenOptions={stackOptions}>
-      <BatallasStack.Screen name="MyBattles" component={ChallengesScreen} />
+      <BatallasStack.Screen name="Battles" component={BattlesScreen} />
+      <BatallasStack.Screen name="Challenges" component={ChallengesScreen} />
       <BatallasStack.Screen name="MatchDetail" component={MatchDetailScreen} />
       <BatallasStack.Screen name="PlayerProfile" component={PlayerProfileScreen} />
       <BatallasStack.Screen name="Passport" component={PassportScreen} />
-      <BatallasStack.Screen name="Bracket" component={BracketScreen} />
+      <BatallasStack.Screen name="Leagues" component={LeaguesScreen} />
+      <BatallasStack.Screen name="CreateLeague" component={CreateLeagueScreen} />
+      <BatallasStack.Screen name="LeagueDetail" component={LeagueDetailScreen} />
+      <BatallasStack.Screen name="LeagueStandings" component={LeagueStandingsScreen} />
+      <BatallasStack.Screen name="Tournaments" component={TournamentsScreen} />
       <BatallasStack.Screen name="TournamentDetail" component={TournamentDetailScreen} />
+      <BatallasStack.Screen name="Bracket" component={BracketScreen} />
     </BatallasStack.Navigator>
   );
 }
@@ -109,19 +119,14 @@ function Play() {
   );
 }
 
+// Rankings solo consulta posiciones. Nada que se juegue vive aquí: esa es la
+// diferencia de intención con Batallas.
 const RankingsStack = createNativeStackNavigator();
 function Rankings() {
   return (
     <RankingsStack.Navigator screenOptions={stackOptions}>
       <RankingsStack.Screen name="GlobalRanking" component={AdminGlobalRankingScreen} />
-      <RankingsStack.Screen name="Leagues" component={LeaguesScreen} />
-      <RankingsStack.Screen name="CreateLeague" component={CreateLeagueScreen} />
-      <RankingsStack.Screen name="LeagueDetail" component={LeagueDetailScreen} />
       <RankingsStack.Screen name="LeagueStandings" component={LeagueStandingsScreen} />
-      <RankingsStack.Screen name="Tournaments" component={TournamentsScreen} />
-      <RankingsStack.Screen name="TournamentDetail" component={TournamentDetailScreen} />
-      <RankingsStack.Screen name="Bracket" component={BracketScreen} />
-      <RankingsStack.Screen name="MatchDetail" component={MatchDetailScreen} />
       <RankingsStack.Screen name="PlayerProfile" component={PlayerProfileScreen} />
       <RankingsStack.Screen name="Passport" component={PassportScreen} />
     </RankingsStack.Navigator>
@@ -139,12 +144,8 @@ function Perfil() {
       <PerfilStack.Screen name="Rivalries" component={RivalriesScreen} />
       <PerfilStack.Screen name="Badges" component={BadgesScreen} />
       <PerfilStack.Screen name="Passport" component={PassportScreen} />
-      <PerfilStack.Screen name="Follows" component={FollowsScreen} />
       <PerfilStack.Screen name="Clubs" component={ClubsScreen} />
       <PerfilStack.Screen name="ClubDetail" component={ClubDetailScreen} />
-      <PerfilStack.Screen name="Leagues" component={LeaguesScreen} />
-      <PerfilStack.Screen name="LeagueDetail" component={LeagueDetailScreen} />
-      <PerfilStack.Screen name="LeagueStandings" component={LeagueStandingsScreen} />
       <PerfilStack.Screen name="MatchDetail" component={MatchDetailScreen} />
       <PerfilStack.Screen name="PlayerProfile" component={PlayerProfileScreen} />
       <PerfilStack.Screen name="Admin" component={AdminScreen} />

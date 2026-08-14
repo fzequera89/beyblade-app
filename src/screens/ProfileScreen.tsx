@@ -39,7 +39,6 @@ const LINKS = [
   { key: 'Combos', label: 'Mis combos', desc: 'Tus beyblades y su rendimiento', glyph: '🌀' },
   { key: 'Rivalries', label: 'Rivalidades', desc: 'Tu récord contra cada rival', glyph: '⚔️' },
   { key: 'Passport', label: 'League Passport', desc: 'Toda tu trayectoria', glyph: '🛂' },
-  { key: 'Leagues', label: 'Mis ligas', desc: 'Ligas y tu posición', glyph: '🏅' },
   { key: 'Clubs', label: 'Clubes', desc: 'Tu equipo', glyph: '🛡️' },
 ];
 
@@ -115,7 +114,7 @@ export default function ProfileScreen({ navigation }: any) {
         </Hex>
 
         <Text style={styles.name}>{player.display_name}</Text>
-        <Pill label={EXPERIENCE_LABEL[player.experience_level ?? ''] ?? 'Blader'} />
+        <Pill label={EXPERIENCE_LABEL[player.experience_level ?? ''] ?? 'Blader'} align="center" />
         <Text style={styles.city}>
           {[player.city, player.country].filter(Boolean).join(', ') || 'Sin ubicación'}
         </Text>
@@ -255,7 +254,13 @@ const styles = StyleSheet.create({
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   pad: { paddingHorizontal: space.xl },
 
-  hero: { alignItems: 'center', gap: space.sm, paddingTop: space.xl, paddingBottom: space.lg },
+  hero: {
+    alignItems: 'center',
+    gap: space.sm,
+    paddingTop: space.xl,
+    paddingBottom: space.lg,
+    paddingHorizontal: space.xl,
+  },
   name: { ...type.display, fontSize: 26, marginTop: space.sm },
   city: { fontSize: 13, color: colors.inkSoft },
   edit: {

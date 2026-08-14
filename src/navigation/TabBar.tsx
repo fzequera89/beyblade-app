@@ -1,10 +1,10 @@
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Polygon, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { BeyMark } from '../ui/Logo';
+import { Hex } from '../ui/primitives';
 import { IconHome, IconSwords, IconRanking, IconProfile } from '../ui/icons';
-import { colors, space, glow } from '../theme';
+import { colors, space } from '../theme';
 
 // Barra de pestañas propia en vez de la de serie.
 //
@@ -29,22 +29,13 @@ function PlayButton({ focused, onPress }: { focused: boolean; onPress: () => voi
       accessibilityLabel="Play"
       accessibilityState={{ selected: focused }}
     >
-      <View style={[styles.playHex, glow(colors.blue, focused ? 22 : 12)]}>
-        <Svg width={62} height={66} viewBox="0 0 100 108" style={StyleSheet.absoluteFill}>
-          <Defs>
-            <LinearGradient id="playfill" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0%" stopColor={colors.blue} stopOpacity={focused ? '0.42' : '0.22'} />
-              <Stop offset="100%" stopColor={colors.blue} stopOpacity="0.06" />
-            </LinearGradient>
-          </Defs>
-          <Polygon
-            points="50,3 94,28 94,80 50,105 6,80 6,28"
-            fill="url(#playfill)"
-            stroke={colors.blue}
-            strokeWidth="3"
-          />
-        </Svg>
-        <BeyMark size={30} color={focused ? colors.blueHi : colors.blue} />
+      {/* El hexágono se dibuja entero en SVG y su relleno opaco ya tapa la línea
+          de la barra por detrás. Antes tenía un fondo cuadrado para eso y se
+          notaba como un recuadro negro. */}
+      <View style={styles.playHex}>
+        <Hex size={62} color={focused ? colors.blueHi : colors.blue} solid>
+          <BeyMark size={30} color={focused ? colors.blueHi : colors.blue} />
+        </Hex>
       </View>
       <Text style={[styles.label, styles.playLabel]}>PLAY</Text>
     </Pressable>
@@ -106,14 +97,6 @@ const styles = StyleSheet.create({
   },
   playWrap: { flex: 1, alignItems: 'center', gap: 2 },
   // El hexágono sobresale de la barra: es lo que lo convierte en botón.
-  playHex: {
-    width: 62,
-    height: 66,
-    marginTop: -28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.bg,
-    borderRadius: 8,
-  },
+  playHex: { marginTop: -28 },
   playLabel: { color: colors.blue, marginTop: 2 },
 });

@@ -147,6 +147,36 @@ Medido el 2026-08-14 cruzando `Reglamento DML Beyblade actualizado pro.docx` con
 
 Orden recomendado: **arbitraje + penalizaciones (24x)** primero, porque la disputa ya está rota; después categorías + ascenso + VP (45x), que es lo que le da sentido competitivo a la liga.
 
+### ⏭️ Próximo frente: Categorías + Ascenso + VP (45x) — reglamento extraído, SIN construir
+
+Investigado el 2026-08-14 leyendo `Reglamento DML Beyblade actualizado pro.docx` (secciones II–V). Reglas textuales para arrancar sin releer el .docx:
+
+**Estructura de categorías — 8 estratos (mayor a menor):** 1. Challenger (élite / selección oficial) · 2. Diamante (jueceo de apoyo) · 3. Platino · 4. Oro · 5. Plata · 6. Bronce · 7. Hierro · 8. Porcelana (iniciación).
+- Cupos (Hierro→Diamante): mín 2, máx 10. Si pasa de 10 → se abren **divisiones** (Oro A / Oro B).
+- **Porcelana (base):** siempre el DOBLE de capacidad de las superiores (si Oro tiene 5, Porcelana 10).
+- Nuevos: entran obligatoriamente en Porcelana.
+- Reingreso (eliminado por inasistencia): reinicia en el ÚLTIMO puesto de Porcelana. Challenger es el único que no resetea por inasistencia (solo por incumplir jueceo).
+
+**Ranking y ascenso (torneo de ranking = 2 fases):**
+- Fase 1 — **Round Robin de categoría:** cada jugador enfrenta a todos los de su rango (grupo de 5 = 4 combates); se reacomodan internamente por desempeño.
+- Fase 2 — **Reto de ascenso:** el 1º de una categoría puede retar al ÚLTIMO de la categoría inmediata superior. Gana el retador → intercambian posiciones para el siguiente torneo; pierde → ambos mantienen su lugar.
+
+**VP (Puntos de Victoria) para el Ranking Unificado Interclubes** — por nivel de riesgo. OJO: la derrota RESTA lo mismo que la victoria suma:
+- Diamante/Platino: **+3 / −3** · Oro/Plata: **+2 / −2** · Bronce/Hierro/Porcelana: **+1 / −1**.
+
+**Criterios de desempate (en orden de prioridad):** 1. Diferencia de puntos (anotados − recibidos: spin/burst/over/xtreme). 2. Enfrentamiento directo (ganador del último duelo). 3. Antigüedad (más tiempo activo). 4. Orden alfabético (solo para el Ranking Unificado, que dura 6 meses).
+
+**Challenger (estatus de élite):** se accede al llegar 1º de la tabla en 5 ocasiones (seguidas o alternas). Vigencia 1 año. Privilegios: inmunidad a reseteo por inasistencia, elección de categoría, patrocinios. Obligación: apoyar en jueceo mín 3 veces/temporada; incumplir el jueceo es la única forma de perder el rango antes de tiempo.
+
+**Temporada:** 3 meses; al terminar, reinicio de posiciones para reestructurar categorías. Torneo inicial = eliminación directa (G3) para fijar la posición inicial.
+
+**Decisiones a confirmar con el cliente antes de construir:**
+- El ELO se queda como ranking APARTE (ya cerrado); VP + categorías son un sistema distinto. Hoy `RANKS` existe en `theme.ts` pero no lo usa nadie.
+- **Cómo puntúa Challenger en VP** — no aparece en la tabla de VP del reglamento.
+- **El reto de ascenso:** ¿automático tras el round robin o lo gestiona el organizador? ¿Se juega como un match normal?
+- **La reestructuración al reset de temporada:** ¿automática por posición o manual del organizador?
+- Empezar por el ESQUEMA (categorías, membresía por temporada+categoría con su posición, VP acumulados por temporada) antes que la UI.
+
 ### ✅ Arbitraje y penalizaciones — construido y CORRIDO (2026-08-14)
 
 La 0022 ya corrió en Supabase. Verificado desde fuera con la anon key: `can_arbitrate` responde `false`, las tablas `penalty_codes` y `penalties` existen, las columnas `judge_role`/`suspended_until`/`penalty_points_a`/`arbitrated_by` están, y `resolve_dispute`, `register_penalty`, `set_judge_role` y `suspend_player` llegan a su lógica de negocio y rechazan a quien no debe.

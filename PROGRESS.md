@@ -132,7 +132,7 @@ Medido el 2026-08-14 cruzando `Reglamento DML Beyblade actualizado pro.docx` con
 | Penalizaciones | 12 | Tabla leves/graves/críticas; 2 leves iguales = 1 punto al rival, graves = pierde el combate, críticas = expulsión |
 | ~~Temporadas~~ ✅ 0031+0039 | 10 | ~~Reseteo a los 3 meses, torneo inicial G3, asistencia~~ — reseteo en 0031; G3 y asistencia en 0039 |
 | ~~Reglas de ronda~~ ✅ 0028 | 8 | ~~Lanzamiento nulo (advertencia → 1 punto al rival), empate = repetir ronda, self-over sin contacto~~ — hecho en 0028 |
-| Sueltos | 8 | Elegir modalidad casual, torneos a 5/7/10, temática por votación, premios, checklist de desgaste |
+| ~~Sueltos~~ ✅ 0043+0044 | 8 | ~~Modalidad casual, torneos a 5/7/10, temática por votación, premios, checklist de desgaste~~ — todo hecho |
 
 **Tres hallazgos verificados en el código, importantes:**
 1. `RANKS` existe en `src/theme.ts` pero **no lo usa ninguna pantalla** — es decoración, no un escalafón.
@@ -342,6 +342,63 @@ a la anon key, y `deck_cards` / `deck_card_combos` devuelven vacío sin sesión.
 **La regla, otra vez:** toda función nueva necesita `revoke execute ... from
 public, anon` ADEMÁS del `grant ... to authenticated`. Grantear no quita lo de
 PUBLIC.
+
+### ✅ Deck 3+1, paginación, checklist de desgaste y temática por votación (0042–0044, 2026-08-15)
+
+Con esto **la brecha contra el reglamento DML queda cerrada**: no quedan bloques
+de esa tabla sin construir.
+
+**0042 — el deck era 3+1, no 3.** La 0040 se quedó corta en dos cosas que solo
+se ven leyendo el reglamento otra vez: el deck lleva **3 principales más 1
+extra** (que se juega completo o se desarma para dar piezas a los otros), y la
+deck card **solo aplica en ranking**, no en casual. La firma de `save_deck_card`
+no cambió a propósito: el extra entra como último elemento del mismo arreglo.
+Agregar un parámetro habría creado una función nueva por sobrecarga y dejado
+viva la vieja —con la validación incompleta— para cualquier APK que siguiera
+llamándola. El extra también entra en la regla de no repetir piezas, porque
+puede entrar a jugar completo (**decisión a confirmar con el cliente**).
+
+**Paginación de 12.** No es un número redondo: las filas miden 72-88 pt y el
+área visible de una lista ronda 600, así que caben 7 u 8. Doce es pantalla y
+media — se ve que la lista sigue y el botón queda al alcance. **Sin carga
+automática al llegar abajo**, por pedido explícito: un ranking que crece solo
+mientras lo lees no deja saber en qué lugar vas. De paso se arregló algo peor
+que la falta de paginación: `RankingsScreen` pedía `.limit(100)`, así que **el
+jugador 101 no existía para la app**, sin aviso. Paginan: ranking general,
+ranking global del admin, feed y tabla de liga.
+
+**0043 — guía de desgaste e inspección.** La tabla del reglamento (Bit, Ratchet,
+Blade: qué se revisa, qué es ilegal, qué prueba de seguridad) vive en
+`wear_checks`, en tabla y no en código, porque esos criterios dependen de qué
+piezas van saliendo. La inspección se guarda **sobre la propia deck card**
+—quién revisó, cuándo, si pasó, con qué nota— y no en una tabla aparte: la única
+pregunta que se hace en la mesa es "¿este deck ya pasó?". **Aprobar congela la
+tarjeta** (el reglamento dice que después de autorizar no se cambian piezas);
+**rechazar no**, porque el jugador tiene que poder corregir y volver. Nadie
+inspecciona su propio deck, y quién puede inspeccionar sale de los mismos cuatro
+caminos que arbitrar.
+
+**0044 — temática por votación.** Decisiones del cliente: **cualquiera propone y
+un moderador acepta**; **votan los miembros de la liga** (no solo los inscritos,
+porque se decide la semana previa, cuando mucha gente no se ha inscrito); y
+**cierra sola en una fecha**.
+
+*"Cierra sola" sin proceso agendado:* este proyecto no tiene cron. La función de
+cierre es **idempotente y la puede llamar cualquiera** — la app la llama al abrir
+el torneo. Lo automático no es quién llama, es que la función se niega a cerrar
+antes de la fecha y, pasada la fecha, cierra igual sin importar quién entre: el
+primero que abra la pantalla lo consuma. El voto es uno por persona y por torneo
+(la llave primaria es el torneo, no la opción: con la opción como llave, cambiar
+de opinión dejaría dos votos vivos), y se puede cambiar hasta el cierre.
+
+**Verificado contra la base**, todo con sesión simulada y `rollback`:
+- Deck 3+1 guarda el cuarto marcado como extra; sin extra sigue siendo válido;
+  en casual lo rechaza; con 5 combos lo rechaza.
+- La guía quedó sembrada con sus tres renglones; la inspección guarda juez, hora
+  y nota, congela al aprobar, y rechaza a quien intenta inspeccionarse solo.
+- La votación: propuesta, cambio de voto (queda **un** voto), cierre prematuro
+  que no hace nada, cierre pasada la fecha que fija la ganadora, y segunda
+  llamada que devuelve lo mismo.
 
 ### Reglamento extraído (referencia, para no releer el .docx)
 
@@ -775,7 +832,7 @@ acumulándose de combates de verdad sigue sin probarse punta a punta.
 **LO QUE SIGUE:**
 1. QA **desde la app, con dos cuentas**: crear el torneo de la temporada desde el escalafón → check-in → generar rondas por categoría → reportar → doble marca → aprobar como juez → ver moverse ELO, tabla local, VP e interclubes. La base ya está probada punta a punta (ver arriba); lo que falta es la interfaz con dedos de verdad, y **dos cuentas**, porque quien reporta no puede aprobar su propio resultado.
 3. Lo que no puede cerrar un agente: **notificaciones push** y **date picker** (los dos exigen dependencia nativa + dev client, contra la decisión 2/9 de este documento), **OAuth de Google**, `is_admin` al correo del cliente, cuentas de tienda, íconos/capturas/política de privacidad.
-4. Paginación de listas: hoy todo carga completo. A escala de liga regional aguanta.
+4. ~~Paginación de listas~~ ✅ hecha (páginas de 12, ver arriba).
 
 **Correr migraciones sin pegarlas a mano:** el `SUPABASE_ACCESS_TOKEN` del entorno es de OTRA cuenta y no ve este proyecto. Con un token de la cuenta `fzequera89` sí se puede, vía Management API:
 `POST https://api.supabase.com/v1/projects/vgffwqmpiunxzmlfmtyo/database/query` con `{"query": "..."}`.
@@ -785,7 +842,7 @@ acumulándose de combates de verdad sigue sin probarse punta a punta.
 
 1. `git clone` / `git pull` del repo.
 2. Copiar `.env.example` a `.env` y llenar `EXPO_PUBLIC_SUPABASE_URL` y `EXPO_PUBLIC_SUPABASE_ANON_KEY` (Supabase → Settings → API del proyecto "CML Beyblade").
-3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-15 las 0001–0041 están corridas y verificadas contra la base** (0036 = portadas de eventos y clubes; 0037 = tabla local por victorias + escala VP 5/4/3/2/1; 0038 = Ranking Unificado Interclubes) — si se agrega una nueva, actualizar esta línea.
+3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-15 las 0001–0044 están corridas y verificadas contra la base** (0036 = portadas de eventos y clubes; 0037 = tabla local por victorias + escala VP 5/4/3/2/1; 0038 = Ranking Unificado Interclubes) — si se agrega una nueva, actualizar esta línea.
 4. `npm install`, luego `npm run web` para verificar rápido en el preview del navegador (no requiere emulador Android).
 5. Para un build real: `npx eas-cli build --platform android --profile preview --non-interactive` (requiere `eas login` ya hecho en la máquina).
 

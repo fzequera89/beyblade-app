@@ -6,8 +6,9 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import Screen from '../ui/Screen';
 import Button from '../ui/Button';
+import { Field } from '../ui/Field';
 import Avatar from '../ui/Avatar';
-import { Card, Hex, Pill, SectionTitle, Tabs } from '../ui/primitives';
+import { Card, Hex, Meter, Pill, SectionTitle, Tabs } from '../ui/primitives';
 import Cover, { coverAccent } from '../ui/Cover';
 import { CountdownBox, ClosingBar, InfoRow, StatStrip, TournamentName } from '../ui/tournament';
 import { pickCoverPhoto, uploadCover } from '../lib/cover';
@@ -23,6 +24,14 @@ import {
 import { categoryLabel, categoryColor } from '../lib/categories';
 import { DeckCard, deckSizeFor, usesDeckCard, loadDeckCard, deckCountFor } from '../lib/decks';
 import { recordInspection } from '../lib/wear';
+import {
+  ThemeVote,
+  loadThemeVote,
+  suggestTheme,
+  approveTheme,
+  voteTheme,
+  openThemeVote,
+} from '../lib/themes';
 import { fmtDate, fmtDateFull, fmtDateTime } from '../lib/when';
 import { IconChevron } from '../ui/icons';
 import { colors, space, type, radius, glow } from '../theme';
@@ -139,6 +148,8 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
   const [myDeck, setMyDeck] = useState<DeckCard | null>(null);
   const [decks, setDecks] = useState<{ total: number; locked: number }>({ total: 0, locked: 0 });
   const [showQr, setShowQr] = useState(false);
+  const [theme, setTheme] = useState<ThemeVote | null>(null);
+  const [nuevaTematica, setNuevaTematica] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -201,6 +212,16 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
         // Si la 0040 todavía no corrió, la pantalla sigue sirviendo para todo
         // lo demás: el deck es una sección, no la pantalla.
         setMyDeck(null);
+      }
+    }
+
+    // La temática es de la modalidad casual, según el reglamento. En ranking no
+    // se pregunta siquiera.
+    if ((row as any)?.mode === 'casual' && playerId) {
+      try {
+        setTheme(await loadThemeVote(tournamentId, playerId));
+      } catch {
+        setTheme(null);
       }
     }
 
@@ -412,6 +433,18 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
         },
       ]
     );
+  }
+
+  async function conTematica(fn: () => Promise<void>) {
+    setBusy(true);
+    try {
+      await fn();
+      load();
+    } catch (e: any) {
+      Alert.alert('No se pudo', e.message ?? String(e));
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function lockDecks() {
@@ -790,6 +823,107 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
           <Text style={styles.meta}>Ronda {myNextMatch.bracket_round} · toca para reportar</Text>
         </Card>
       )}
+
+      {tab === 'resumen' && tournament.mode === 'casual' && theme ? (
+        <Card style={{ gap: space.md }}>
+          <View style={styles.sectionRow}>
+            <Text style={styles.listTitle}>TEMÁTICA DEL TORNEO</Text>
+            {theme.closesAt && !theme.theme ? (
+              <Text style={styles.meta}>Cierra el {fmtDate(theme.closesAt)}</Text>
+            ) : null}
+          </View>
+
+          {theme.theme ? (
+            // Ya se votó: la temática es una regla del torneo, no una encuesta.
+            <View style={[styles.themeWinner, { borderColor: accent.neon }]}>
+              <Text style={styles.themeWinnerLabel}>GANÓ LA VOTACIÓN</Text>
+              <Text style={[styles.themeWinnerText, { color: accent.warm }]}>{theme.theme}</Text>
+              <Text style={styles.hint}>Solo se puede jugar con lo que permita esta temática.</Text>
+            </View>
+          ) : !theme.closesAt ? (
+            <>
+              <Text style={styles.hint}>
+                Un torneo casual puede jugarse con una restricción votada por la comunidad. La
+                votación cierra una semana antes del torneo.
+              </Text>
+              {isOrganizer ? (
+                <Button
+                  label="ABRIR VOTACIÓN DE TEMÁTICA"
+                  variant="ghost"
+                  onPress={() => conTematica(() => openThemeVote(tournamentId, tournament.starts_at))}
+                  disabled={busy}
+                />
+              ) : (
+                <Text style={styles.hint}>La abre un moderador de la liga.</Text>
+              )}
+            </>
+          ) : (
+            <>
+              {theme.options.filter((o) => o.approved).length === 0 ? (
+                <Text style={styles.hint}>
+                  Todavía no hay opciones en la boleta. Propón una: un moderador la acepta y queda
+                  para votar.
+                </Text>
+              ) : null}
+
+              {theme.options.map((o) => {
+                const total = theme.options.reduce((n, x) => n + x.votes, 0) || 1;
+                return (
+                  <Pressable
+                    key={o.id}
+                    onPress={() => (o.approved ? conTematica(() => voteTheme(o.id)) : undefined)}
+                    style={[
+                      styles.themeOption,
+                      o.mine && { borderColor: accent.neon, backgroundColor: colors.surface },
+                      !o.approved && { opacity: 0.6 },
+                    ]}
+                  >
+                    <View style={{ flex: 1, gap: 5 }}>
+                      <Text style={styles.themeLabel}>
+                        {o.label}
+                        {!o.approved ? '  · por aceptar' : ''}
+                      </Text>
+                      <Meter value={o.votes} max={total} color={o.mine ? accent.neon : colors.lineHi} />
+                    </View>
+                    <Text style={[styles.themeVotes, o.mine && { color: accent.warm }]}>{o.votes}</Text>
+                    {isOrganizer && !o.approved ? (
+                      <Pressable
+                        onPress={() => conTematica(() => approveTheme(o.id, true))}
+                        style={styles.themeApprove}
+                        hitSlop={6}
+                      >
+                        <Text style={styles.themeApproveText}>ACEPTAR</Text>
+                      </Pressable>
+                    ) : null}
+                  </Pressable>
+                );
+              })}
+
+              <Field
+                label="Proponer una temática"
+                placeholder="Solo Blades de metal"
+                value={nuevaTematica}
+                onChangeText={setNuevaTematica}
+              />
+              <Button
+                label="PROPONER"
+                variant="ghost"
+                disabled={nuevaTematica.trim().length < 3 || busy}
+                onPress={() =>
+                  conTematica(async () => {
+                    await suggestTheme(tournamentId, nuevaTematica.trim());
+                    setNuevaTematica('');
+                  })
+                }
+              />
+              <Text style={styles.hint}>
+                Propone cualquier miembro de la liga y un moderador la acepta. Votan los miembros de
+                la liga, un voto cada quien, y se puede cambiar hasta el cierre.
+              </Text>
+            </>
+          )}
+        </Card>
+      ) : null}
 
       {tab === 'resumen' && tournament.prize ? (
         <Card style={styles.prize} onPress={() => setTab('info')}>
@@ -1689,6 +1823,29 @@ const styles = StyleSheet.create({
   next: { gap: 3 },
   nextTag: { fontSize: 9, fontWeight: '800', letterSpacing: 1 },
   nextText: { fontSize: 14.5, fontWeight: '800', color: colors.ink },
+
+  themeWinner: { borderWidth: 1, borderRadius: radius.md, padding: space.lg, gap: 3 },
+  themeWinnerLabel: { fontSize: 8.5, fontWeight: '800', letterSpacing: 0.8, color: colors.inkDim },
+  themeWinnerText: { fontSize: 17, fontWeight: '800', fontStyle: 'italic' },
+  themeOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.md,
+    padding: space.md,
+  },
+  themeLabel: { fontSize: 13, fontWeight: '700', color: colors.ink },
+  themeVotes: { fontSize: 15, fontWeight: '800', color: colors.inkSoft, minWidth: 20, textAlign: 'right' },
+  themeApprove: {
+    borderWidth: 1,
+    borderColor: colors.win,
+    borderRadius: 7,
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+  },
+  themeApproveText: { fontSize: 9, fontWeight: '800', color: colors.win, letterSpacing: 0.5 },
 
   prize: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   prizeTag: { fontSize: 9, fontWeight: '800', letterSpacing: 1, color: colors.elite },

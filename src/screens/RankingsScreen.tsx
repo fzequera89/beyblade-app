@@ -200,6 +200,17 @@ export default function RankingsScreen({ navigation }: any) {
         ))}
       </View>
 
+      {/* El interclubes es otro ranking (VP, cruza ligas). Va como acceso, no
+          como otro scope de ELO: mezclarlos confundiría dos sistemas distintos. */}
+      <Pressable style={styles.interclub} onPress={() => navigation.navigate('Interclub')}>
+        <Text style={styles.interclubGlyph}>🏅</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.interclubTitle}>Ranking Interclubes</Text>
+          <Text style={styles.interclubSub}>VP acumulados de todas las ligas y ciudades</Text>
+        </View>
+        <Text style={styles.interclubChevron}>›</Text>
+      </Pressable>
+
       {scope === 'liga' && leagues.length > 1 && (
         <View style={styles.leagueRow}>
           {leagues.map((l) => (
@@ -461,6 +472,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.xl,
     marginBottom: space.md,
   },
+
+  interclub: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    marginHorizontal: space.xl,
+    marginBottom: space.md,
+    paddingVertical: space.md,
+    paddingHorizontal: space.lg,
+    backgroundColor: colors.card,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.streak,
+  },
+  interclubGlyph: { fontSize: 20 },
+  interclubTitle: { fontSize: 14, fontWeight: '800', color: colors.ink },
+  interclubSub: { fontSize: 11, color: colors.inkSoft, marginTop: 1 },
+  interclubChevron: { fontSize: 22, fontWeight: '800', color: colors.streak },
 
   myBox: {
     flexDirection: 'row',

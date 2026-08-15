@@ -47,6 +47,15 @@ function seedOf(key: string) {
   return h >>> 0;
 }
 
+/**
+ * El color de identidad de una entidad: el mismo de su portada dibujada.
+ * Así el acento de la pantalla y su portada hablan del mismo lugar, aunque
+ * después suban una foto real — el color no cambia porque sale del id.
+ */
+export function coverAccent(id: string) {
+  return PALETTES[seedOf(id || 'x') % PALETTES.length];
+}
+
 export default function Cover({
   id,
   photoUrl,

@@ -5,15 +5,32 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import Screen from '../ui/Screen';
 import Button from '../ui/Button';
+import Avatar from '../ui/Avatar';
 import { Field } from '../ui/Field';
-import { Card, Hex, Pill, SectionTitle } from '../ui/primitives';
-import Cover from '../ui/Cover';
+import { Card, Hex, SectionTitle } from '../ui/primitives';
+import Cover, { coverAccent } from '../ui/Cover';
 import { pickCoverPhoto, uploadCover } from '../lib/cover';
 import { IconChevron } from '../ui/icons';
 import { colors, space, type, radius } from '../theme';
 
+// Las tres letras del escudo. Se salta las palabras que llevan TODAS las ligas:
+// "Liga CML Central" tiene que dar CML, no LIG.
+const FILLER = /^(liga|league|la|el|los|las|de|del|the)$/i;
+function emblemOf(name: string): string {
+  const words = name.split(/\s+/).filter((w) => w && !FILLER.test(w));
+  return (words[0] ?? name).slice(0, 3).toUpperCase();
+}
+
 type Season = { id: string; name: string; start_date: string | null; end_date: string | null };
 type League = { id: string; name: string; description: string | null; photo_url: string | null };
+type TopPlayer = {
+  id: string;
+  display_name: string;
+  elo_rating: number;
+  avatar_key: string | null;
+  avatar_url: string | null;
+  wins: number;
+};
 
 export default function LeagueDetailScreen({ route, navigation }: any) {
   const { leagueId } = route.params;
@@ -24,10 +41,12 @@ export default function LeagueDetailScreen({ route, navigation }: any) {
   const [memberCount, setMemberCount] = useState(0);
   const [tournamentCount, setTournamentCount] = useState(0);
   const [myRank, setMyRank] = useState<number | null>(null);
+  const [top, setTop] = useState<TopPlayer[]>([]);
   const [newSeason, setNewSeason] = useState('');
   const [creating, setCreating] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(true);
+
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -45,24 +64,41 @@ export default function LeagueDetailScreen({ route, navigation }: any) {
           .select('id, name, start_date, end_date')
           .eq('league_id', leagueId)
           .order('created_at', { ascending: false }),
-        supabase.from('league_members').select('player_id, players(elo_rating)').eq('league_id', leagueId),
+        supabase
+          .from('league_members')
+          .select('player_id, players(id, display_name, elo_rating, avatar_key, avatar_url)')
+          .eq('league_id', leagueId),
         supabase.from('tournaments').select('*', { count: 'exact', head: true }).eq('league_id', leagueId),
       ]);
 
-    setLoading(false);
     setLeague(leagueData ?? null);
     setRole((membership?.role as any) ?? null);
     setSeasons(seasonRows ?? []);
     setTournamentCount(tCount ?? 0);
 
-    const list = ((roster as any[]) ?? []).map((r) => ({
-      id: r.player_id,
-      elo: r.players?.elo_rating ?? 1000,
-    }));
+    const list = ((roster as any[]) ?? [])
+      .map((r) => r.players)
+      .filter(Boolean)
+      .sort((a: any, b: any) => (b.elo_rating ?? 0) - (a.elo_rating ?? 0));
+
     setMemberCount(list.length);
-    list.sort((a, b) => b.elo - a.elo);
-    const idx = list.findIndex((p) => p.id === playerId);
+    const idx = list.findIndex((p: any) => p.id === playerId);
     setMyRank(idx >= 0 ? idx + 1 : null);
+
+    // Las victorias se cuentan SOLO para los tres del podio. Contarlas para
+    // todos serían tantas consultas como miembros, y solo se muestran tres.
+    const podium = list.slice(0, 3);
+    const wins = await Promise.all(
+      podium.map((p: any) =>
+        supabase
+          .from('matches')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'confirmed')
+          .eq('winner_id', p.id)
+      )
+    );
+    setTop(podium.map((p: any, i: number) => ({ ...p, wins: wins[i].count ?? 0 })));
+    setLoading(false);
   }, [leagueId, playerId]);
 
   useFocusEffect(
@@ -113,48 +149,96 @@ export default function LeagueDetailScreen({ route, navigation }: any) {
     );
   }
 
+  // Cada liga tiene su color, el mismo de su portada. Dos ligas no se sienten
+  // la misma pantalla con otro nombre.
+  const accent = coverAccent(league.id);
+
+  // Ojo con las fechas SIN hora ("2026-05-14"): new Date() las interpreta como
+  // medianoche UTC, y en México eso cae el día anterior. Una temporada que
+  // empieza el 14 se mostraba como 13. Se arman a mano en hora local.
+  function fmt(d: string | null) {
+    if (!d) return null;
+    const [y, m, day] = d.slice(0, 10).split('-').map(Number);
+    if (!y || !m || !day) return new Date(d).toLocaleDateString();
+    return new Date(y, m - 1, day).toLocaleDateString();
+  }
+
   return (
     <Screen scroll padded={false}>
-      <View style={styles.headRow}>
-        <Pressable onPress={() => navigation.goBack()} hitSlop={8}>
+      {/* Portada a sangre: entras a la liga, no a su ficha. */}
+      <View>
+        <Cover id={league.id} photoUrl={league.photo_url} height={210} />
+
+        <Pressable style={styles.backOverCover} onPress={() => navigation.goBack()} hitSlop={8}>
           <Text style={styles.back}>‹</Text>
         </Pressable>
+
+        {role === 'organizer' && (
+          <Pressable
+            style={styles.coverEdit}
+            onPress={changeCover}
+            disabled={uploading}
+            hitSlop={8}
+          >
+            <Text style={styles.coverEditText}>{uploading ? '…' : '🖼️'}</Text>
+          </Pressable>
+        )}
+
+        {/* El emblema monta sobre la portada, como un escudo. */}
+        <View style={styles.emblemWrap} pointerEvents="none">
+          <Hex size={78} color={accent.neon} solid>
+            <Text style={styles.emblemText} numberOfLines={1}>
+              {emblemOf(league.name)}
+            </Text>
+          </Hex>
+        </View>
       </View>
 
       <View style={styles.pad}>
-        {/* La portada primero: entras a la liga, no a su ficha. */}
-        <View style={styles.cover}>
-          <Cover id={league.id} photoUrl={league.photo_url} height={160} />
-          {role === 'organizer' && (
-            <Pressable style={styles.coverBtn} onPress={changeCover} disabled={uploading} hitSlop={6}>
-              <Text style={styles.coverBtnText}>
-                {uploading ? 'Subiendo…' : league.photo_url ? '🖼️ Cambiar portada' : '🖼️ Poner portada'}
-              </Text>
-            </Pressable>
-          )}
-        </View>
-
         <View style={styles.hero}>
           <Text style={styles.title}>{league.name}</Text>
           {league.description ? <Text style={styles.desc}>{league.description}</Text> : null}
           {role && (
-            <Pill
-              label={role === 'organizer' ? 'Eres moderador' : 'Eres miembro'}
-              color={role === 'organizer' ? colors.streak : colors.blue}
-              align="center"
-            />
+            <View style={[styles.rolePill, { borderColor: accent.neon }]}>
+              <Text style={[styles.rolePillText, { color: accent.warm }]}>
+                {role === 'organizer' ? 'ERES MODERADOR' : 'ERES MIEMBRO'}
+              </Text>
+            </View>
           )}
         </View>
 
+        {/* Podio: la liga es su gente, no sus números. */}
+        {top.length >= 3 && (
+          <View style={styles.block}>
+            <SectionTitle
+              right={
+                <Pressable onPress={() => navigation.navigate('LeagueStandings', { leagueId })} hitSlop={6}>
+                  <Text style={[styles.topLink, { color: accent.warm }]}>Ver ranking completo ›</Text>
+                </Pressable>
+              }
+            >
+              ★ Top 3 jugadores
+            </SectionTitle>
+
+            <View style={styles.podium}>
+              <PodiumSlot player={top[1]} place={2} accent={accent} navigation={navigation} />
+              <PodiumSlot player={top[0]} place={1} accent={accent} navigation={navigation} />
+              <PodiumSlot player={top[2]} place={3} accent={accent} navigation={navigation} />
+            </View>
+          </View>
+        )}
+
         <Card style={styles.stats}>
-          <Stat label="Miembros" value={String(memberCount)} />
+          <Stat glyph="👥" label="Miembros" value={String(memberCount)} tint={accent.neon} />
           <View style={styles.vDiv} />
-          <Stat label="Torneos" value={String(tournamentCount)} />
+          <Stat glyph="🏆" label="Torneos" value={String(tournamentCount)} tint={accent.neon} />
           <View style={styles.vDiv} />
           <Stat
+            glyph="📊"
             label="Tu posición"
             value={myRank ? `#${myRank}` : '—'}
-            tint={myRank ? colors.blue : undefined}
+            tint={accent.neon}
+            strong={!!myRank}
           />
         </Card>
 
@@ -165,40 +249,27 @@ export default function LeagueDetailScreen({ route, navigation }: any) {
         )}
 
         <View style={styles.block}>
-          <Card
-            style={styles.link}
+          <LinkCard
+            glyph="🏆"
+            accent={accent.neon}
+            title="Torneos"
+            sub={`${tournamentCount} torneo${tournamentCount === 1 ? '' : 's'} en esta liga`}
             onPress={() => navigation.navigate('Tournaments', { leagueId, isOrganizer: role === 'organizer' })}
-          >
-            <Text style={styles.linkGlyph}>🏆</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.linkLabel}>Torneos</Text>
-              <Text style={styles.meta}>
-                {tournamentCount} torneo{tournamentCount === 1 ? '' : 's'} en esta liga
-              </Text>
-            </View>
-            <IconChevron />
-          </Card>
-
-          <Card style={styles.link} onPress={() => navigation.navigate('LeagueStandings', { leagueId })}>
-            <Text style={styles.linkGlyph}>📊</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.linkLabel}>Ranking de la liga</Text>
-              <Text style={styles.meta}>Posiciones y reporte</Text>
-            </View>
-            <IconChevron />
-          </Card>
-
-          <Card
-            style={styles.link}
+          />
+          <LinkCard
+            glyph="📊"
+            accent={accent.neon}
+            title="Ranking de la liga"
+            sub="Posiciones y reporte"
+            onPress={() => navigation.navigate('LeagueStandings', { leagueId })}
+          />
+          <LinkCard
+            glyph="⚖️"
+            accent={accent.neon}
+            title="Cuerpo de jueces"
+            sub="Quién aprueba los resultados de esta liga"
             onPress={() => navigation.navigate('Judges', { leagueId, title: league.name })}
-          >
-            <Text style={styles.linkGlyph}>⚖️</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.linkLabel}>Cuerpo de jueces</Text>
-              <Text style={styles.meta}>Quién aprueba los resultados de esta liga</Text>
-            </View>
-            <IconChevron />
-          </Card>
+          />
         </View>
 
         <View style={styles.block}>
@@ -208,31 +279,30 @@ export default function LeagueDetailScreen({ route, navigation }: any) {
               <Text style={type.soft}>Sin temporadas todavía.</Text>
             </Card>
           ) : (
-            seasons.map((s) => (
-              <Card
-                key={s.id}
-                style={styles.season}
-                onPress={() =>
-                  navigation.navigate('Ladder', { seasonId: s.id, leagueId, seasonName: s.name })
-                }
-              >
-                <Hex size={38} color={colors.blue}>
-                  <Text style={{ fontSize: 14 }}>📅</Text>
-                </Hex>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.name}>{s.name}</Text>
-                  <Text style={styles.meta}>
-                    {s.start_date
-                      ? `${new Date(s.start_date).toLocaleDateString()}${
-                          s.end_date ? ` – ${new Date(s.end_date).toLocaleDateString()}` : ''
-                        } · `
-                      : ''}
-                    Ver escalafón
-                  </Text>
-                </View>
-                <IconChevron />
-              </Card>
-            ))
+            seasons.map((s) => {
+              const from = fmt(s.start_date);
+              const to = fmt(s.end_date);
+              return (
+                <Card
+                  key={s.id}
+                  style={styles.season}
+                  onPress={() =>
+                    navigation.navigate('Ladder', { seasonId: s.id, leagueId, seasonName: s.name })
+                  }
+                >
+                  <View style={[styles.tile, { borderColor: accent.neon }]}>
+                    <Text style={styles.tileGlyph}>📅</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.name}>{s.name}</Text>
+                    <Text style={styles.meta}>
+                      {from ? `${from}${to ? ` – ${to}` : ''} · ` : ''}Ver escalafón
+                    </Text>
+                  </View>
+                  <IconChevron />
+                </Card>
+              );
+            })
           )}
 
           {role === 'organizer' &&
@@ -256,37 +326,199 @@ export default function LeagueDetailScreen({ route, navigation }: any) {
   );
 }
 
-function Stat({ label, value, tint }: { label: string; value: string; tint?: string }) {
+const MEDAL: Record<number, string> = { 1: colors.streak, 2: '#C3CDDD', 3: '#C77B45' };
+
+function PodiumSlot({
+  player,
+  place,
+  accent,
+  navigation,
+}: {
+  player?: TopPlayer;
+  place: number;
+  accent: { neon: string; warm: string };
+  navigation: any;
+}) {
+  if (!player) return <View style={{ flex: 1 }} />;
+  const first = place === 1;
+
+  return (
+    <Pressable
+      style={[styles.slot, first && styles.slotFirst, first && { borderColor: MEDAL[1] }]}
+      onPress={() => navigation.navigate('PlayerProfile', { playerId: player.id })}
+    >
+      {first && <Text style={styles.crown}>👑</Text>}
+
+      <View style={styles.slotAvatar}>
+        <Avatar
+          uri={player.avatar_url}
+          avatarKey={player.avatar_key}
+          size={first ? 68 : 54}
+          ring={MEDAL[place]}
+        />
+        <View style={[styles.place, { borderColor: MEDAL[place] }]}>
+          <Text style={[styles.placeText, { color: MEDAL[place] }]}>{place}</Text>
+        </View>
+      </View>
+
+      <Text style={[styles.slotName, first && styles.slotNameFirst]} numberOfLines={1}>
+        {player.display_name}
+      </Text>
+      <Text style={[styles.slotElo, { color: first ? MEDAL[1] : accent.warm }]}>
+        {Math.round(player.elo_rating).toLocaleString()} <Text style={styles.slotEloUnit}>ELO</Text>
+      </Text>
+      <Text style={styles.slotWins}>{player.wins} victorias</Text>
+    </Pressable>
+  );
+}
+
+function LinkCard({
+  glyph,
+  title,
+  sub,
+  accent,
+  onPress,
+}: {
+  glyph: string;
+  title: string;
+  sub: string;
+  accent: string;
+  onPress: () => void;
+}) {
+  return (
+    <Card style={styles.link} onPress={onPress}>
+      <View style={[styles.tile, { borderColor: accent }]}>
+        <Text style={styles.tileGlyph}>{glyph}</Text>
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.linkLabel}>{title}</Text>
+        <Text style={styles.meta}>{sub}</Text>
+      </View>
+      <IconChevron />
+    </Card>
+  );
+}
+
+function Stat({
+  glyph,
+  label,
+  value,
+  tint,
+  strong,
+}: {
+  glyph: string;
+  label: string;
+  value: string;
+  tint: string;
+  strong?: boolean;
+}) {
   return (
     <View style={styles.stat}>
-      <Text style={styles.statLabel}>{label.toUpperCase()}</Text>
-      <Text style={[styles.statVal, tint ? { color: tint } : null]}>{value}</Text>
+      <Text style={styles.statGlyph}>{glyph}</Text>
+      <View>
+        <Text style={styles.statLabel}>{label.toUpperCase()}</Text>
+        <Text style={[styles.statVal, strong ? { color: tint } : null]}>{value}</Text>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  headRow: { paddingHorizontal: space.xl, paddingTop: space.md },
-  back: { color: colors.ink, fontSize: 30, lineHeight: 32, width: 22 },
+  back: { color: colors.ink, fontSize: 30, lineHeight: 32 },
+  backOverCover: {
+    position: 'absolute',
+    top: space.md,
+    left: space.xl,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(4,6,12,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  coverEdit: {
+    position: 'absolute',
+    top: space.md,
+    right: space.xl,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(4,6,12,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  coverEditText: { fontSize: 15 },
+  emblemWrap: { position: 'absolute', bottom: -22, left: 0, right: 0, alignItems: 'center' },
+  emblemText: { fontSize: 17, fontWeight: '800', fontStyle: 'italic', color: colors.ink, letterSpacing: -0.5 },
+
   pad: { paddingHorizontal: space.xl },
-
-  cover: { borderRadius: radius.lg, overflow: 'hidden', marginTop: space.md },
-  coverBtn: { paddingVertical: space.md, alignItems: 'center', backgroundColor: colors.card },
-  coverBtnText: { color: colors.blue, fontSize: 12.5, fontWeight: '700' },
-  hero: { alignItems: 'center', gap: space.sm, paddingVertical: space.lg },
-  title: { ...type.display, fontSize: 24, textAlign: 'center' },
+  hero: { alignItems: 'center', gap: space.sm, paddingTop: space.xxl, paddingBottom: space.lg },
+  title: { ...type.display, fontSize: 26, textAlign: 'center' },
   desc: { fontSize: 12.5, color: colors.inkSoft, textAlign: 'center', lineHeight: 18 },
+  rolePill: {
+    borderWidth: 1,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.lg,
+    paddingVertical: 7,
+    marginTop: 2,
+  },
+  rolePillText: { fontSize: 10.5, fontWeight: '800', letterSpacing: 0.8 },
 
-  stats: { flexDirection: 'row', alignItems: 'center' },
-  stat: { flex: 1, alignItems: 'center', gap: 2 },
+  podium: { flexDirection: 'row', alignItems: 'flex-end', gap: space.sm },
+  slot: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 3,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.lg,
+    backgroundColor: colors.card,
+    paddingVertical: space.lg,
+    paddingHorizontal: space.sm,
+  },
+  slotFirst: { paddingVertical: space.xl, backgroundColor: colors.surface },
+  crown: { fontSize: 18, marginTop: -space.lg, marginBottom: 2 },
+  slotAvatar: { alignItems: 'center' },
+  place: {
+    position: 'absolute',
+    top: -4,
+    left: -8,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    backgroundColor: colors.bg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  placeText: { fontSize: 11, fontWeight: '800' },
+  slotName: { fontSize: 12.5, fontWeight: '800', fontStyle: 'italic', color: colors.ink, marginTop: 5 },
+  slotNameFirst: { fontSize: 14.5 },
+  slotElo: { fontSize: 13, fontWeight: '800' },
+  slotEloUnit: { fontSize: 9.5, fontWeight: '700', color: colors.inkSoft },
+  slotWins: { fontSize: 10.5, color: colors.inkSoft },
+
+  stats: { flexDirection: 'row', alignItems: 'center', marginTop: space.md },
+  stat: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.sm, justifyContent: 'center' },
+  statGlyph: { fontSize: 17 },
   statLabel: { fontSize: 8.5, fontWeight: '800', letterSpacing: 0.8, color: colors.inkDim },
   statVal: { fontSize: 17, fontWeight: '800', color: colors.ink },
-  vDiv: { width: 1, height: 28, backgroundColor: colors.line },
+  vDiv: { width: 1, height: 30, backgroundColor: colors.line },
 
   block: { marginTop: space.xxl, gap: space.sm },
+  topLink: { fontSize: 12, fontWeight: '700' },
   link: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  linkGlyph: { fontSize: 19, width: 26, textAlign: 'center' },
+  tile: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tileGlyph: { fontSize: 17 },
   linkLabel: { fontSize: 14.5, fontWeight: '700', color: colors.ink },
   season: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   name: { fontSize: 14, fontWeight: '700', color: colors.ink },

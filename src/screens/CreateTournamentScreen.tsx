@@ -29,7 +29,7 @@ import { createTournament, PhaseSpec } from '../lib/formatsRepo';
 // Por eso el armador pregunta un eje a la vez, en el orden en que el
 // organizador ya piensa: qué se juega → cómo se emparejan → a cuántos puntos.
 
-const STEPS = ['Identidad', 'Modalidad', 'Estructura', 'Puntos'] as const;
+const STEPS = ['Identidad', 'Dónde', 'Modalidad', 'Estructura', 'Puntos'] as const;
 
 export default function CreateTournamentScreen({ route, navigation }: any) {
   const { leagueId } = route.params;
@@ -42,7 +42,19 @@ export default function CreateTournamentScreen({ route, navigation }: any) {
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [mode, setMode] = useState<'ranking' | 'casual'>('ranking');
 
-  // Paso 2
+  // Paso 2 — dónde y cuándo
+  const [date, setDate] = useState('');
+  const [venues, setVenues] = useState<{ id: string; name: string; city: string | null }[]>([]);
+  const [venueId, setVenueId] = useState<string | null>(null);
+  const [newVenue, setNewVenue] = useState('');
+  const [newVenueCity, setNewVenueCity] = useState('');
+  const [addingVenue, setAddingVenue] = useState(false);
+  const [capacity, setCapacity] = useState<number | null>(32);
+  const [closesAt, setClosesAt] = useState('');
+  const [level, setLevel] = useState('Abierto');
+  const [prize, setPrize] = useState('');
+
+  // Paso 3
   const [combatMode, setCombatMode] = useState<CombatMode>('solo');
   const [deckOrder, setDeckOrder] = useState<'fixed' | 'blind'>('fixed');
 
@@ -67,6 +79,31 @@ export default function CreateTournamentScreen({ route, navigation }: any) {
       }
     })();
   }, [leagueId]);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from('venues').select('id, name, city').order('name');
+      setVenues((data as any) ?? []);
+    })();
+  }, []);
+
+  // La locación nueva se guarda en Locaciones, no suelta dentro del torneo:
+  // el mismo lugar sirve para el siguiente torneo y para el check-in por QR.
+  async function addVenue() {
+    if (newVenue.trim().length < 2) return;
+    const { data, error } = await supabase.rpc('create_venue_quick', {
+      p_name: newVenue.trim(),
+      p_city: newVenueCity.trim() || null,
+      p_address: null,
+    });
+    if (error) return Alert.alert('No se pudo crear la locación', error.message);
+    const { data: fresh } = await supabase.from('venues').select('id, name, city').order('name');
+    setVenues((fresh as any) ?? []);
+    setVenueId(data as any);
+    setNewVenue('');
+    setNewVenueCity('');
+    setAddingVenue(false);
+  }
 
   const applyRecommendation = useCallback(
     (playerCount: number, forMode: 'ranking' | 'casual') => {
@@ -123,6 +160,12 @@ export default function CreateTournamentScreen({ route, navigation }: any) {
         combat_mode: combatMode,
         deck_order: deckOrder,
         swiss_tiebreak: tiebreak,
+        starts_at: date ? new Date(`${date}T12:00:00`).toISOString() : null,
+        venue_id: venueId,
+        capacity,
+        registration_closes_at: closesAt ? new Date(`${closesAt}T23:59:00`).toISOString() : null,
+        level,
+        prize: prize.trim() || null,
         phases,
       });
 
@@ -212,6 +255,102 @@ export default function CreateTournamentScreen({ route, navigation }: any) {
 
         {step === 1 && (
           <View style={{ gap: space.md }}>
+            <Field
+              label="¿Qué día se juega?"
+              placeholder="2026-09-27"
+              value={date}
+              onChangeText={setDate}
+              hint="Formato año-mes-día."
+            />
+
+            <SectionTitle>¿Dónde?</SectionTitle>
+            {venues.length === 0 && !addingVenue && (
+              <Text style={styles.hint}>No hay locaciones registradas todavía.</Text>
+            )}
+            {venues.map((v) => (
+              <Pressable
+                key={v.id}
+                onPress={() => setVenueId(venueId === v.id ? null : v.id)}
+                style={[styles.opt, venueId === v.id && styles.optOn]}
+              >
+                <Text style={[styles.optName, venueId === v.id && styles.optNameOn]}>{v.name}</Text>
+                {v.city ? <Text style={styles.optDesc}>{v.city}</Text> : null}
+              </Pressable>
+            ))}
+
+            {addingVenue ? (
+              <Card style={{ gap: space.md }}>
+                <Field label="Nombre de la locación" placeholder="Arena Central" value={newVenue} onChangeText={setNewVenue} />
+                <Field label="Ciudad" placeholder="Guadalajara" value={newVenueCity} onChangeText={setNewVenueCity} />
+                <Text style={styles.hint}>
+                  Se guarda en Locaciones: sirve para el siguiente torneo y para el check-in por QR.
+                </Text>
+                <Button label="AGREGAR LOCACIÓN" onPress={addVenue} disabled={newVenue.trim().length < 2} />
+                <Button label="Cancelar" variant="ghost" onPress={() => setAddingVenue(false)} />
+              </Card>
+            ) : (
+              <Button label="＋  AGREGAR UNA LOCACIÓN NUEVA" variant="ghost" onPress={() => setAddingVenue(true)} />
+            )}
+
+            <SectionTitle>¿Cuántos caben?</SectionTitle>
+            <View style={styles.row}>
+              {[8, 16, 32, 64].map((n) => (
+                <Pressable
+                  key={n}
+                  onPress={() => setCapacity(n)}
+                  style={[styles.points, capacity === n && styles.optOn]}
+                >
+                  <Text style={[styles.pointsText, capacity === n && styles.optNameOn]}>{n}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <Pressable
+              onPress={() => setCapacity(null)}
+              style={[styles.opt, capacity === null && styles.optOn]}
+            >
+              <Text style={[styles.optName, capacity === null && styles.optNameOn]}>Sin límite</Text>
+              <Text style={styles.optDesc}>Entra quien llegue; no se cierra por cupo.</Text>
+            </Pressable>
+            {capacity !== null && (
+              <Text style={styles.hint}>
+                Al llegar a {capacity} inscritos, la app deja de aceptar inscripciones.
+              </Text>
+            )}
+
+            <Field
+              label="Cierre de inscripciones (opcional)"
+              placeholder="2026-09-25"
+              value={closesAt}
+              onChangeText={setClosesAt}
+              hint="Después de esa fecha ya nadie se puede inscribir."
+            />
+
+            <SectionTitle>Nivel</SectionTitle>
+            <View style={styles.row}>
+              {['Abierto', 'Principiantes', 'Avanzado'].map((l) => (
+                <Pressable
+                  key={l}
+                  onPress={() => setLevel(l)}
+                  style={[styles.opt, { flex: 1 }, level === l && styles.optOn]}
+                >
+                  <Text style={[styles.optName, level === l && styles.optNameOn]}>{l}</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <Field
+              label="Premio (opcional)"
+              placeholder="Trofeo + medallas para el top 3"
+              value={prize}
+              onChangeText={setPrize}
+            />
+
+            <Button label="SIGUIENTE" onPress={() => setStep(2)} />
+          </View>
+        )}
+
+        {step === 2 && (
+          <View style={{ gap: space.md }}>
             <SectionTitle>¿Cuántas peonzas trae cada quien?</SectionTitle>
             {COMBAT_MODES.map((m) => (
               <Pressable
@@ -251,11 +390,11 @@ export default function CreateTournamentScreen({ route, navigation }: any) {
               </>
             )}
 
-            <Button label="SIGUIENTE" onPress={() => setStep(2)} />
+            <Button label="SIGUIENTE" onPress={() => setStep(3)} />
           </View>
         )}
 
-        {step === 2 && (
+        {step === 3 && (
           <View style={{ gap: space.md }}>
             <Field
               label="¿Cuántos van a jugar?"
@@ -355,11 +494,11 @@ export default function CreateTournamentScreen({ route, navigation }: any) {
               </>
             )}
 
-            <Button label="SIGUIENTE" onPress={() => setStep(3)} disabled={phases.length === 0} />
+            <Button label="SIGUIENTE" onPress={() => setStep(4)} disabled={phases.length === 0} />
           </View>
         )}
 
-        {step === 3 && (
+        {step === 4 && (
           <View style={{ gap: space.md }}>
             <SectionTitle>Meta de puntos por fase</SectionTitle>
             <Text style={styles.hint}>

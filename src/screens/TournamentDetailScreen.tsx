@@ -101,11 +101,12 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
     load();
   }
 
+  // Por RPC y no por insert directo: el cupo se hace valer en el servidor, con
+  // la fila del torneo bloqueada. Contando desde la app, dos personas que tocan
+  // "Inscribirme" a la vez con un solo lugar libre entrarían las dos.
   async function register() {
-    const { error } = await supabase
-      .from('tournament_registrations')
-      .insert({ tournament_id: tournamentId, player_id: playerId });
-    if (error) return Alert.alert('Error', error.message);
+    const { error } = await supabase.rpc('register_for_tournament', { p_tournament_id: tournamentId });
+    if (error) return Alert.alert('No te pudimos inscribir', error.message);
     load();
   }
 

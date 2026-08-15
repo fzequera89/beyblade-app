@@ -49,6 +49,13 @@ export type TournamentSpec = {
   deck_order: 'fixed' | 'blind';
   swiss_tiebreak: SwissTiebreak;
   photo_url?: string | null;
+  starts_at?: string | null;
+  venue_id?: string | null;
+  /** null = sin límite: entra quien llegue. */
+  capacity?: number | null;
+  registration_closes_at?: string | null;
+  level?: string | null;
+  prize?: string | null;
   phases: PhaseSpec[];
 };
 
@@ -63,6 +70,12 @@ export async function createTournament(spec: TournamentSpec): Promise<string> {
       deck_order: spec.deck_order,
       swiss_tiebreak: spec.swiss_tiebreak,
       photo_url: spec.photo_url ?? null,
+      starts_at: spec.starts_at ?? null,
+      venue_id: spec.venue_id ?? null,
+      capacity: spec.capacity ?? null,
+      registration_closes_at: spec.registration_closes_at ?? null,
+      level: spec.level ?? null,
+      prize: spec.prize ?? null,
     })
     .select('id')
     .single();

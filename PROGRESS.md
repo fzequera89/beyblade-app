@@ -237,11 +237,36 @@ código de salida real y el bundle compila.
 
 ### ✅ Round robin por categoría, torneo inicial G3 y deck 3+1 — CONSTRUIDO (0039 y 0040, 2026-08-15)
 
-⚠️ **LAS MIGRACIONES 0039 Y 0040 NO ESTÁN CORRIDAS.** El `SUPABASE_ACCESS_TOKEN`
-del entorno sigue siendo el de la otra cuenta (403 comprobado hoy), así que hay
-que pegarlas en el SQL Editor de Supabase, en orden. **Hasta que corran, la app
-funciona igual pero estas funciones nuevas dan error al usarlas** (el resto de
-la pantalla no se cae: el deck se consulta dentro de un try).
+✅ **0039, 0040 y 0041 CORRIDAS Y VERIFICADAS CONTRA LA BASE** (2026-08-15, con
+un token de Management API de la cuenta `fzequera89` que dio Farid). Ya no hace
+falta el SQL Editor: con ese token, `POST /v1/projects/<ref>/database/query`
+corre migraciones y consultas.
+
+**Cómo se verificó, que es lo interesante para la próxima vez:** se puede probar
+el flujo COMPLETO sin app y sin sesión real, impersonando dentro de una
+transacción que termina en `rollback` — no queda rastro en producción:
+
+```sql
+begin;
+  -- montaje como postgres (salta RLS)
+  set local role authenticated;
+  set local request.jwt.claims = '{"sub":"<auth_user_id>","role":"authenticated"}';
+  select mi_funcion(...);   -- ahora auth.uid() devuelve ese usuario
+rollback;
+```
+
+Resultados reales de esa prueba:
+- `enroll_season_in_tournament` + `tournament_category_groups` sobre 6 jugadores
+  sembrados en dos categorías → devolvió **Oro 3 / Bronce 3**, agrupado por tier.
+- `seed_season_from_tournament` sobre el bracket de 8 ya jugado de los datos demo
+  → colocó **campeón 1º, finalista 2º, semifinalistas 3º y 4º**, y el resto por
+  diferencia de puntos. Es exactamente "hasta dónde llegó".
+- `save_deck_card`: el deck legal guardó sus 3 combos y `lock_tournament_decks`
+  lo dejó bloqueado; el deck con **"Flat" y "flat"** fue rechazado ("repite 1
+  pieza"), o sea que la normalización funciona; y 2 combos donde pide 3 también
+  se rechazó.
+- La RLS de `season_standings` rechazó un insert directo hecho como
+  `authenticated` — la tabla sigue siendo escribible solo por función.
 
 **0039 — el torneo de ranking del reglamento:**
 - Fase nueva `category_rr`: todos contra todos **dentro de cada categoría**. El
@@ -296,6 +321,27 @@ han corrido.
 > `react-native-svg` ("rect attribute height: a negative value is not valid")
 > durante el primer layout. Se comprobó que **ya estaban en `main` antes de este
 > trabajo** y que **no aparecen en producción**; el DOM final es válido.
+
+
+### 🔒 0041 — otra vez: las funciones nuevas nacieron abiertas a PUBLIC (2026-08-15)
+
+Al verificar la 0039 se encontró que **un anónimo con la anon key podía ejecutar
+`tournament_category_groups`** y leer los grupos por categoría de cualquier
+torneo. Las otras cuatro se defienden solas (piden `auth.uid()`), pero esa es un
+`select` `security definer` sin comprobación.
+
+**Es la misma causa de la 0023 y volvió a pasar:** en Postgres una función nueva
+le da EXECUTE a **PUBLIC** por defecto. Se vio en `proacl` como `=X/postgres`
+(grantee vacío = PUBLIC). El `alter default privileges` que dejó la 0023 no
+cubrió estas, creadas por la Management API.
+
+La 0041 revoca a `public` y a `anon` en las cinco y re-otorga a `authenticated`.
+**Verificado después de correrla:** las cinco devuelven `42501 permission denied`
+a la anon key, y `deck_cards` / `deck_card_combos` devuelven vacío sin sesión.
+
+**La regla, otra vez:** toda función nueva necesita `revoke execute ... from
+public, anon` ADEMÁS del `grant ... to authenticated`. Grantear no quita lo de
+PUBLIC.
 
 ### Reglamento extraído (referencia, para no releer el .docx)
 
@@ -727,8 +773,7 @@ producción monta sin errores. **Sin datos de temporada reales**, así que el VP
 acumulándose de combates de verdad sigue sin probarse punta a punta.
 
 **LO QUE SIGUE:**
-1. **Correr la 0039 y la 0040 en el SQL Editor** (en ese orden). Es lo único que separa al escalafón completo de estar en vivo.
-2. QA con sesión iniciada del flujo completo, ya con todo construido: crear el torneo de la temporada desde el escalafón → check-in → generar rondas por categoría → reportar y aprobar → ver moverse la tabla, el VP local y el interclubes.
+1. QA **desde la app, con dos cuentas**: crear el torneo de la temporada desde el escalafón → check-in → generar rondas por categoría → reportar → doble marca → aprobar como juez → ver moverse ELO, tabla local, VP e interclubes. La base ya está probada punta a punta (ver arriba); lo que falta es la interfaz con dedos de verdad, y **dos cuentas**, porque quien reporta no puede aprobar su propio resultado.
 3. Lo que no puede cerrar un agente: **notificaciones push** y **date picker** (los dos exigen dependencia nativa + dev client, contra la decisión 2/9 de este documento), **OAuth de Google**, `is_admin` al correo del cliente, cuentas de tienda, íconos/capturas/política de privacidad.
 4. Paginación de listas: hoy todo carga completo. A escala de liga regional aguanta.
 
@@ -740,7 +785,7 @@ acumulándose de combates de verdad sigue sin probarse punta a punta.
 
 1. `git clone` / `git pull` del repo.
 2. Copiar `.env.example` a `.env` y llenar `EXPO_PUBLIC_SUPABASE_URL` y `EXPO_PUBLIC_SUPABASE_ANON_KEY` (Supabase → Settings → API del proyecto "CML Beyblade").
-3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-15 las 0001–0038 están corridas y verificadas contra la base; la 0039 y la 0040 están escritas y SIN CORRER** (0036 = portadas de eventos y clubes; 0037 = tabla local por victorias + escala VP 5/4/3/2/1; 0038 = Ranking Unificado Interclubes) — si se agrega una nueva, actualizar esta línea.
+3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-15 las 0001–0041 están corridas y verificadas contra la base** (0036 = portadas de eventos y clubes; 0037 = tabla local por victorias + escala VP 5/4/3/2/1; 0038 = Ranking Unificado Interclubes) — si se agrega una nueva, actualizar esta línea.
 4. `npm install`, luego `npm run web` para verificar rápido en el preview del navegador (no requiere emulador Android).
 5. Para un build real: `npx eas-cli build --platform android --profile preview --non-interactive` (requiere `eas login` ya hecho en la máquina).
 

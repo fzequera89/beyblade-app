@@ -602,10 +602,46 @@ y ya no por `vp` (comprobado con `pg_get_functiondef`), el bundle compila y
 producción monta sin errores. Sin datos de temporada sembrados, así que la tabla
 con jugadores reales sigue sin probarse.
 
+### ✅ Ranking Unificado Interclubes — SEGUNDA MITAD, CONSTRUIDO (commit `d61eaac`, migración 0038, 2026-08-15)
+
+El VP dejó de ordenar la tabla local en 0037; aquí gana su lugar propio. El
+cliente confirmó **escala 5/4/3/2/1** y **"ya hazlo"** al interclubes completo.
+
+**Ahora hay cuatro medidas de posición, y conviene no confundirlas:**
+| | ELO | Tabla local (0037) | Interclubes (0038) |
+|---|---|---|---|
+| Mide | habilidad | posición en 1 liga | VP unificados |
+| Alcance | global | 1 liga/temporada | TODAS las ligas/ciudades |
+| Ordena por | rating | victorias | VP |
+| Reset | nunca | 3 meses (temporada) | ~6 meses (periodo) |
+
+- **0038** (CORRIDA y verificada): `interclub_periods` (siempre uno vigente,
+  índice único lo garantiza) + `interclub_standings` (VP global por jugador y
+  periodo). `apply_vp_for_match` ahora acredita al periodo vigente **además** de
+  la tabla local (un combate suma a las dos cuentas). `interclub_ranking_ordered
+  (p_period_id default null→vigente)` ordena por VP → dif. puntos →
+  enfrentamiento directo → antigüedad (`first_at`) → alfabético. `current_
+  interclub_period()` y `reset_interclub_ranking(label)` (solo admin: cierra el
+  vigente y abre otro; el histórico se conserva por periodo).
+- **`InterclubScreen`**: periodo vigente, líder destacado, tu posición, tabla con
+  récord G–P y VP. Se llega desde `RankingsScreen` (tarjeta 🏅, NO como scope de
+  ELO — son sistemas distintos). Registrada en la pila de Rankings.
+
+**Decisiones que tomé (ver cabecera de 0038):** el VP de un combate usa la
+categoría del jugador en ESA liga; solo puntúan combates de ranking con
+temporada; el periodo se reinicia a mano (como el cierre de temporada de 0031);
+antigüedad = primer combate que puntuó en el periodo.
+
+**Verificado:** `interclub_ranking_ordered` ordena por VP con datos reales de
+prueba (insertados y limpiados), `apply_vp_for_match` ya escribe al interclubes
+(`pg_get_functiondef`), periodo sembrado, typecheck limpio, bundle compila,
+producción monta sin errores. **Sin datos de temporada reales**, así que el VP
+acumulándose de combates de verdad sigue sin probarse punta a punta.
+
 **LO QUE SIGUE:**
-1. Ranking Unificado Interclubes completo (VP cruzando ligas/ciudades + pantalla + periodo).
-2. QA con sesión iniciada del flujo de torneo completo y del hub.
-3. Completar el escalafón: round robin por categoría, UI de cierre de temporada, torneo inicial G3.
+1. QA con sesión iniciada del flujo completo (torneo → VP local + interclubes) y del hub.
+2. Completar el escalafón: round robin por categoría, UI de cierre de temporada, torneo inicial G3.
+3. Portadas de eventos/clubes ya están; falta solo pulido y publicación en tiendas.
 
 **Correr migraciones sin pegarlas a mano:** el `SUPABASE_ACCESS_TOKEN` del entorno es de OTRA cuenta y no ve este proyecto. Con un token de la cuenta `fzequera89` sí se puede, vía Management API:
 `POST https://api.supabase.com/v1/projects/vgffwqmpiunxzmlfmtyo/database/query` con `{"query": "..."}`.
@@ -615,7 +651,7 @@ con jugadores reales sigue sin probarse.
 
 1. `git clone` / `git pull` del repo.
 2. Copiar `.env.example` a `.env` y llenar `EXPO_PUBLIC_SUPABASE_URL` y `EXPO_PUBLIC_SUPABASE_ANON_KEY` (Supabase → Settings → API del proyecto "CML Beyblade").
-3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-15 las 0001–0037 están corridas y verificadas contra la base** (0036 = portadas de eventos y clubes; 0037 = tabla local por victorias + escala VP 5/4/3/2/1) — si se agrega una nueva, actualizar esta línea.
+3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-15 las 0001–0038 están corridas y verificadas contra la base** (0036 = portadas de eventos y clubes; 0037 = tabla local por victorias + escala VP 5/4/3/2/1; 0038 = Ranking Unificado Interclubes) — si se agrega una nueva, actualizar esta línea.
 4. `npm install`, luego `npm run web` para verificar rápido en el preview del navegador (no requiere emulador Android).
 5. Para un build real: `npx eas-cli build --platform android --profile preview --non-interactive` (requiere `eas login` ya hecho en la máquina).
 

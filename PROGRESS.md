@@ -514,10 +514,41 @@ pantallas reproducen los mockups elemento por elemento. **Sin probar con sesión
 iniciada** (los jugadores demo tienen `auth_user_id` nulo): el flujo completo
 desde la UI logueada sigue pendiente de la fase de QA.
 
+### ✅ El hub de Batallas usa los lobbies ricos (commit `063ba08`, 2026-08-15)
+
+**El bug que reportó Farid:** las sub-pestañas **Batallas → Torneos** y
+**Batallas → Ligas** se veían "sin cambios" (tarjetas simples) aunque el resto de
+la app sí. Causa: los lobbies ricos se habían construido como pantallas aparte
+(`TournamentsScreen`, `LeaguesScreen`) a las que el hub NO llegaba —
+`BattlesScreen` renderizaba sus propias listas viejas. No era caché ni deploy:
+faltó conectar el hub con los diseños nuevos.
+
+- **Componentes compartidos nuevos** (filosofía `src/ui/`, un solo lugar por
+  entidad): `src/ui/LeagueCard.tsx` (escudo hexagonal, ADMIN/MODERADOR según
+  **dueño real** vía `leagues.owner_player_id`, MiniStats miembros/torneos/tu
+  posición) y `src/ui/tournamentCards.tsx` (`HeroCard`, `RowCard`, `byRelevance`,
+  `attachChampions`). `LeaguesScreen` y `TournamentsScreen` se refactorizaron para
+  consumirlos — dejaron de tener su copia local del markup.
+- **Batallas → Torneos:** filtros TODOS/ABIERTOS/COMPLETADOS + HeroCard +
+  RowCard, **global** (todos los torneos, con la liga como subtítulo), inscritos,
+  cuenta regresiva y campeón en los terminados.
+- **Batallas → Ligas:** `LeagueCard` con "Mis ligas" + Explorar y los stats
+  calculados (posición sobre el rating global, decisión 7).
+
+**Regla para lo que venga:** hay DOS alcances de estos lobbies —el del hub
+(global) y el de pantalla propia (`TournamentsScreen` por-liga, `LeaguesScreen`
+todas). Ambos comparten `LeagueCard`/`tournamentCards`: tocar la tarjeta en un
+lado la cambia en los dos. Es a propósito.
+
+**Verificado (2026-08-15):** typecheck limpio con código de salida real, el bundle
+compila, producción sirve el bundle nuevo y la app monta sin errores de consola.
+**Sin probar con sesión iniciada** (falta cuenta de prueba): el render logueado de
+las dos sub-pestañas sigue pendiente de QA.
+
 **LO QUE SIGUE:**
 1. Portadas de eventos y clubes (~5x), mismo patrón de portada que ligas/torneos.
 2. Partir VP local vs. interclubes (⚠️ ver decisión de arriba: 0030 los juntó).
-3. QA con sesión iniciada del flujo de torneo completo.
+3. QA con sesión iniciada del flujo de torneo completo y del hub.
 
 **Correr migraciones sin pegarlas a mano:** el `SUPABASE_ACCESS_TOKEN` del entorno es de OTRA cuenta y no ve este proyecto. Con un token de la cuenta `fzequera89` sí se puede, vía Management API:
 `POST https://api.supabase.com/v1/projects/vgffwqmpiunxzmlfmtyo/database/query` con `{"query": "..."}`.

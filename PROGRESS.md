@@ -1,6 +1,6 @@
 # Beyblade League App — Estado del proyecto
 
-> Última actualización: 2026-08-14. Este archivo es la fuente de verdad para retomar el proyecto desde cualquier máquina/sesión — está versionado en git, a diferencia de las notas de memoria de Claude Code (que solo viven localmente en la PC donde se desarrolló).
+> Última actualización: 2026-08-15. Este archivo es la fuente de verdad para retomar el proyecto desde cualquier máquina/sesión — está versionado en git, a diferencia de las notas de memoria de Claude Code (que solo viven localmente en la PC donde se desarrolló).
 
 **Este documento cubre el ESTADO del proyecto.** Para lo demás:
 > - [`README.md`](README.md) — qué es, cómo correrlo, arquitectura y modelo de seguridad
@@ -457,6 +457,42 @@ que resuelve es la que cuenta.
 
 **Sin probar con datos reales.** Verificado: typecheck limpio con el código de
 salida real, el bundle compila (756 módulos) y la app monta sin errores de consola.
+
+### ✅ Formatos de torneo y rediseño visual (2026-08-15)
+
+**Migraciones 0032–0035, TODAS CORRIDAS Y VERIFICADAS** (por Management API, ver abajo).
+
+- **0032** — administrador: conviven `dmlbeybladereynosa@gmail.com` (cuenta del cliente) y la de desarrollo. **La del cliente todavía NO existe**: cero registros en `auth.users`. La migración es re-ejecutable; correrla otra vez cuando el cliente cree su cuenta.
+- **0033** — `tournament_phases`, y en `tournaments`: `combat_mode`, `deck_order`, `swiss_tiebreak`, `photo_url`. En `matches`: `phase_id`, `block_number`, `bracket_side`. Los torneos viejos recibieron una fase de eliminación simple para no quedarse sin estructura.
+- **0034** — `leagues.photo_url` y bucket `covers` (rutas por tipo: `league/`, `tournament/`…). Las portadas de torneo estaban yendo al bucket `venues` por reaprovechar código.
+- **0035** — `starts_at`, `venue_id`, `capacity` (NULL = sin límite), `registration_closes_at`, `level`, `prize`; más `register_for_tournament` y `create_venue_quick`.
+
+**Motor de emparejamiento (`src/lib/formats.ts`)** — funciones PURAS, sin base ni red: todos contra todos, grupos, suizo, eliminación simple y doble, siembra, byes y top cut. **`npm run test:formats` corre 58 comprobaciones**, incluidas simulaciones de torneos completos de doble eliminación de 4 a 16 jugadores. **Correrlo antes de tocar ese archivo.** La simulación encontró un fallo que la lectura no veía: en doble eliminación el finalista de arriba desaparecía mientras abajo seguían jugando.
+
+Suizo con los DOS desempates que pidió el cliente: `dml` (diferencia de puntos → enfrentamiento directo) y `opponents` (fuerza de rivales, Buchholz/OMW%).
+
+**`src/lib/formatsRepo.ts`** conecta el motor con la base. El estado de la doble eliminación se DEDUCE de las derrotas, no se guarda: un estado guardado se desincroniza en cuanto un juez corrige un resultado. Solo cuentan los resultados confirmados.
+
+**Decisiones del cliente ya cerradas (2026-08-15):**
+- Ranking local: **victorias primero**, puntos como desempate. Los VP (Challenger 5, Diamante/Platino 4, Oro/Plata 3, Bronce/Hierro 2, Porcelana 1) son **solo del interclubes**, no de la tabla local. ⚠️ 0030 construyó los VP como si fueran la tabla local: **hay que partirlo en dos**.
+- **Ciudades/interclubes: van ahora**, ya existen ligas en otras ciudades.
+- Formatos: deben cubrir 1v1, 3v3, 5G, stock, eliminación simple y doble, suizo con top cut. Armador guiado.
+- **Cupo real** (bloquea al llenarse) con opción sin límite. **Sede desde las locaciones existentes**, con opción de crear una nueva que queda guardada en Locaciones.
+- **Regla visual permanente:** todo lo que se crea (ligas, torneos, eventos, clubes) lleva portada. "Solo cuando suma y no resta": nada decorativo que empuje el contenido útil.
+
+**Pantallas rehechas y aprobadas por Farid:** detalle de liga (portada a sangre, escudo, podio top 3, color propio por liga), lobby de ligas (tarjeta horizontal con escudo), ranking de liga (mismo modelo que el ranking general). Cada liga usa **su** color, derivado de su id vía `coverAccent()` — el mismo de su portada dibujada.
+
+Dos errores que solo aparecieron al probar con nombres reales: el escudo daba "LIG" para "Liga CML Central" (la palabra "liga" la llevan todas), y "CML Central" y "CML Norte" daban el mismo escudo. Ahora son dos renglones (`src/lib/emblem.ts`). Y las fechas SIN hora (`2026-05-14`) se leían como UTC y en México retrocedían un día.
+
+**LO QUE SIGUE (~22x), con mockups ya aprobados por Farid:**
+1. **Lobby de torneos** — filtros TODOS/ABIERTOS/COMPLETADOS, tarjeta destacada con cuenta regresiva ("FALTAN 12 DÍAS") y barra de cierre de inscripciones, lista con escudo hexagonal, campeón en los terminados, banner "¿Organizas torneos?".
+2. **Detalle de torneo** — pestañas RESUMEN/JUGADORES/BRACKET/INFORMACIÓN, check-in con QR, lista de inscritos con "TU POSICIÓN", tarjeta de premio.
+3. **Avance de fases** — el detalle todavía NO sabe generar la ronda siguiente ni mostrar la tabla por fase. `generatePhaseRound()` ya existe en formatsRepo y está sin usar. **Sin esto no se puede jugar un torneo completo.**
+4. Portadas de eventos y clubes (~5x), mismo patrón.
+
+**Correr migraciones sin pegarlas a mano:** el `SUPABASE_ACCESS_TOKEN` del entorno es de OTRA cuenta y no ve este proyecto. Con un token de la cuenta `fzequera89` sí se puede, vía Management API:
+`POST https://api.supabase.com/v1/projects/vgffwqmpiunxzmlfmtyo/database/query` con `{"query": "..."}`.
+⚠️ **Con `curl`, no con Python**: el endpoint responde 403 de Cloudflare al agente de urllib.
 
 ## Cómo retomar el proyecto (checklist para una sesión nueva)
 

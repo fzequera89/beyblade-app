@@ -200,9 +200,21 @@ rango, tu posición destacada arriba, y para la organización el botón de abrir
 reto de ascenso sobre el 1º de cada categoría y el de reorganizar divisiones.
 Se llega tocando una temporada en el detalle de liga.
 
-**Lo que falta de este bloque:** el round robin por categoría (hoy el bracket
-sigue siendo eliminación directa), la UI para cerrar temporada (la función
-existe pero necesita un selector de temporada destino), y el torneo inicial G3.
+**Lo que falta de este bloque:** ~~la UI para cerrar temporada~~ ✅ hecha
+(`LadderScreen`, commit `30ae233`, 2026-08-15): la organización elige una
+temporada destino ya creada y cierra; conserva categorías, reinicia
+posiciones/VP/marcadores, cuenta títulos y reingresa inactivos a Porcelana.
+Siguen pendientes el **round robin por categoría** (hoy el bracket sigue siendo
+eliminación directa) y el **torneo inicial G3**.
+
+⚠️ **ESLABÓN FALTANTE encontrado el 2026-08-15:** `CreateTournamentScreen` **nunca
+fija `tournaments.season_id`**, y `apply_vp_for_match` solo puntúa combates cuyo
+torneo tiene `season_id`. O sea: **hoy ningún torneo creado desde la app alimenta
+el escalafón ni el VP** — el QA de VP funcionó porque el combate de prueba se ató
+a mano a una temporada. Antes (o dentro) del round robin por categoría hay que
+**conectar torneo↔temporada en la UI** (elegir temporada al crear un torneo de
+ranking, o generar el round robin desde el escalafón creando el torneo atado).
+Es un pedido de decisión al cliente sobre por dónde entra esa conexión.
 
 **Sin probar con datos reales.** Verificado: 0030 y 0031 corridas y comprobadas
 contra la base (catálogo con los 8 tiers, las 3 tablas, las 9 funciones, las

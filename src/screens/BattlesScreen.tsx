@@ -1,28 +1,36 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import Screen from '../ui/Screen';
 import Avatar from '../ui/Avatar';
-import { Card, Pill, Hex, SectionTitle } from '../ui/primitives';
-import Cover from '../ui/Cover';
-import { COMBAT_MODES } from '../lib/formats';
+import { Card, Pill, SectionTitle, Tabs } from '../ui/primitives';
+import LeagueCard, { LeagueCardData } from '../ui/LeagueCard';
+import {
+  HeroCard,
+  RowCard,
+  byRelevance,
+  attachChampions,
+  Filter,
+  Tournament,
+} from '../ui/tournamentCards';
 import { IconChevron, IconSwords } from '../ui/icons';
 import { colors, space, type, radius, glow } from '../theme';
 
 // Centro competitivo. Todo lo que se juega vive aquí: lo que tienes pendiente,
 // los retos, los torneos y tus ligas. Antes estaba repartido entre tres pestañas
 // y los torneos quedaban a cuatro toques, escondidos detrás de la liga.
+//
+// Torneos y Ligas usan las MISMAS tarjetas ricas que sus lobbies propios
+// (ui/tournamentCards, ui/LeagueCard). La diferencia es el alcance: aquí es
+// global —todos los torneos, todas mis ligas—, no una liga a la vez.
 
 type Tab = 'jugar' | 'torneos' | 'ligas';
 
-// La modalidad se muestra solo si NO es la de siempre: decir "1 vs 1" en cada
-// tarjeta cuando casi todos lo son es ruido.
-function combatLabel(mode?: string | null): string | null {
-  if (!mode || mode === 'solo') return null;
-  return COMBAT_MODES.find((m) => m.key === mode)?.label ?? null;
-}
+// El torneo del hub carga además a qué liga pertenece: la lista es global, así
+// que la liga es el dato que ubica cada torneo.
+type HubTournament = Tournament & { league_id: string; leagueName: string | null; isOrganizer: boolean };
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'jugar', label: 'Por jugar' },
@@ -31,13 +39,14 @@ const TABS: { key: Tab; label: string }[] = [
 ];
 
 export default function BattlesScreen({ navigation }: any) {
-  const { playerId } = useAuth();
+  const { playerId, isAdmin } = useAuth();
   const [tab, setTab] = useState<Tab>('jugar');
+  const [torneoFilter, setTorneoFilter] = useState<Filter>('todos');
 
   const [pending, setPending] = useState<any[]>([]);
   const [received, setReceived] = useState<any[]>([]);
-  const [tournaments, setTournaments] = useState<any[]>([]);
-  const [leagues, setLeagues] = useState<any[]>([]);
+  const [tournaments, setTournaments] = useState<HubTournament[]>([]);
+  const [leagues, setLeagues] = useState<LeagueCardData[]>([]);
   const [isJudge, setIsJudge] = useState(false);
   const [disputeCount, setDisputeCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -65,12 +74,14 @@ export default function BattlesScreen({ navigation }: any) {
           .order('created_at', { ascending: false }),
         supabase
           .from('tournaments')
-          .select('id, name, status, league_id, photo_url, combat_mode, leagues(name), tournament_registrations(count)')
+          .select(
+            'id, name, status, league_id, mode, photo_url, combat_mode, created_at, starts_at, registration_closes_at, capacity, level, prize, venues(name, city), leagues(name), tournament_registrations(count)'
+          )
           .order('created_at', { ascending: false })
-          .limit(20),
+          .limit(50),
         supabase
           .from('league_members')
-          .select('league_id, role, leagues(id, name, description, photo_url)')
+          .select('league_id, role, leagues(id, name, description, photo_url, owner_player_id)')
           .eq('player_id', playerId),
       ]);
 
@@ -94,10 +105,93 @@ export default function BattlesScreen({ navigation }: any) {
       ((challenges as any[]) ?? []).filter((c) => c.match && c.match.status !== 'confirmed')
     );
     setReceived((incoming as any) ?? []);
-    setTournaments((tours as any) ?? []);
-    setLeagues((memberships as any) ?? []);
+
+    // ── Torneos (global): las mismas tarjetas del lobby, pero de todas las ligas ──
+    const myLeagueRole = new Map<string, string>(
+      ((memberships as any[]) ?? []).map((m) => [m.league_id, m.role])
+    );
+    const { data: myRegs } = await supabase
+      .from('tournament_registrations')
+      .select('tournament_id')
+      .eq('player_id', playerId);
+    const mineSet = new Set(((myRegs as any[]) ?? []).map((r) => r.tournament_id));
+
+    const tRows: HubTournament[] = ((tours as any[]) ?? []).map((t) => ({
+      id: t.id,
+      name: t.name,
+      status: t.status,
+      mode: t.mode,
+      photo_url: t.photo_url,
+      combat_mode: t.combat_mode,
+      created_at: t.created_at,
+      starts_at: t.starts_at,
+      registration_closes_at: t.registration_closes_at,
+      capacity: t.capacity,
+      level: t.level,
+      prize: t.prize,
+      venues: Array.isArray(t.venues) ? t.venues[0] ?? null : t.venues ?? null,
+      registered: t.tournament_registrations?.[0]?.count ?? 0,
+      mine: mineSet.has(t.id),
+      champion: null,
+      league_id: t.league_id,
+      leagueName: (Array.isArray(t.leagues) ? t.leagues[0]?.name : t.leagues?.name) ?? null,
+      // Puedes administrar el torneo si eres admin o moderador de su liga.
+      isOrganizer: isAdmin || myLeagueRole.get(t.league_id) === 'organizer',
+    }));
+    await attachChampions(tRows);
+    tRows.sort(byRelevance);
+    setTournaments(tRows);
+
+    // ── Mis ligas (con stats), las mismas tarjetas del lobby de Ligas ──
+    const myLeagues = ((memberships as any[]) ?? []).map((m) => ({
+      ...(Array.isArray(m.leagues) ? m.leagues[0] : m.leagues),
+      role: m.role,
+    }));
+    const myLeagueIds = myLeagues.map((l) => l.id).filter(Boolean);
+    if (myLeagueIds.length > 0) {
+      const [{ data: rosters }, { data: tourneys }] = await Promise.all([
+        supabase.from('league_members').select('league_id, player_id, players(elo_rating)').in('league_id', myLeagueIds),
+        supabase.from('tournaments').select('league_id').in('league_id', myLeagueIds),
+      ]);
+
+      // La posición en cada liga se calcula sobre el rating GLOBAL de sus
+      // miembros: no hay un ELO por liga (decisión 7 de PROGRESS.md).
+      const byLeague = new Map<string, { player_id: string; elo: number }[]>();
+      for (const row of ((rosters as any[]) ?? [])) {
+        const list = byLeague.get(row.league_id) ?? [];
+        list.push({ player_id: row.player_id, elo: row.players?.elo_rating ?? 1000 });
+        byLeague.set(row.league_id, list);
+      }
+      const tourCount = new Map<string, number>();
+      for (const t of ((tourneys as any[]) ?? [])) {
+        tourCount.set(t.league_id, (tourCount.get(t.league_id) ?? 0) + 1);
+      }
+
+      const cards: LeagueCardData[] = myLeagues.map((l) => {
+        const roster = (byLeague.get(l.id) ?? []).slice().sort((a, b) => b.elo - a.elo);
+        const idx = roster.findIndex((p) => p.player_id === playerId);
+        return {
+          id: l.id,
+          name: l.name,
+          description: l.description ?? null,
+          photo_url: l.photo_url ?? null,
+          role: l.role,
+          isOwner: l.owner_player_id === playerId,
+          myRank: idx >= 0 ? idx + 1 : null,
+          memberCount: roster.length,
+          tournamentCount: tourCount.get(l.id) ?? 0,
+        };
+      });
+      // Las que diriges primero (dueño, luego moderador): son las que vienes a gestionar.
+      const rank = (l: LeagueCardData) => (l.isOwner ? 2 : l.role === 'organizer' ? 1 : 0);
+      cards.sort((a, b) => rank(b) - rank(a));
+      setLeagues(cards);
+    } else {
+      setLeagues([]);
+    }
+
     setLoading(false);
-  }, [playerId]);
+  }, [playerId, isAdmin]);
 
   useFocusEffect(
     useCallback(() => {
@@ -122,6 +216,29 @@ export default function BattlesScreen({ navigation }: any) {
     if (status === 'reported') return { label: 'Falta confirmar', color: colors.streak };
     if (status === 'disputed') return { label: 'En disputa', color: colors.loss };
     return { label: 'Sin jugar', color: colors.blue };
+  }
+
+  // El filtro decide qué torneos se ven; el orden ya vino por relevancia. El
+  // tratamiento de héroe solo va si lo primero DE VERDAD es un torneo abierto.
+  const shownTournaments = useMemo(() => {
+    if (torneoFilter === 'abiertos') return tournaments.filter((t) => t.status !== 'completed');
+    if (torneoFilter === 'completados') return tournaments.filter((t) => t.status === 'completed');
+    return tournaments;
+  }, [tournaments, torneoFilter]);
+  const openTournamentCount = tournaments.filter((t) => t.status !== 'completed').length;
+  const torneoHero =
+    shownTournaments[0] && shownTournaments[0].status === 'pending' && torneoFilter !== 'completados'
+      ? shownTournaments[0]
+      : null;
+  const torneoRest = torneoHero ? shownTournaments.slice(1) : shownTournaments;
+
+  function openTournament(t: HubTournament, toBracket = false) {
+    navigation.navigate('TournamentDetail', {
+      tournamentId: t.id,
+      leagueId: t.league_id,
+      isOrganizer: t.isOrganizer,
+      initialTab: toBracket ? 'bracket' : undefined,
+    });
   }
 
   return (
@@ -360,45 +477,39 @@ export default function BattlesScreen({ navigation }: any) {
 
         {tab === 'torneos' && (
           <View style={styles.block}>
-            <SectionTitle>Torneos</SectionTitle>
+            <Tabs
+              variant="boxed"
+              tabs={[
+                { key: 'todos' as Filter, label: 'TODOS', glyph: '🏆' },
+                { key: 'abiertos' as Filter, label: 'ABIERTOS', glyph: '🟢', badge: openTournamentCount },
+                { key: 'completados' as Filter, label: 'COMPLETADOS', glyph: '🏁' },
+              ]}
+              current={torneoFilter}
+              onChange={setTorneoFilter}
+            />
+
             {loading ? (
               <Text style={type.soft}>Cargando…</Text>
-            ) : tournaments.length === 0 ? (
+            ) : shownTournaments.length === 0 ? (
               <Card>
-                <Text style={type.soft}>Todavía no hay torneos. Los crea un moderador de liga.</Text>
+                <Text style={type.soft}>
+                  {torneoFilter === 'completados'
+                    ? 'Ningún torneo terminado todavía.'
+                    : 'Todavía no hay torneos. Los crea un moderador de liga.'}
+                </Text>
               </Card>
             ) : (
-              tournaments.map((t) => {
-                const open = t.status === 'pending';
-                return (
-                  <Pressable
+              <View style={{ gap: space.md }}>
+                {torneoHero ? <HeroCard t={torneoHero} onPress={() => openTournament(torneoHero)} /> : null}
+                {torneoRest.map((t) => (
+                  <RowCard
                     key={t.id}
-                    onPress={() =>
-                      navigation.navigate('TournamentDetail', { tournamentId: t.id, leagueId: t.league_id })
-                    }
-                    style={({ pressed }) => pressed && { opacity: 0.85 }}
-                  >
-                    <View style={[styles.tCard, open && { borderColor: colors.win }]}>
-                      <Cover id={t.id} photoUrl={t.photo_url} live={open} height={92} />
-                      <View style={styles.tBody}>
-                        <View style={{ flex: 1, gap: 3 }}>
-                          <Text style={styles.tName} numberOfLines={1}>
-                            {t.name}
-                          </Text>
-                          <Text style={styles.meta} numberOfLines={1}>
-                            {t.leagues?.name ?? 'Liga'} · {t.tournament_registrations?.[0]?.count ?? 0} inscritos
-                            {combatLabel(t.combat_mode) ? ` · ${combatLabel(t.combat_mode)}` : ''}
-                          </Text>
-                        </View>
-                        <Pill
-                          label={open ? 'Abierto' : 'Terminado'}
-                          color={open ? colors.win : colors.inkDim}
-                        />
-                      </View>
-                    </View>
-                  </Pressable>
-                );
-              })
+                    t={t}
+                    subtitle={t.leagueName}
+                    onPress={() => openTournament(t, t.status === 'completed')}
+                  />
+                ))}
+              </View>
             )}
           </View>
         )}
@@ -422,28 +533,15 @@ export default function BattlesScreen({ navigation }: any) {
                 </Text>
               </Card>
             ) : (
-              leagues.map((m) => (
-                <Pressable
-                  key={m.league_id}
-                  onPress={() => navigation.navigate('LeagueDetail', { leagueId: m.league_id })}
-                  style={({ pressed }) => pressed && { opacity: 0.85 }}
-                >
-                  <View style={[styles.tCard, { borderColor: colors.blue }]}>
-                    <Cover id={m.league_id} photoUrl={m.leagues?.photo_url} height={92} />
-                    <View style={styles.tBody}>
-                      <View style={{ flex: 1, gap: 3 }}>
-                        <Text style={styles.tName} numberOfLines={1}>
-                          {m.leagues?.name ?? 'Liga'}
-                        </Text>
-                        <Text style={styles.meta} numberOfLines={1}>
-                          {m.leagues?.description ?? 'Sin descripción'}
-                        </Text>
-                      </View>
-                      {m.role === 'organizer' ? <Pill label="Moderador" /> : null}
-                    </View>
-                  </View>
-                </Pressable>
-              ))
+              <View style={{ gap: space.md }}>
+                {leagues.map((l) => (
+                  <LeagueCard
+                    key={l.id}
+                    league={l}
+                    onPress={() => navigation.navigate('LeagueDetail', { leagueId: l.id })}
+                  />
+                ))}
+              </View>
             )}
           </View>
         )}
@@ -457,22 +555,6 @@ const styles = StyleSheet.create({
   title: { ...type.display, fontSize: 28 },
   sub: { ...type.soft, marginTop: 4 },
   pad: { paddingHorizontal: space.xl },
-
-  tCard: {
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: radius.lg,
-    backgroundColor: colors.card,
-    overflow: 'hidden',
-  },
-  tBody: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.md,
-  },
-  tName: { fontSize: 15, fontWeight: '800', fontStyle: 'italic', color: colors.ink, letterSpacing: -0.2 },
 
   judgeCall: { gap: 2, borderColor: colors.loss, marginBottom: space.lg },
   judgeTag: { fontSize: 9, fontWeight: '800', letterSpacing: 1.1, color: colors.loss },

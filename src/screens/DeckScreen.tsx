@@ -8,6 +8,7 @@ import { Card, Hex, Pill, SectionTitle } from '../ui/primitives';
 import {
   Combo,
   DeckCard,
+  SPARE_SLOTS,
   deckSizeFor,
   loadDeckCard,
   loadMyCombos,
@@ -29,6 +30,9 @@ export default function DeckScreen({ route, navigation }: any) {
   const { playerId } = useAuth();
 
   const size = deckSizeFor(combatMode);
+  // El deck del reglamento es "3+1": los principales más un extra opcional que
+  // se juega completo o se desarma para dar piezas a los otros.
+  const maxPicks = size + SPARE_SLOTS;
   const [combos, setCombos] = useState<Combo[]>([]);
   const [deck, setDeck] = useState<DeckCard | null>(null);
   const [picked, setPicked] = useState<string[]>([]);
@@ -68,8 +72,11 @@ export default function DeckScreen({ route, navigation }: any) {
     if (locked) return;
     setPicked((prev) => {
       if (prev.includes(combo.id)) return prev.filter((id) => id !== combo.id);
-      if (prev.length >= size) {
-        Alert.alert('Deck completo', `Este torneo pide ${size} combinaciones. Quita una para cambiarla.`);
+      if (prev.length >= maxPicks) {
+        Alert.alert(
+          'Deck completo',
+          `Este torneo pide ${size} principales y un extra. Quita uno para cambiarlo.`
+        );
         return prev;
       }
       return [...prev, combo.id];
@@ -89,7 +96,13 @@ export default function DeckScreen({ route, navigation }: any) {
     }
   }
 
-  const canSave = !locked && picked.length === size && repeated.length === 0 && status === 'pending';
+  // El extra es opcional: con los principales ya se puede guardar.
+  const canSave =
+    !locked &&
+    picked.length >= size &&
+    picked.length <= maxPicks &&
+    repeated.length === 0 &&
+    status === 'pending';
 
   return (
     <Screen scroll>
@@ -110,8 +123,12 @@ export default function DeckScreen({ route, navigation }: any) {
 
       <Card style={{ gap: space.sm, marginBottom: space.lg }}>
         <Text style={styles.rule}>
-          Ninguna pieza se puede repetir entre tus {size} combinaciones: ni el blade, ni el ratchet,
-          ni el bit.
+          {size} principales y 1 extra opcional. Ninguna pieza se puede repetir entre ellos: ni el
+          blade, ni el ratchet, ni el bit.
+        </Text>
+        <Text style={styles.hint}>
+          El extra se puede jugar completo o desarmar para cambiarle piezas a los principales. El
+          deck solo se usa en torneos de ranking.
         </Text>
         <Text style={styles.hint}>
           {locked
@@ -123,13 +140,23 @@ export default function DeckScreen({ route, navigation }: any) {
       {/* Los espacios se ven vacíos a propósito: el deck es una tarjeta con
           huecos que llenar, no una lista de seleccionados. */}
       <View style={styles.slots}>
-        {Array.from({ length: size }).map((_, i) => {
+        {Array.from({ length: maxPicks }).map((_, i) => {
           const combo = chosen[i];
+          const spare = i >= size;
           return (
-            <View key={i} style={[styles.slot, combo && { borderColor: colors.blue }]}>
-              <Text style={styles.slotNum}>{i + 1}</Text>
+            <View
+              key={i}
+              style={[
+                styles.slot,
+                combo && { borderColor: spare ? colors.streak : colors.blue },
+                spare && !combo && { borderColor: colors.line },
+              ]}
+            >
+              <Text style={[styles.slotNum, spare && { color: colors.streak }]}>
+                {spare ? 'EXTRA' : i + 1}
+              </Text>
               <Text style={[styles.slotName, !combo && { color: colors.inkDim }]} numberOfLines={1}>
-                {combo ? combo.name : 'Vacío'}
+                {combo ? combo.name : spare ? 'Opcional' : 'Vacío'}
               </Text>
             </View>
           );
@@ -193,15 +220,19 @@ export default function DeckScreen({ route, navigation }: any) {
       {!locked && (
         <View style={{ gap: space.sm, marginTop: space.lg }}>
           <Button
-            label={`GUARDAR DECK (${picked.length}/${size})`}
+            label={`GUARDAR DECK (${picked.length}/${size}${picked.length > size ? '+1' : ''})`}
             onPress={save}
             disabled={!canSave || busy}
             loading={busy}
           />
           {status !== 'pending' ? (
             <Text style={styles.hintCenter}>El torneo ya empezó: el deck se registra antes.</Text>
-          ) : picked.length !== size ? (
-            <Text style={styles.hintCenter}>Te faltan {size - picked.length} combinación(es).</Text>
+          ) : picked.length < size ? (
+            <Text style={styles.hintCenter}>
+              Te faltan {size - picked.length} principal(es). El extra es opcional.
+            </Text>
+          ) : picked.length === size ? (
+            <Text style={styles.hintCenter}>Puedes guardar así, o agregar el extra.</Text>
           ) : null}
         </View>
       )}

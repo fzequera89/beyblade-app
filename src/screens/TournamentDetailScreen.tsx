@@ -21,7 +21,7 @@ import {
   loadCategoryGroups,
 } from '../lib/formatsRepo';
 import { categoryLabel, categoryColor } from '../lib/categories';
-import { DeckCard, deckSizeFor, loadDeckCard, deckCountFor } from '../lib/decks';
+import { DeckCard, deckSizeFor, usesDeckCard, loadDeckCard, deckCountFor } from '../lib/decks';
 import { fmtDate, fmtDateFull, fmtDateTime } from '../lib/when';
 import { IconChevron } from '../ui/icons';
 import { colors, space, type, radius, glow } from '../theme';
@@ -188,7 +188,7 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
 
     // El deck solo existe en las modalidades que lo piden; en 1 vs 1 ni se
     // consulta.
-    if (deckSizeFor((row as any)?.combat_mode) > 1 && playerId) {
+    if (usesDeckCard((row as any)?.combat_mode, (row as any)?.mode) && playerId) {
       try {
         const [card, counts] = await Promise.all([
           loadDeckCard(tournamentId, playerId),
@@ -559,7 +559,7 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
             {/* En modalidad con deck, registrar la tarjeta es un paso propio
                 del torneo y con fecha límite: después de que se bloquea, ya no
                 se toca. Por eso vive aquí y no en "mis combos". */}
-            {deckSizeFor(tournament.combat_mode) > 1 && (mine || isOrganizer) && (
+            {usesDeckCard(tournament.combat_mode, tournament.mode) && (mine || isOrganizer) && (
               <Pressable
                 style={[styles.linkRow, { borderColor: myDeck?.locked_at ? colors.streak : colors.lineHi }]}
                 onPress={() =>
@@ -579,14 +579,14 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
                       ? `Bloqueado · ${myDeck.combos.length} combinaciones`
                       : myDeck
                       ? `Registrado · ${myDeck.combos.length} de ${deckSizeFor(tournament.combat_mode)}`
-                      : `Sin registrar · hacen falta ${deckSizeFor(tournament.combat_mode)} combinaciones`}
+                      : `Sin registrar · ${deckSizeFor(tournament.combat_mode)} principales y 1 extra`}
                   </Text>
                 </View>
                 <IconChevron />
               </Pressable>
             )}
 
-            {isOrganizer && deckSizeFor(tournament.combat_mode) > 1 && (
+            {isOrganizer && usesDeckCard(tournament.combat_mode, tournament.mode) && (
               <View style={{ gap: space.sm }}>
                 <Button
                   label={`🔒  BLOQUEAR DECKS (${decks.total} registrados)`}

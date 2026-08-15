@@ -8,6 +8,7 @@ import Avatar from '../ui/Avatar';
 import { Card, Pill, Hex } from '../ui/primitives';
 import { coverAccent } from '../ui/Cover';
 import { colors, space, type, radius } from '../theme';
+import { PAGE_SIZE } from '../lib/paging';
 
 type Row = {
   player_id: string;
@@ -29,6 +30,7 @@ export default function LeagueStandingsScreen({ route, navigation }: any) {
   const [rows, setRows] = useState<Row[]>([]);
   const [leagueName, setLeagueName] = useState('');
   const [wins, setWins] = useState<Record<string, number>>({});
+  const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -48,6 +50,9 @@ export default function LeagueStandingsScreen({ route, navigation }: any) {
     }
     setLeagueName((league as any)?.name ?? '');
 
+    // Se ordena en el cliente porque el ELO vive en `players`, no en la fila de
+    // membresía: pedirle la página a la consulta daría los 12 primeros por
+    // fecha de ingreso, no por rating. Se trae la liga completa y se corta aquí.
     const sorted = ((data as any as Row[]) ?? []).sort(
       (a, b) => (b.players?.elo_rating ?? 0) - (a.players?.elo_rating ?? 0)
     );
@@ -94,7 +99,11 @@ export default function LeagueStandingsScreen({ route, navigation }: any) {
   // Mismo modelo que el ranking general: el 1º no compite por atención con el
   // 2º y el 3º, así que va en tarjeta propia y ellos comparten una fila.
   const podium = rows.slice(0, 3);
-  const rest = rows.slice(3);
+  // El podio no cuenta contra la página: son tres tarjetas de otro tamaño, no
+  // renglones de la tabla.
+  const restCompleto = rows.slice(3);
+  const rest = restCompleto.slice(0, (page + 1) * PAGE_SIZE);
+  const hayMas = restCompleto.length > rest.length;
   const [first, second, third] = podium;
 
   return (
@@ -242,6 +251,13 @@ export default function LeagueStandingsScreen({ route, navigation }: any) {
             </Card>
           );
         }}
+        ListFooterComponent={
+          hayMas ? (
+            <Pressable style={styles.masBtn} onPress={() => setPage((p) => p + 1)}>
+              <Text style={styles.masText}>VER {PAGE_SIZE} MÁS</Text>
+            </Pressable>
+          ) : null
+        }
         ListEmptyComponent={
           !loading && rows.length === 0 ? (
             <Card style={styles.empty}>
@@ -267,6 +283,15 @@ function ChampStat({ label, value, tint }: { label: string; value: string; tint?
 }
 
 const styles = StyleSheet.create({
+  masBtn: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.md,
+    paddingVertical: space.md,
+    alignItems: 'center',
+    marginTop: space.sm,
+  },
+  masText: { fontSize: 11.5, fontWeight: '800', letterSpacing: 0.8, color: colors.inkSoft },
   list: { paddingHorizontal: space.xl, paddingBottom: space.xxxl, gap: space.sm },
   header: { gap: space.md, paddingTop: space.md, marginBottom: space.sm },
   headRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },

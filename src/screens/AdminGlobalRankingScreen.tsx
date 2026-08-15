@@ -5,7 +5,8 @@ import { supabase } from '../lib/supabase';
 import Screen from '../ui/Screen';
 import Avatar from '../ui/Avatar';
 import { Card, Hex } from '../ui/primitives';
-import { colors, space, type } from '../theme';
+import { colors, space, type, radius } from '../theme';
+import { PAGE_SIZE, upToPage } from '../lib/paging';
 
 type PlayerRow = {
   id: string;
@@ -25,21 +26,32 @@ function medal(pos: number) {
 
 export default function AdminGlobalRankingScreen({ navigation }: any) {
   const [players, setPlayers] = useState<PlayerRow[]>([]);
+  const [page, setPage] = useState(0);
+  const [hayMas, setHayMas] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('players')
-      .select('id, display_name, elo_rating, matches_played, avatar_key, avatar_url')
-      .order('elo_rating', { ascending: false });
-    setLoading(false);
-    if (error) {
-      Alert.alert('Error', error.message);
-      return;
-    }
-    setPlayers(data ?? []);
-  }, []);
+  // Se pide UNA fila de más que lo que se muestra: es la forma barata de saber
+  // si hay siguiente página sin pagar un count sobre toda la tabla.
+  const load = useCallback(
+    async (hasta = page) => {
+      setLoading(true);
+      const [desde, hastaFila] = upToPage(hasta);
+      const { data, error } = await supabase
+        .from('players')
+        .select('id, display_name, elo_rating, matches_played, avatar_key, avatar_url')
+        .order('elo_rating', { ascending: false })
+        .range(desde, hastaFila + 1);
+      setLoading(false);
+      if (error) {
+        Alert.alert('Error', error.message);
+        return;
+      }
+      const filas = data ?? [];
+      setHayMas(filas.length > hastaFila - desde + 1);
+      setPlayers(filas.slice(0, hastaFila - desde + 1));
+    },
+    [page]
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -107,12 +119,35 @@ export default function AdminGlobalRankingScreen({ navigation }: any) {
             </Card>
           ) : null
         }
+        ListFooterComponent={
+          hayMas ? (
+            <Pressable
+              style={styles.masBtn}
+              onPress={() => {
+                const siguiente = page + 1;
+                setPage(siguiente);
+                load(siguiente);
+              }}
+            >
+              <Text style={styles.masText}>VER {PAGE_SIZE} MÁS</Text>
+            </Pressable>
+          ) : null
+        }
       />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  masBtn: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.md,
+    paddingVertical: space.md,
+    alignItems: 'center',
+    marginTop: space.sm,
+  },
+  masText: { fontSize: 11.5, fontWeight: '800', letterSpacing: 0.8, color: colors.inkSoft },
   list: { paddingHorizontal: space.xl, paddingBottom: space.xxxl, gap: space.sm },
   header: { gap: space.sm, paddingTop: space.md, marginBottom: space.sm },
   headRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },

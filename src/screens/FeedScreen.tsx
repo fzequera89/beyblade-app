@@ -9,6 +9,7 @@ import Avatar from '../ui/Avatar';
 import { Card, Hex } from '../ui/primitives';
 import { badgeIcon } from '../lib/badges';
 import { colors, space, type } from '../theme';
+import { PAGE_SIZE } from '../lib/paging';
 
 // El feed se arma con tres consultas filtradas por la gente que sigues y se
 // mezcla en el cliente. No hay tabla de feed denormalizada a propósito: para el
@@ -27,7 +28,11 @@ type FeedItem = {
   avatarUrl?: string | null;
 };
 
-const FEED_LIMIT = 30;
+// El feed mezcla tres fuentes (combates, logros y check-ins), así que se pide
+// una página de cada una y se corta la mezcla. Pedir de más a cada fuente es
+// necesario: si de los 12 combates ninguno es reciente, la mezcla necesita
+// candidatos de las otras dos para llenar la página.
+const porFuente = (pagina: number) => (pagina + 1) * PAGE_SIZE;
 
 const KIND_COLOR: Record<FeedItem['kind'], string> = {
   match: colors.blue,
@@ -39,6 +44,8 @@ export default function FeedScreen({ navigation }: any) {
   const { playerId } = useAuth();
   const [items, setItems] = useState<FeedItem[]>([]);
   const [followingCount, setFollowingCount] = useState(0);
+  const [page, setPage] = useState(0);
+  const [hayMas, setHayMas] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -64,19 +71,19 @@ export default function FeedScreen({ navigation }: any) {
         .eq('status', 'confirmed')
         .or(`player_a_id.in.(${list}),player_b_id.in.(${list})`)
         .order('confirmed_at', { ascending: false })
-        .limit(FEED_LIMIT),
+        .limit(porFuente(page)),
       supabase
         .from('player_badges')
         .select('player_id, earned_at, badges(code, name), players(display_name, avatar_key, avatar_url)')
         .in('player_id', ids)
         .order('earned_at', { ascending: false })
-        .limit(FEED_LIMIT),
+        .limit(porFuente(page)),
       supabase
         .from('check_ins')
         .select('id, player_id, checked_in_at, players(display_name, avatar_key, avatar_url), venues(name)')
         .in('player_id', ids)
         .order('checked_in_at', { ascending: false })
-        .limit(FEED_LIMIT),
+        .limit(porFuente(page)),
     ]);
 
     const merged: FeedItem[] = [];
@@ -131,9 +138,11 @@ export default function FeedScreen({ navigation }: any) {
     }
 
     merged.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
-    setItems(merged.slice(0, FEED_LIMIT));
+    const visibles = porFuente(page);
+    setHayMas(merged.length > visibles);
+    setItems(merged.slice(0, visibles));
     setLoading(false);
-  }, [playerId]);
+  }, [playerId, page]);
 
   useFocusEffect(
     useCallback(() => {
@@ -213,7 +222,14 @@ export default function FeedScreen({ navigation }: any) {
           ) : null
         }
         ListFooterComponent={
-          <View style={{ marginTop: space.xl }}>
+          <View style={{ marginTop: space.xl, gap: space.sm }}>
+            {hayMas && (
+              <Button
+                label={`VER ${PAGE_SIZE} MÁS`}
+                variant="ghost"
+                onPress={() => setPage((p) => p + 1)}
+              />
+            )}
             <Button label="MI GENTE" variant="ghost" onPress={() => navigation.navigate('Follows')} />
           </View>
         }

@@ -8,6 +8,7 @@ import Avatar from '../ui/Avatar';
 import { Card, Chip } from '../ui/primitives';
 import { FINISH_TYPES, FINISH_COLORS as FINISH_COLOR } from '../lib/finishTypes';
 import { colors, space, type, radius } from '../theme';
+import { PAGE_SIZE, upToPage } from '../lib/paging';
 
 function ChampStat({ label, value, tint }: { label: string; value: string; tint?: string }) {
   return (
@@ -62,13 +63,21 @@ function rankColor(pos: number) {
 
 export default function RankingsScreen({ navigation }: any) {
   const { playerId } = useAuth();
-  const [scope, setScope] = useState<Scope>('global');
+  const [scope, setScopeRaw] = useState<Scope>('global');
   const [rows, setRows] = useState<Row[]>([]);
   const [myCity, setMyCity] = useState<string | null>(null);
   const [leagues, setLeagues] = useState<{ id: string; name: string }[]>([]);
   const [leagueId, setLeagueId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [champ, setChamp] = useState<ChampStats | null>(null);
+  const [page, setPage] = useState(0);
+  // Cambiar de alcance vuelve a la primera página: la página 3 del ranking
+  // global no significa nada en el de tu ciudad.
+  const setScope = (s: Scope) => {
+    setPage(0);
+    setScopeRaw(s);
+  };
+  const [hayMas, setHayMas] = useState(false);
 
   // Se cargan una vez: definen qué puede consultar este jugador.
   useEffect(() => {
@@ -100,17 +109,29 @@ export default function RankingsScreen({ navigation }: any) {
         .eq('league_id', leagueId);
       const list = ((data as any[]) ?? []).map((m) => m.players).filter(Boolean) as Row[];
       list.sort((a, b) => b.elo_rating - a.elo_rating);
-      setRows(list);
+      const [, hastaFila] = upToPage(page);
+      setHayMas(list.length > hastaFila + 1);
+      setRows(list.slice(0, hastaFila + 1));
       setLoading(false);
       return;
     }
 
-    let q = supabase.from('players').select(cols).order('elo_rating', { ascending: false }).limit(100);
+    // Antes esto era `.limit(100)`: el jugador 101 simplemente no existía para
+    // la app, sin aviso. Ahora se pagina y se pide una fila de más para saber si
+    // queda siguiente página sin contar la tabla entera.
+    const [desde, hastaFila] = upToPage(page);
+    let q = supabase
+      .from('players')
+      .select(cols)
+      .order('elo_rating', { ascending: false })
+      .range(desde, hastaFila + 1);
     if (scope === 'ciudad' && myCity) q = q.eq('city', myCity);
     const { data } = await q;
-    setRows((data as any) ?? []);
+    const filas = ((data as any[]) ?? []) as Row[];
+    setHayMas(filas.length > hastaFila + 1);
+    setRows(filas.slice(0, hastaFila + 1));
     setLoading(false);
-  }, [scope, myCity, leagueId]);
+  }, [scope, myCity, leagueId, page]);
 
   useFocusEffect(
     useCallback(() => {
@@ -260,6 +281,13 @@ export default function RankingsScreen({ navigation }: any) {
             </Card>
           );
         }}
+        ListFooterComponent={
+          hayMas ? (
+            <Pressable style={styles.masBtn} onPress={() => setPage((p) => p + 1)}>
+              <Text style={styles.masText}>VER {PAGE_SIZE} MÁS</Text>
+            </Pressable>
+          ) : null
+        }
         ListEmptyComponent={
           !loading ? (
             <Text style={styles.empty}>
@@ -388,6 +416,15 @@ function Podium({
 }
 
 const styles = StyleSheet.create({
+  masBtn: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.md,
+    paddingVertical: space.md,
+    alignItems: 'center',
+    marginTop: space.sm,
+  },
+  masText: { fontSize: 11.5, fontWeight: '800', letterSpacing: 0.8, color: colors.inkSoft },
   head: { paddingHorizontal: space.xl, paddingTop: space.xl, paddingBottom: space.lg },
 
   podium: { gap: space.md, marginBottom: space.lg },

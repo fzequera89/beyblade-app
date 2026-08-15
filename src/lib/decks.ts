@@ -16,11 +16,23 @@ export type Combo = { id: string; name: string; parts: ComboParts };
 export type DeckCard = {
   id: string;
   locked_at: string | null;
-  combos: { slot: number; combo: Combo }[];
+  combos: { slot: number; is_spare: boolean; combo: Combo }[];
 };
 
 export function deckSizeFor(combatMode?: string | null): number {
   return COMBAT_MODES.find((m) => m.key === combatMode)?.deckSize ?? 1;
+}
+
+/**
+ * El "+1" del reglamento: además de los principales se puede registrar UN
+ * extra, que se juega completo o se desarma para dar piezas a los otros. Es
+ * opcional — no todos lo llevan — pero nunca más de uno.
+ */
+export const SPARE_SLOTS = 1;
+
+/** ¿Este torneo lleva deck card? Solo los de ranking con más de una peonza. */
+export function usesDeckCard(combatMode?: string | null, mode?: string | null): boolean {
+  return deckSizeFor(combatMode) > 1 && mode === 'ranking';
 }
 
 const norm = (s?: string | null) => (s ?? '').trim().toLowerCase();
@@ -68,7 +80,7 @@ export async function loadMyCombos(playerId: string): Promise<Combo[]> {
 export async function loadDeckCard(tournamentId: string, playerId: string): Promise<DeckCard | null> {
   const { data, error } = await supabase
     .from('deck_cards')
-    .select('id, locked_at, deck_card_combos(slot, combos(id, name, parts))')
+    .select('id, locked_at, deck_card_combos(slot, is_spare, combos(id, name, parts))')
     .eq('tournament_id', tournamentId)
     .eq('player_id', playerId)
     .maybeSingle();
@@ -80,7 +92,11 @@ export async function loadDeckCard(tournamentId: string, playerId: string): Prom
     id: (data as any).id,
     locked_at: (data as any).locked_at ?? null,
     combos: rows
-      .map((r) => ({ slot: r.slot, combo: Array.isArray(r.combos) ? r.combos[0] : r.combos }))
+      .map((r) => ({
+        slot: r.slot,
+        is_spare: !!r.is_spare,
+        combo: Array.isArray(r.combos) ? r.combos[0] : r.combos,
+      }))
       .filter((r) => r.combo)
       .sort((a, b) => a.slot - b.slot),
   };

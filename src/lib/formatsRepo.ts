@@ -208,7 +208,11 @@ export async function generatePhaseRound(
   // No se arma la siguiente si la actual sigue abierta.
   const pendingNow = played.filter((m) => m.bracket_round === roundsPlayed && !m.winner_id);
   if (roundsPlayed > 0 && pendingNow.length > 0) {
-    throw new Error(`Faltan ${pendingNow.length} resultado(s) por aprobar en la ronda ${roundsPlayed}.`);
+    throw new Error(
+      pendingNow.length === 1
+        ? `Falta 1 resultado por aprobar en la ronda ${roundsPlayed}.`
+        : `Faltan ${pendingNow.length} resultados por aprobar en la ronda ${roundsPlayed}.`
+    );
   }
 
   const nextRound = roundsPlayed + 1;

@@ -33,10 +33,63 @@ export default function ScanCheckInScreen({ navigation }: any) {
   const [scanned, setScanned] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  // El QR de un torneo lleva prefijo ("torneo:<id>") y el de una locación es el
+  // código suelto que ya se guardaba en `venues.qr_code`. Se distinguen por el
+  // prefijo y no por buscar en las dos tablas: así un código desconocido dice
+  // que no se reconoce, en vez de dar dos vueltas a la base para lo mismo.
+  async function checkInTournament(tournamentId: string) {
+    const { data: tournament } = await supabase
+      .from('tournaments')
+      .select('name')
+      .eq('id', tournamentId)
+      .maybeSingle();
+
+    if (!tournament) {
+      Alert.alert('QR no reconocido', 'Este código no corresponde a ningún torneo.', [
+        { text: 'Reintentar', onPress: () => setScanned(false) },
+      ]);
+      setBusy(false);
+      return;
+    }
+
+    // Devuelve las filas tocadas: si viene vacío es que no estás inscrito, que
+    // es distinto de un error y merece otro mensaje.
+    const { data: updated, error } = await supabase
+      .from('tournament_registrations')
+      .update({ checked_in_at: new Date().toISOString() })
+      .eq('tournament_id', tournamentId)
+      .eq('player_id', playerId)
+      .select('player_id');
+    setBusy(false);
+
+    if (error) {
+      Alert.alert('Error', error.message, [{ text: 'OK', onPress: () => setScanned(false) }]);
+      return;
+    }
+
+    if (!updated || updated.length === 0) {
+      Alert.alert(
+        'No estás inscrito',
+        `Primero inscríbete en ${(tournament as any).name} desde la pantalla del torneo.`,
+        [{ text: 'Entendido', onPress: () => navigation.goBack() }]
+      );
+      return;
+    }
+
+    Alert.alert('¡Check-in hecho!', `Ya estás presente en ${(tournament as any).name}.`, [
+      { text: 'Listo', onPress: () => navigation.goBack() },
+    ]);
+  }
+
   async function handleScan(data: string) {
     if (scanned || busy) return;
     setScanned(true);
     setBusy(true);
+
+    if (data.startsWith('torneo:')) {
+      await checkInTournament(data.slice('torneo:'.length));
+      return;
+    }
 
     const { data: venue, error } = await supabase
       .from('venues')

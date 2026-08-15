@@ -7,7 +7,7 @@ import Screen from '../ui/Screen';
 import Button from '../ui/Button';
 import { Card, Hex, Pill } from '../ui/primitives';
 import Cover, { coverAccent } from '../ui/Cover';
-import { leagueEmblem } from '../lib/emblem';
+import { leagueEmblem, emblemFont } from '../lib/emblem';
 import { IconChevron } from '../ui/icons';
 import { colors, space, type, radius } from '../theme';
 
@@ -144,11 +144,20 @@ export default function LeaguesScreen({ navigation }: any) {
                 <View style={styles.cardRow}>
                   <Hex size={72} color={accent.neon} solid>
                     <View style={{ alignItems: 'center' }}>
-                      <Text style={styles.emblem} numberOfLines={1}>
+                      <Text
+                        style={[styles.emblem, { fontSize: emblemFont(leagueEmblem(item.name).top, 15) }]}
+                        numberOfLines={1}
+                      >
                         {leagueEmblem(item.name).top}
                       </Text>
                       {leagueEmblem(item.name).bottom ? (
-                        <Text style={styles.emblemSub} numberOfLines={1}>
+                        <Text
+                          style={[
+                            styles.emblemSub,
+                            { fontSize: emblemFont(leagueEmblem(item.name).bottom!, 8.5) },
+                          ]}
+                          numberOfLines={1}
+                        >
                           {leagueEmblem(item.name).bottom}
                         </Text>
                       ) : null}

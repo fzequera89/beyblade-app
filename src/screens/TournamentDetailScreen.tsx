@@ -1,55 +1,142 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, FlatList, Pressable, StyleSheet, Alert } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import QRCode from 'react-native-qrcode-svg';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { generateRound1Bracket } from '../lib/bracket';
 import Screen from '../ui/Screen';
 import Button from '../ui/Button';
 import Avatar from '../ui/Avatar';
-import { Card, Hex, Pill, SectionTitle } from '../ui/primitives';
-import Cover from '../ui/Cover';
+import { Card, Hex, Pill, SectionTitle, Tabs } from '../ui/primitives';
+import Cover, { coverAccent } from '../ui/Cover';
+import { CountdownBox, ClosingBar, InfoRow, StatStrip, TournamentName } from '../ui/tournament';
 import { pickCoverPhoto, uploadCover } from '../lib/cover';
-import { COMBAT_MODES } from '../lib/formats';
-import { colors, space, type, radius } from '../theme';
+import { COMBAT_MODES, PHASE_KINDS, Standing } from '../lib/formats';
+import { Phase, loadPhases, generatePhaseRound, phaseStandings } from '../lib/formatsRepo';
+import { fmtDate, fmtDateFull, fmtDateTime } from '../lib/when';
+import { IconChevron } from '../ui/icons';
+import { colors, space, type, radius, glow } from '../theme';
 
-// La modalidad solo se nombra cuando NO es la de siempre.
-function combatLabel(mode?: string | null): string | null {
-  if (!mode || mode === 'solo') return null;
-  return COMBAT_MODES.find((m) => m.key === mode)?.label ?? null;
-}
+// Detalle de torneo.
+//
+// Cuatro caras del mismo torneo, no cuatro pantallas: RESUMEN (qué me toca
+// hacer), JUGADORES (quién viene), BRACKET (cómo va) e INFORMACIÓN (la ficha).
+// En una sola lista larga, lo que un jugador necesita el día del torneo —el
+// botón de check-in y su siguiente combate— quedaba debajo de la lista completa
+// de inscritos.
+
+type Tab = 'resumen' | 'jugadores' | 'bracket' | 'info';
+
+type PlayerLite = {
+  display_name: string;
+  avatar_key: string | null;
+  avatar_url: string | null;
+};
 
 type Registration = {
   player_id: string;
   checked_in_at: string | null;
-  players: {
-    display_name: string;
-    elo_rating: number;
-    avatar_key: string | null;
-    avatar_url: string | null;
-  } | null;
+  players: (PlayerLite & { elo_rating: number }) | null;
 };
 
+type MatchRow = {
+  id: string;
+  phase_id: string | null;
+  bracket_round: number;
+  bracket_side: 'winners' | 'losers' | 'final' | null;
+  block_number: number | null;
+  status: 'pending' | 'reported' | 'confirmed' | 'disputed';
+  winner_id: string | null;
+  score_a: number;
+  score_b: number;
+  player_a_id: string;
+  player_b_id: string;
+  player_a: PlayerLite | null;
+  player_b: PlayerLite | null;
+};
+
+type Bye = { phase_id: string | null; bracket_round: number; player_id: string };
+
+type Tournament = {
+  id: string;
+  name: string;
+  status: string;
+  mode: string | null;
+  photo_url: string | null;
+  combat_mode: string | null;
+  deck_order: string | null;
+  swiss_tiebreak: string | null;
+  created_at: string | null;
+  starts_at: string | null;
+  registration_closes_at: string | null;
+  capacity: number | null;
+  level: string | null;
+  prize: string | null;
+  venues: { name: string; city: string | null; address: string | null } | null;
+};
+
+function combatLabel(mode?: string | null): string {
+  return COMBAT_MODES.find((m) => m.key === mode)?.label ?? '1 vs 1';
+}
+
+// Cómo se juega y con cuántas peonzas, sin decir dos veces lo mismo.
+function formatLine(t: Tournament): string {
+  const deck = COMBAT_MODES.find((m) => m.key === t.combat_mode)?.deckSize ?? 1;
+  const rules = t.combat_mode === 'stock' ? 'Stock de caja' : 'Estándar';
+  return `${rules} · ${deck} pieza${deck === 1 ? '' : 's'}`;
+}
+
+function phaseLabel(kind: string): string {
+  return PHASE_KINDS.find((k) => k.key === kind)?.label ?? kind;
+}
+
+// El nombre de la ronda sale de cuántos combates tiene, no de su número: es lo
+// que el jugador entiende. Solo aplica en eliminación — en un suizo la ronda 3
+// se llama ronda 3.
+function roundTitle(kind: string, matchCount: number, round: number, side?: string | null): string {
+  if (side === 'final') return 'GRAN FINAL';
+  if (kind === 'single_elim' || kind === 'double_elim') {
+    if (matchCount === 1) return side === 'losers' ? 'FINAL DE PERDEDORES' : 'FINAL';
+    if (matchCount === 2) return 'SEMIFINAL';
+    if (matchCount <= 4) return 'CUARTOS DE FINAL';
+    if (matchCount <= 8) return 'OCTAVOS DE FINAL';
+  }
+  return `RONDA ${round}`;
+}
+
+const SIDE_LABEL: Record<string, string> = {
+  winners: 'LLAVE DE GANADORES',
+  losers: 'LLAVE DE PERDEDORES',
+  final: 'GRAN FINAL',
+};
+
+const MEDAL: Record<number, string> = { 1: '#F5A524', 2: '#C3CDDD', 3: '#C77B45' };
+
 export default function TournamentDetailScreen({ route, navigation }: any) {
-  const { tournamentId, leagueId, isOrganizer } = route.params;
+  const { tournamentId, leagueId, isOrganizer, initialTab } = route.params;
   const { playerId } = useAuth();
-  const [name, setName] = useState('');
-  const [status, setStatus] = useState('pending');
-  const [mode, setMode] = useState<'ranking' | 'casual'>('ranking');
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
-  const [combatMode, setCombatMode] = useState<string | null>(null);
+
+  const [tab, setTab] = useState<Tab>(initialTab ?? 'resumen');
+  const [tournament, setTournament] = useState<Tournament | null>(null);
   const [registrations, setRegistrations] = useState<Registration[]>([]);
-  const [hasBracket, setHasBracket] = useState(false);
+  const [phases, setPhases] = useState<Phase[]>([]);
+  const [matches, setMatches] = useState<MatchRow[]>([]);
+  const [byes, setByes] = useState<Bye[]>([]);
+  const [phaseId, setPhaseId] = useState<string | null>(null);
+  const [standings, setStandings] = useState<Standing[] | null>(null);
+  const [showQr, setShowQr] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [{ data: tournament }, { data: regs }, { count: matchCount }] = await Promise.all([
+    const [{ data: t }, { data: regs }, { data: matchRows }, { data: byeRows }] = await Promise.all([
       supabase
         .from('tournaments')
-        .select('name, status, mode, photo_url, combat_mode')
+        .select(
+          'id, name, status, mode, photo_url, combat_mode, deck_order, swiss_tiebreak, created_at, starts_at, registration_closes_at, capacity, level, prize, venues(name, city, address)'
+        )
         .eq('id', tournamentId)
         .single(),
       supabase
@@ -58,23 +145,49 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
         .eq('tournament_id', tournamentId),
       supabase
         .from('matches')
-        .select('*', { count: 'exact', head: true })
+        .select(
+          'id, phase_id, bracket_round, bracket_side, block_number, status, winner_id, score_a, score_b, player_a_id, player_b_id, player_a:players!matches_player_a_id_fkey(display_name, avatar_key, avatar_url), player_b:players!matches_player_b_id_fkey(display_name, avatar_key, avatar_url)'
+        )
         .eq('tournament_id', tournamentId)
-        .eq('bracket_round', 1),
+        .order('bracket_round', { ascending: true }),
+      supabase
+        .from('bracket_byes')
+        .select('phase_id, bracket_round, player_id')
+        .eq('tournament_id', tournamentId),
     ]);
-    setLoading(false);
-    setName((tournament as any)?.name ?? '');
-    setStatus((tournament as any)?.status ?? 'pending');
-    setMode((tournament as any)?.mode === 'casual' ? 'casual' : 'ranking');
-    // Se ordena por ELO: es el orden con el que se va a sembrar el bracket
-    // ranking. En casual el emparejamiento es al azar, pero mostrarlos por ELO
-    // sigue siendo el orden más útil para leer la lista de inscritos.
+
+    const row = t as any;
+    setTournament(
+      row
+        ? { ...row, venues: Array.isArray(row.venues) ? row.venues[0] ?? null : row.venues ?? null }
+        : null
+    );
+
+    // Por ELO: es el orden con el que se siembra el bracket de ranking, y en
+    // casual sigue siendo la forma más útil de leer la lista.
     setRegistrations(
       ((regs as any as Registration[]) ?? []).sort(
         (a, b) => (b.players?.elo_rating ?? 0) - (a.players?.elo_rating ?? 0)
       )
     );
-    setHasBracket((matchCount ?? 0) > 0);
+    setMatches((matchRows as any) ?? []);
+    setByes((byeRows as any) ?? []);
+
+    try {
+      const list = await loadPhases(tournamentId);
+      setPhases(list);
+      setPhaseId((current) => {
+        if (current && list.some((p) => p.id === current)) return current;
+        // La fase que se está jugando; si ninguna, la primera sin terminar.
+        const live = list.find((p) => p.status === 'in_progress');
+        const next = list.find((p) => p.status !== 'completed');
+        return (live ?? next ?? list[list.length - 1])?.id ?? null;
+      });
+    } catch (e: any) {
+      Alert.alert('No se pudieron cargar las fases', e.message ?? String(e));
+    }
+
+    setLoading(false);
   }, [tournamentId]);
 
   useFocusEffect(
@@ -83,11 +196,67 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
     }, [load])
   );
 
-  const mine = registrations.find((r) => r.player_id === playerId);
-  const checkedIn = registrations.filter((r) => r.checked_in_at).length;
+  const phase = phases.find((p) => p.id === phaseId) ?? null;
 
-  // La portada se puede cambiar después: al crear el torneo casi nunca se
-  // tiene la foto todavía, llega el día del evento.
+  // La tabla la calcula el motor de formatos, no la pantalla: es la MISMA
+  // función que decide el corte hacia la fase siguiente. Dos cálculos distintos
+  // para lo mismo terminan mostrando una tabla que no corresponde a quién pasó.
+  useEffect(() => {
+    let alive = true;
+    if (!phase || phases.length === 0 || phase.kind === 'single_elim' || phase.kind === 'double_elim') {
+      setStandings(null);
+      return;
+    }
+    setStandings(null);
+    phaseStandings(phase, phases)
+      .then((s) => {
+        if (alive) setStandings(s);
+      })
+      .catch(() => {
+        if (alive) setStandings([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [phase, phases]);
+
+  const nameOf = useMemo(() => {
+    const map = new Map<string, PlayerLite>();
+    for (const r of registrations) if (r.players) map.set(r.player_id, r.players);
+    return map;
+  }, [registrations]);
+
+  const mine = registrations.find((r) => r.player_id === playerId) ?? null;
+  const checkedIn = registrations.filter((r) => r.checked_in_at).length;
+  const myPosition = registrations.findIndex((r) => r.player_id === playerId) + 1;
+  const full = !!tournament?.capacity && registrations.length >= tournament.capacity;
+  const closed =
+    !!tournament?.registration_closes_at && new Date(tournament.registration_closes_at) < new Date();
+  const accent = coverAccent(tournamentId);
+
+  // El campeón: el ganador del combate de ronda más alta, con la gran final por
+  // encima del número de ronda (en eliminación doble abajo se juegan más rondas
+  // que arriba, así que la última no es la que decide).
+  const champion = useMemo(() => {
+    if (tournament?.status !== 'completed') return null;
+    const confirmed = matches.filter((m) => m.status === 'confirmed' && m.winner_id);
+    if (confirmed.length === 0) return null;
+    const weight = (m: MatchRow) => (m.bracket_side === 'final' ? 1 : 0);
+    const best = confirmed.reduce((acc, m) => {
+      if (weight(m) !== weight(acc)) return weight(m) > weight(acc) ? m : acc;
+      return m.bracket_round > acc.bracket_round ? m : acc;
+    });
+    return best.winner_id === best.player_a_id ? best.player_a : best.player_b;
+  }, [matches, tournament?.status]);
+
+  const myNextMatch = useMemo(
+    () =>
+      matches.find(
+        (m) => (m.player_a_id === playerId || m.player_b_id === playerId) && m.status !== 'confirmed'
+      ) ?? null,
+    [matches, playerId]
+  );
+
   async function changePhoto() {
     const uri = await pickCoverPhoto();
     if (!uri) return;
@@ -130,161 +299,345 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
     load();
   }
 
-  async function generateBracket() {
+  async function advance() {
+    if (!phase) return;
     setBusy(true);
     try {
-      const { pairsCreated, bye } = await generateRound1Bracket(tournamentId, leagueId);
-      Alert.alert(
-        'Bracket generado',
-        `${pairsCreated} enfrentamiento(s) creados.${bye ? ` ${bye.display_name} pasa directo (bye).` : ''}`
-      );
+      const r = await generatePhaseRound(phase, phases, leagueId);
+      if (r.finished) {
+        const champ = r.championId ? nameOf.get(r.championId)?.display_name : null;
+        Alert.alert(
+          'Fase terminada',
+          champ ? `${champ} se lleva esta fase.` : 'Ya se jugaron todas las rondas de esta fase.'
+        );
+      } else {
+        const byeNames = r.byes.map((b) => nameOf.get(b)?.display_name ?? '—');
+        Alert.alert(
+          `Ronda ${r.round} lista`,
+          [
+            `${r.created} combate(s) creados.`,
+            byeNames.length > 0 ? `Pasa(n) directo: ${byeNames.join(', ')}.` : null,
+            r.note ?? null,
+          ]
+            .filter(Boolean)
+            .join('\n')
+        );
+      }
       load();
     } catch (e: any) {
-      Alert.alert('Error', e.message ?? 'No se pudo generar el bracket');
+      Alert.alert('No se pudo avanzar', e.message ?? String(e));
     } finally {
       setBusy(false);
     }
   }
 
+  if (loading && !tournament) {
+    return (
+      <Screen>
+        <View style={styles.center}>
+          <Text style={type.soft}>Cargando…</Text>
+        </View>
+      </Screen>
+    );
+  }
+
+  if (!tournament) {
+    return (
+      <Screen>
+        <View style={styles.center}>
+          <Text style={type.soft}>Este torneo ya no existe.</Text>
+        </View>
+      </Screen>
+    );
+  }
+
+  const openTag =
+    tournament.status === 'pending'
+      ? { label: 'REGISTRO ABIERTO', color: colors.win }
+      : tournament.status === 'completed'
+      ? { label: 'COMPLETADO', color: colors.inkSoft }
+      : { label: 'EN JUEGO', color: accent.warm };
+
+  const header = (
+    <View style={{ gap: space.md }}>
+      <View style={styles.topBar}>
+        <Pressable onPress={() => navigation.goBack()} hitSlop={8}>
+          <Text style={styles.back}>‹</Text>
+        </Pressable>
+        <View style={{ flex: 1 }} />
+        {isOrganizer && (
+          <Pressable style={styles.iconBtn} onPress={changePhoto} disabled={uploading} hitSlop={6}>
+            <Text style={styles.iconBtnText}>{uploading ? '…' : '🖼️'}</Text>
+          </Pressable>
+        )}
+      </View>
+
+      {/* La cabecera es el torneo visto de cerca: la misma información con la
+          que se anuncia en el lobby, para que se reconozca al entrar. */}
+      <View style={[styles.headCard, { borderColor: accent.neon }]}>
+        <View style={styles.absFill} pointerEvents="none">
+          <Cover
+            id={tournamentId}
+            photoUrl={tournament.photo_url}
+            live={tournament.status !== 'completed'}
+            height={236}
+          />
+        </View>
+
+        <View style={styles.headTop}>
+          <View style={[styles.tag, { borderColor: openTag.color, backgroundColor: 'rgba(4,6,12,0.6)' }]}>
+            <Text style={[styles.tagText, { color: openTag.color }]}>{openTag.label}</Text>
+          </View>
+          <CountdownBox startsAt={tournament.starts_at} accent={accent.warm} />
+        </View>
+
+        <View style={{ gap: space.md }}>
+          <TournamentName name={tournament.name} color={accent.warm} size={24} />
+          <View style={{ gap: 5 }}>
+            <InfoRow
+              glyph="📅"
+              value={fmtDateFull(tournament.starts_at) ?? 'Fecha por confirmar'}
+              accent={accent.warm}
+            />
+            <InfoRow
+              glyph="📍"
+              value={
+                tournament.venues
+                  ? [tournament.venues.name, tournament.venues.city].filter(Boolean).join(', ')
+                  : 'Sede por confirmar'
+              }
+              accent={accent.warm}
+            />
+            <InfoRow
+              glyph="👥"
+              label="Formato"
+              value={`${formatLine(tournament)} · ${tournament.mode === 'casual' ? 'casual' : 'ranking'}`}
+              accent={accent.warm}
+            />
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.tabCard}>
+        <Tabs
+          tabs={[
+            { key: 'resumen' as Tab, label: 'RESUMEN' },
+            { key: 'jugadores' as Tab, label: 'JUGADORES' },
+            { key: 'bracket' as Tab, label: 'BRACKET' },
+            { key: 'info' as Tab, label: 'INFORMACIÓN' },
+          ]}
+          current={tab}
+          onChange={setTab}
+          color={accent.neon}
+        />
+
+        {tab === 'resumen' && (
+          <View style={styles.tabBody}>
+            <StatStrip
+              items={[
+                {
+                  glyph: '👥',
+                  label: 'INSCRITOS',
+                  value: tournament.capacity
+                    ? `${registrations.length} / ${tournament.capacity}`
+                    : String(registrations.length),
+                  tint: full ? colors.loss : undefined,
+                },
+                { glyph: '✅', label: 'CHECK-IN', value: String(checkedIn), tint: colors.win },
+                { glyph: '🛡️', label: 'NIVEL', value: tournament.level ?? 'Abierto' },
+                { glyph: '🏆', label: 'PREMIO', value: tournament.prize ?? 'Sin premio' },
+              ]}
+            />
+
+            <ClosingBar
+              createdAt={tournament.created_at}
+              closesAt={tournament.registration_closes_at}
+              accent={accent.neon}
+            />
+
+            <MyAction
+              tournament={tournament}
+              accent={accent}
+              mine={mine}
+              full={full}
+              closed={closed}
+              isOrganizer={isOrganizer}
+              onRegister={register}
+              onCheckIn={checkIn}
+              onQr={() => (isOrganizer ? setShowQr((v) => !v) : navigation.navigate('ScanCheckIn'))}
+            />
+
+            {/* El QR lo muestra quien organiza y lo escanea quien llega: es el
+                check-in de la puerta, y se usa con el torneo abierto en la mano. */}
+            {isOrganizer && showQr && (
+              <View style={styles.qrWrap}>
+                <View style={styles.qrBox}>
+                  <QRCode value={`torneo:${tournamentId}`} size={168} />
+                </View>
+                <Text style={styles.hintCenter}>
+                  Muéstralo en la entrada: quien lo escanea desde la app queda con check-in.
+                </Text>
+              </View>
+            )}
+
+            <Pressable
+              style={styles.linkRow}
+              onPress={() => navigation.navigate('Judges', { tournamentId, title: tournament.name })}
+            >
+              <Text style={styles.linkGlyph}>⚖️</Text>
+              <Text style={styles.linkText}>CUERPO DE JUECES</Text>
+              <IconChevron />
+            </Pressable>
+          </View>
+        )}
+
+        {tab === 'jugadores' && (
+          <View style={styles.tabBody}>
+            {mine ? (
+              <View style={[styles.youCard, { borderColor: accent.neon }]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.youLabel}>TU POSICIÓN</Text>
+                  <Text style={[styles.youValue, { color: accent.warm }]}>
+                    #{myPosition} de {registrations.length}
+                  </Text>
+                </View>
+                <Pill
+                  label={mine.checked_in_at ? 'Presente' : 'Falta tu check-in'}
+                  color={mine.checked_in_at ? colors.win : colors.streak}
+                />
+              </View>
+            ) : null}
+            <Text style={styles.listTitle}>
+              {isOrganizer
+                ? `JUGADORES INSCRITOS (${registrations.length}) · TOCA PARA DAR CHECK-IN`
+                : `JUGADORES INSCRITOS (${registrations.length})`}
+            </Text>
+          </View>
+        )}
+
+        {tab === 'bracket' && (
+          <View style={styles.tabBody}>
+            <BracketTab
+              phases={phases}
+              phase={phase}
+              onPickPhase={setPhaseId}
+              matches={matches}
+              byes={byes}
+              nameOf={nameOf}
+              standings={standings}
+              playerId={playerId}
+              accent={accent}
+              champion={champion}
+              checkedIn={checkedIn}
+              isOrganizer={isOrganizer}
+              busy={busy}
+              onAdvance={advance}
+              onOpenMatch={(id: string) => navigation.navigate('MatchDetail', { matchId: id })}
+            />
+          </View>
+        )}
+
+        {tab === 'info' && (
+          <View style={styles.tabBody}>
+            <InfoTab
+              tournament={tournament}
+              phases={phases}
+              accent={accent}
+              onJudges={() => navigation.navigate('Judges', { tournamentId, title: tournament.name })}
+            />
+          </View>
+        )}
+      </View>
+
+      {/* Los inscritos también se asoman en el resumen: quién viene es parte de
+          decidir si vas, y mandarlo a otra pestaña lo esconde. */}
+      {tab === 'resumen' && registrations.length > 0 && (
+        <View style={{ gap: space.sm }}>
+          <View style={styles.sectionRow}>
+            <Text style={styles.listTitle}>JUGADORES INSCRITOS ({registrations.length})</Text>
+            <Pressable onPress={() => setTab('jugadores')} hitSlop={6}>
+              <Text style={[styles.sectionLink, { color: accent.warm }]}>VER TODOS ›</Text>
+            </Pressable>
+          </View>
+          {registrations.slice(0, 5).map((r, i) => (
+            <PlayerRow
+              key={r.player_id}
+              reg={r}
+              index={i}
+              me={r.player_id === playerId}
+              accent={accent}
+              onPress={
+                isOrganizer ? () => toggleCheckIn(r.player_id, !!r.checked_in_at) : undefined
+              }
+            />
+          ))}
+        </View>
+      )}
+
+      {tab === 'resumen' && champion && (
+        <Card style={styles.champ}>
+          <Text style={styles.champTag}>CAMPEÓN DEL TORNEO</Text>
+          <View style={styles.champRow}>
+            <Avatar uri={champion.avatar_url} avatarKey={champion.avatar_key} size={58} ring={colors.streak} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.champName} numberOfLines={1}>
+                {champion.display_name}
+              </Text>
+              <Text style={styles.meta}>Ganó la final</Text>
+            </View>
+            <Text style={{ fontSize: 26 }}>🏆</Text>
+          </View>
+        </Card>
+      )}
+
+      {tab === 'resumen' && myNextMatch && (
+        <Card
+          style={[styles.next, { borderColor: accent.neon }]}
+          onPress={() => navigation.navigate('MatchDetail', { matchId: myNextMatch.id })}
+        >
+          <Text style={[styles.nextTag, { color: accent.warm }]}>TU SIGUIENTE COMBATE</Text>
+          <Text style={styles.nextText}>
+            {myNextMatch.player_a?.display_name ?? '—'} vs {myNextMatch.player_b?.display_name ?? '—'}
+          </Text>
+          <Text style={styles.meta}>Ronda {myNextMatch.bracket_round} · toca para reportar</Text>
+        </Card>
+      )}
+
+      {tab === 'resumen' && tournament.prize ? (
+        <Card style={styles.prize} onPress={() => setTab('info')}>
+          <Hex size={46} color={colors.elite}>
+            <Text style={{ fontSize: 17 }}>🏆</Text>
+          </Hex>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.prizeTag}>PREMIO DEL TORNEO</Text>
+            <Text style={styles.prizeText}>{tournament.prize}</Text>
+          </View>
+          <IconChevron />
+        </Card>
+      ) : null}
+    </View>
+  );
+
   return (
     <Screen padded={false}>
       <FlatList
-        data={registrations}
+        data={tab === 'jugadores' ? registrations : []}
         keyExtractor={(r) => r.player_id}
         refreshing={loading}
         onRefresh={load}
         contentContainerStyle={styles.list}
-        ListHeaderComponent={
-          <View style={styles.header}>
-            <Pressable onPress={() => navigation.goBack()} hitSlop={8}>
-              <Text style={styles.back}>‹</Text>
-            </Pressable>
-
-            {/* La portada primero y a todo el ancho: entras al torneo, no a su
-                ficha. Si nadie subió foto, se dibuja una. */}
-            <View style={styles.cover}>
-              <Cover
-                id={tournamentId}
-                photoUrl={photoUrl}
-                live={status === 'pending'}
-                height={168}
-              />
-              {isOrganizer && (
-                <Pressable style={styles.photoBtn} onPress={changePhoto} disabled={uploading} hitSlop={6}>
-                  <Text style={styles.photoBtnText}>
-                    {uploading ? 'Subiendo…' : photoUrl ? '🖼️ Cambiar portada' : '🖼️ Poner portada'}
-                  </Text>
-                </Pressable>
-              )}
-            </View>
-
-            <View style={styles.hero}>
-              <Text style={styles.title}>{name}</Text>
-              {combatLabel(combatMode) ? (
-                <Text style={styles.combat}>{combatLabel(combatMode)}</Text>
-              ) : null}
-              <View style={styles.pills}>
-                <Pill
-                  label={status === 'pending' ? 'Registro abierto' : 'Terminado'}
-                  color={status === 'pending' ? colors.win : colors.inkDim}
-                />
-                <Pill
-                  label={mode === 'casual' ? 'Casual' : 'Ranking'}
-                  color={mode === 'casual' ? colors.streak : colors.blue}
-                />
-              </View>
-              {mode === 'casual' && (
-                <Text style={styles.modeNote}>
-                  Emparejamiento al azar · Aerial permitido · no mueve el ELO
-                </Text>
-              )}
-            </View>
-
-            <Card style={styles.stats}>
-              <Stat label="Inscritos" value={String(registrations.length)} />
-              <View style={styles.vDiv} />
-              <Stat label="Con check-in" value={String(checkedIn)} tint={colors.win} />
-            </Card>
-
-            <View style={{ gap: space.sm }}>
-              {!mine ? (
-                <Button label="INSCRIBIRME" onPress={register} />
-              ) : mine.checked_in_at ? (
-                <Card style={styles.done}>
-                  <Text style={styles.doneText}>✓ Ya hiciste check-in</Text>
-                </Card>
-              ) : (
-                <Button label="HACER CHECK-IN" onPress={checkIn} />
-              )}
-
-              {hasBracket ? (
-                <Button
-                  label="VER BRACKET"
-                  variant="ghost"
-                  onPress={() => navigation.navigate('Bracket', { tournamentId, leagueId, isOrganizer })}
-                />
-              ) : isOrganizer ? (
-                <>
-                  <Button
-                    label={`GENERAR BRACKET (${checkedIn} listos)`}
-                    variant="ghost"
-                    onPress={generateBracket}
-                    disabled={busy || checkedIn < 2}
-                    loading={busy}
-                  />
-                  {checkedIn < 2 && (
-                    <Text style={styles.hint}>
-                      Hacen falta al menos 2 jugadores con check-in para armar el bracket.
-                    </Text>
-                  )}
-                </>
-              ) : null}
-
-              {/* Un cuerpo arbitral se convoca para el evento: sin jueces
-                  nombrados, los resultados de este torneo se quedan esperando. */}
-              <Button
-                label="⚖️  CUERPO DE JUECES"
-                variant="ghost"
-                onPress={() => navigation.navigate('Judges', { tournamentId, title: 'Este torneo' })}
-              />
-            </View>
-
-            <SectionTitle>
-              {isOrganizer ? 'Jugadores · toca para dar check-in' : 'Jugadores inscritos'}
-            </SectionTitle>
-          </View>
-        }
-        renderItem={({ item, index }) => {
-          const p = item.players;
-          const here = !!item.checked_in_at;
-          const me = item.player_id === playerId;
-          const row = (
-            <Card style={[styles.row, me && { borderColor: colors.blue }]}>
-              <Text style={styles.seed}>{index + 1}</Text>
-              <Avatar
-                uri={p?.avatar_url}
-                avatarKey={p?.avatar_key}
-                size={40}
-                ring={here ? colors.win : undefined}
-              />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.name} numberOfLines={1}>
-                  {me ? 'Tú' : p?.display_name ?? '—'}
-                </Text>
-                <Text style={styles.meta}>{Math.round(p?.elo_rating ?? 1000)} ELO</Text>
-              </View>
-              {here ? <Pill label="Presente" color={colors.win} /> : <Text style={styles.waiting}>Falta</Text>}
-            </Card>
-          );
-
-          return isOrganizer ? (
-            <Pressable onPress={() => toggleCheckIn(item.player_id, here)}>{row}</Pressable>
-          ) : (
-            row
-          );
-        }}
+        ListHeaderComponent={header}
+        renderItem={({ item, index }) => (
+          <PlayerRow
+            reg={item}
+            index={index}
+            me={item.player_id === playerId}
+            accent={accent}
+            onPress={isOrganizer ? () => toggleCheckIn(item.player_id, !!item.checked_in_at) : undefined}
+          />
+        )}
         ListEmptyComponent={
-          !loading ? (
+          tab === 'jugadores' && !loading ? (
             <Card>
               <Text style={type.soft}>Nadie inscrito todavía. Sé el primero.</Text>
             </Card>
@@ -295,41 +648,759 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
   );
 }
 
-function Stat({ label, value, tint }: { label: string; value: string; tint?: string }) {
+/* ─────────────────────────── Lo que me toca hacer ─────────────────────────── */
+
+function MyAction({
+  tournament,
+  accent,
+  mine,
+  full,
+  closed,
+  isOrganizer,
+  onRegister,
+  onCheckIn,
+  onQr,
+}: {
+  tournament: Tournament;
+  accent: { neon: string; warm: string };
+  mine: Registration | null;
+  full: boolean;
+  closed: boolean;
+  isOrganizer: boolean;
+  onRegister: () => void;
+  onCheckIn: () => void;
+  onQr: () => void;
+}) {
+  const canRegister = tournament.status === 'pending' && !full && !closed;
+
+  if (mine?.checked_in_at && !isOrganizer) {
+    return (
+      <View style={[styles.doneCard, { borderColor: colors.win }]}>
+        <Text style={styles.doneText}>✓ Ya hiciste check-in</Text>
+      </View>
+    );
+  }
+
+  const label = !mine ? 'INSCRIBIRME' : mine.checked_in_at ? 'CHECK-IN HECHO' : 'HACER CHECK-IN';
+  const action = !mine ? onRegister : mine.checked_in_at ? () => {} : onCheckIn;
+  const off = !mine ? !canRegister : !!mine.checked_in_at;
+
   return (
-    <View style={styles.stat}>
-      <Text style={styles.statLabel}>{label.toUpperCase()}</Text>
-      <Text style={[styles.statVal, tint ? { color: tint } : null]}>{value}</Text>
+    <View style={{ gap: space.sm }}>
+      <View style={styles.actionRow}>
+        <Pressable
+          onPress={action}
+          disabled={off}
+          style={({ pressed }) => [
+            styles.action,
+            { backgroundColor: off ? colors.surface : accent.neon },
+            !off && glow(accent.neon, 12),
+            pressed && !off && { opacity: 0.9 },
+          ]}
+        >
+          <Text style={[styles.actionText, off && { color: colors.inkDim }]}>{label}</Text>
+        </Pressable>
+
+        {/* El cuadrito del QR: el organizador lo enseña, el jugador lo escanea. */}
+        <Pressable onPress={onQr} style={[styles.qrBtn, { borderColor: accent.neon }]} hitSlop={4}>
+          <Text style={{ fontSize: 19 }}>▣</Text>
+        </Pressable>
+      </View>
+
+      {!mine && !canRegister && (
+        <Text style={styles.hintCenter}>
+          {tournament.status !== 'pending'
+            ? 'Este torneo ya empezó.'
+            : full
+            ? 'Ya no quedan lugares.'
+            : 'Las inscripciones ya cerraron.'}
+        </Text>
+      )}
+    </View>
+  );
+}
+
+function PlayerRow({
+  reg,
+  index,
+  me,
+  accent,
+  onPress,
+}: {
+  reg: Registration;
+  index: number;
+  me: boolean;
+  accent: { neon: string; warm: string };
+  onPress?: () => void;
+}) {
+  const p = reg.players;
+  const here = !!reg.checked_in_at;
+  const medal = MEDAL[index + 1];
+
+  const body = (
+    <View style={[styles.playerRow, me && { borderColor: accent.neon, backgroundColor: colors.surface }]}>
+      <View style={[styles.seedBox, medal ? { borderColor: medal } : null]}>
+        <Text style={[styles.seedText, medal ? { color: medal } : null]}>{index + 1}</Text>
+      </View>
+      <Avatar uri={p?.avatar_url} avatarKey={p?.avatar_key} size={40} ring={here ? colors.win : undefined} />
+      <View style={{ flex: 1 }}>
+        <Text style={styles.playerName} numberOfLines={1}>
+          {me ? 'Tú' : p?.display_name ?? '—'}
+        </Text>
+        <Text style={styles.meta}>{Math.round(p?.elo_rating ?? 1000)} ELO</Text>
+      </View>
+      {me ? (
+        <View style={[styles.tag, { borderColor: accent.neon }]}>
+          <Text style={[styles.tagText, { color: accent.warm }]}>TU POSICIÓN</Text>
+        </View>
+      ) : (
+        <Text style={[styles.checkText, here && { color: colors.win }]}>
+          {here ? '✓ Presente' : 'Check-in pendiente'}
+        </Text>
+      )}
+    </View>
+  );
+
+  return onPress ? <Pressable onPress={onPress}>{body}</Pressable> : body;
+}
+
+/* ─────────────────────────── BRACKET ─────────────────────────── */
+
+function BracketTab({
+  phases,
+  phase,
+  onPickPhase,
+  matches,
+  byes,
+  nameOf,
+  standings,
+  playerId,
+  accent,
+  champion,
+  checkedIn,
+  isOrganizer,
+  busy,
+  onAdvance,
+  onOpenMatch,
+}: any) {
+  if (!phase) {
+    return (
+      <Card>
+        <Text style={type.soft}>Este torneo no tiene estructura todavía.</Text>
+      </Card>
+    );
+  }
+
+  const phaseMatches: MatchRow[] = matches.filter((m: MatchRow) => m.phase_id === phase.id);
+  const rounds = [...new Set(phaseMatches.map((m) => m.bracket_round))].sort((a, b) => a - b);
+  const lastRound = rounds[rounds.length - 1] ?? 0;
+  const openMatches = phaseMatches.filter(
+    (m) => m.bracket_round === lastRound && m.status !== 'confirmed'
+  );
+
+  const index = phases.findIndex((p: Phase) => p.id === phase.id);
+  const previous: Phase | null = index > 0 ? phases[index - 1] : null;
+  const previousPending = !!previous && previous.status !== 'completed';
+
+  const notStarted = rounds.length === 0;
+  const enoughPlayers = phase.phase_number > 1 || checkedIn >= 2;
+  const canAdvance =
+    isOrganizer &&
+    phase.status !== 'completed' &&
+    openMatches.length === 0 &&
+    !previousPending &&
+    enoughPlayers;
+
+  const advanceLabel = notStarted
+    ? phase.phase_number === 1
+      ? `GENERAR PRIMERA RONDA (${checkedIn} con check-in)`
+      : 'ABRIR ESTA FASE'
+    : `GENERAR RONDA ${lastRound + 1}`;
+
+  const blocked = previousPending
+    ? `Primero tiene que terminar la fase ${previous!.phase_number}.`
+    : openMatches.length > 0
+    ? openMatches.length === 1
+      ? `Falta 1 resultado por aprobar en la ronda ${lastRound}.`
+      : `Faltan ${openMatches.length} resultados por aprobar en la ronda ${lastRound}.`
+    : !enoughPlayers
+    ? 'Hacen falta al menos 2 jugadores con check-in.'
+    : null;
+
+  return (
+    <View style={{ gap: space.md }}>
+      {phases.length > 1 && (
+        <View style={styles.phaseRow}>
+          {phases.map((p: Phase) => {
+            const on = p.id === phase.id;
+            return (
+              <Pressable
+                key={p.id}
+                onPress={() => onPickPhase(p.id)}
+                style={[styles.phaseChip, on && { borderColor: accent.neon, backgroundColor: colors.surface }]}
+              >
+                <Text style={[styles.phaseChipText, on && { color: colors.ink }]}>FASE {p.phase_number}</Text>
+                <Text style={styles.phaseChipSub}>{phaseLabel(p.kind)}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
+
+      <View style={styles.phaseHead}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.phaseTitle}>{phaseLabel(phase.kind)}</Text>
+          <Text style={styles.meta}>
+            {[
+              `a ${phase.points_to_win} puntos`,
+              phase.kind === 'swiss' && phase.rounds ? `${phase.rounds} rondas` : null,
+              phase.kind === 'blocks' && phase.block_count ? `${phase.block_count} grupos` : null,
+              phase.cut_size ? `pasan ${phase.cut_size}` : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </Text>
+        </View>
+        <Pill
+          label={
+            phase.status === 'completed'
+              ? 'Terminada'
+              : phase.status === 'in_progress'
+              ? 'En juego'
+              : 'Sin empezar'
+          }
+          color={
+            phase.status === 'completed'
+              ? colors.inkDim
+              : phase.status === 'in_progress'
+              ? accent.neon
+              : colors.streak
+          }
+        />
+      </View>
+
+      {champion && (
+        <Card style={styles.champ}>
+          <Text style={styles.champTag}>CAMPEÓN DEL TORNEO</Text>
+          <View style={styles.champRow}>
+            <Avatar uri={champion.avatar_url} avatarKey={champion.avatar_key} size={52} ring={colors.streak} />
+            <Text style={[styles.champName, { flex: 1 }]} numberOfLines={1}>
+              {champion.display_name}
+            </Text>
+            <Text style={{ fontSize: 24 }}>🏆</Text>
+          </View>
+        </Card>
+      )}
+
+      {/* La tabla solo tiene sentido donde todos siguen jugando. En eliminación
+          la posición es "hasta dónde llegó", y eso lo cuenta la llave. */}
+      {standings && standings.length > 0 && (
+        <View style={{ gap: space.sm }}>
+          <Text style={styles.listTitle}>TABLA DE LA FASE</Text>
+          <View style={styles.table}>
+            <View style={styles.tableHead}>
+              <Text style={[styles.thNum, { width: 24 }]}>#</Text>
+              <Text style={[styles.th, { flex: 1 }]}>JUGADOR</Text>
+              <Text style={[styles.thNum, { width: 30 }]}>G</Text>
+              <Text style={[styles.thNum, { width: 30 }]}>P</Text>
+              <Text style={[styles.thNum, { width: 42 }]}>DIF</Text>
+            </View>
+            {standings.map((s: Standing, i: number) => {
+              const me = s.player_id === playerId;
+              const cut = phase.cut_size && i < phase.cut_size;
+              return (
+                <View
+                  key={s.player_id}
+                  style={[
+                    styles.tableRow,
+                    me && { backgroundColor: colors.surface },
+                    cut ? { borderLeftWidth: 2, borderLeftColor: colors.win } : null,
+                  ]}
+                >
+                  <Text style={[styles.tdNum, { width: 24 }, me && { color: accent.warm }]}>{i + 1}</Text>
+                  <Text
+                    style={[styles.td, { flex: 1 }, me && { color: colors.ink, fontWeight: '800' }]}
+                    numberOfLines={1}
+                  >
+                    {me ? 'Tú' : nameOf.get(s.player_id)?.display_name ?? '—'}
+                  </Text>
+                  <Text style={[styles.tdNum, { width: 30, color: colors.win }]}>{s.wins}</Text>
+                  <Text style={[styles.tdNum, { width: 30, color: colors.loss }]}>{s.losses}</Text>
+                  <Text style={[styles.tdNum, { width: 42 }]}>{s.diff > 0 ? `+${s.diff}` : s.diff}</Text>
+                </View>
+              );
+            })}
+          </View>
+          {phase.cut_size ? (
+            <Text style={styles.hint}>
+              La línea verde marca a los {phase.cut_size} que pasan a la fase siguiente.
+            </Text>
+          ) : null}
+        </View>
+      )}
+
+      {rounds.length === 0 ? (
+        <Card style={styles.empty}>
+          <Hex size={50} color={colors.inkDim}>
+            <Text style={{ fontSize: 18 }}>🗺️</Text>
+          </Hex>
+          <Text style={styles.emptyTitle}>Esta fase no ha empezado</Text>
+          <Text style={styles.hintCenter}>
+            {isOrganizer
+              ? 'La primera ronda se arma con quienes tengan check-in.'
+              : 'La arma un moderador cuando cierre el check-in.'}
+          </Text>
+        </Card>
+      ) : (
+        rounds.map((round) => {
+          const roundMatches = phaseMatches.filter((m) => m.bracket_round === round);
+          const roundByes = byes.filter((b: Bye) => b.phase_id === phase.id && b.bracket_round === round);
+          // En eliminación doble las dos llaves se juegan a la vez: separarlas es
+          // la única forma de leer la ronda sin adivinar quién sigue vivo.
+          const sides = [...new Set(roundMatches.map((m) => m.bracket_side ?? 'none'))];
+
+          return (
+            <View key={round} style={{ gap: space.sm }}>
+              <View style={styles.roundHead}>
+                <View style={styles.roundLine} />
+                <Text style={styles.roundTitle}>{roundTitle(phase.kind, roundMatches.length, round)}</Text>
+                <View style={styles.roundLine} />
+              </View>
+
+              {sides.map((side) =>
+                roundMatches
+                  .filter((m) => (m.bracket_side ?? 'none') === side)
+                  .map((m, i) => (
+                    <View key={m.id} style={{ gap: space.sm }}>
+                      {i === 0 && sides.length > 1 && side !== 'none' ? (
+                        <Text style={styles.sideLabel}>{SIDE_LABEL[side] ?? ''}</Text>
+                      ) : null}
+                      <MatchCard match={m} onPress={() => onOpenMatch(m.id)} />
+                    </View>
+                  ))
+              )}
+
+              {roundByes.map((b: Bye) => (
+                <Card key={`bye-${round}-${b.player_id}`} style={styles.bye}>
+                  <Hex size={32} color={colors.streak}>
+                    <Text style={{ fontSize: 12 }}>➜</Text>
+                  </Hex>
+                  <Text style={styles.byeText}>
+                    <Text style={styles.byeName}>{nameOf.get(b.player_id)?.display_name ?? '—'}</Text> pasa
+                    directo (bye)
+                  </Text>
+                </Card>
+              ))}
+            </View>
+          );
+        })
+      )}
+
+      {isOrganizer && phase.status !== 'completed' && (
+        <View style={{ gap: space.sm, marginTop: space.sm }}>
+          <Button label={advanceLabel} onPress={onAdvance} disabled={!canAdvance || busy} loading={busy} />
+          {blocked ? <Text style={styles.hintCenter}>{blocked}</Text> : null}
+        </View>
+      )}
+    </View>
+  );
+}
+
+function MatchCard({ match, onPress }: { match: MatchRow; onPress: () => void }) {
+  const aWon = match.winner_id === match.player_a_id;
+  const bWon = match.winner_id === match.player_b_id;
+  const done = match.status === 'confirmed';
+
+  return (
+    <Card style={[styles.match, !done && { borderColor: colors.lineHi }]} onPress={onPress}>
+      <Side player={match.player_a} won={aWon} dim={done && !aWon} />
+      <View style={styles.matchCenter}>
+        {done ? (
+          <Text style={styles.score}>
+            {match.score_a}–{match.score_b}
+          </Text>
+        ) : (
+          <Text style={styles.vs}>VS</Text>
+        )}
+        {!done && (
+          <Pill
+            label={
+              match.status === 'disputed'
+                ? 'Disputa'
+                : match.status === 'reported'
+                ? 'Por aprobar'
+                : 'En juego'
+            }
+            color={match.status === 'disputed' ? colors.loss : colors.blue}
+            align="center"
+          />
+        )}
+      </View>
+      <Side player={match.player_b} won={bWon} dim={done && !bWon} right />
+    </Card>
+  );
+}
+
+function Side({
+  player,
+  won,
+  dim,
+  right,
+}: {
+  player: PlayerLite | null;
+  won: boolean;
+  dim: boolean;
+  right?: boolean;
+}) {
+  return (
+    <View style={[styles.side, right && { flexDirection: 'row-reverse' }]}>
+      <Avatar uri={player?.avatar_url} avatarKey={player?.avatar_key} size={36} ring={won ? colors.win : undefined} />
+      <Text
+        style={[
+          styles.sideName,
+          right && { textAlign: 'right' },
+          won && { color: colors.win },
+          dim && { color: colors.inkDim },
+        ]}
+        numberOfLines={2}
+      >
+        {player?.display_name ?? '—'}
+      </Text>
+    </View>
+  );
+}
+
+/* ─────────────────────────── INFORMACIÓN ─────────────────────────── */
+
+function InfoTab({
+  tournament,
+  phases,
+  accent,
+  onJudges,
+}: {
+  tournament: Tournament;
+  phases: Phase[];
+  accent: { neon: string; warm: string };
+  onJudges: () => void;
+}) {
+  const venue = tournament.venues;
+  const deckSize = COMBAT_MODES.find((m) => m.key === tournament.combat_mode)?.deckSize ?? 1;
+
+  return (
+    <View style={{ gap: space.md }}>
+      <Text style={styles.listTitle}>CUÁNDO Y DÓNDE</Text>
+      <Card style={{ gap: space.md }}>
+        <InfoLine glyph="📅" label="Fecha" value={fmtDateTime(tournament.starts_at) ?? 'Por confirmar'} />
+        <InfoLine
+          glyph="📍"
+          label="Sede"
+          value={venue ? [venue.name, venue.city, venue.address].filter(Boolean).join(' · ') : 'Por confirmar'}
+        />
+        <InfoLine
+          glyph="👥"
+          label="Cupo"
+          value={tournament.capacity ? `${tournament.capacity} jugadores` : 'Sin límite'}
+        />
+        <InfoLine
+          glyph="🔒"
+          label="Cierre de inscripciones"
+          value={fmtDate(tournament.registration_closes_at) ?? 'Hasta que empiece'}
+        />
+        {tournament.prize ? <InfoLine glyph="🏅" label="Premio" value={tournament.prize} /> : null}
+      </Card>
+
+      <Text style={styles.listTitle}>CÓMO SE JUEGA</Text>
+      <Card style={{ gap: space.md }}>
+        <InfoLine glyph="⚔️" label="Modalidad" value={combatLabel(tournament.combat_mode)} />
+        {deckSize > 1 ? (
+          <InfoLine
+            glyph="🎴"
+            label="Orden del deck"
+            value={
+              tournament.deck_order === 'blind'
+                ? 'A ciegas: cada quien elige en secreto y se revela a la vez'
+                : 'Decidido antes y respetado'
+            }
+          />
+        ) : null}
+        <InfoLine
+          glyph="📈"
+          label="Cuenta para el ranking"
+          value={
+            tournament.mode === 'casual'
+              ? 'No. Emparejamiento al azar, Aerial permitido, no mueve el ELO'
+              : 'Sí. Siembra por ELO, sin Aerial'
+          }
+        />
+        {phases.some((p) => p.kind === 'swiss') ? (
+          <InfoLine
+            glyph="⚖️"
+            label="Desempate del suizo"
+            value={
+              tournament.swiss_tiebreak === 'opponents'
+                ? 'Fuerza de rivales (Buchholz)'
+                : 'Reglamento DML: diferencia de puntos, luego enfrentamiento directo'
+            }
+          />
+        ) : null}
+      </Card>
+
+      <Text style={styles.listTitle}>ESTRUCTURA</Text>
+      {phases.map((p) => (
+        <Card key={p.id} style={styles.phaseInfo}>
+          <View style={[styles.phaseNum, { borderColor: accent.neon }]}>
+            <Text style={[styles.phaseNumText, { color: accent.warm }]}>{p.phase_number}</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.playerName}>{phaseLabel(p.kind)}</Text>
+            <Text style={styles.meta}>
+              {[
+                `a ${p.points_to_win} puntos`,
+                p.kind === 'swiss' && p.rounds ? `${p.rounds} rondas` : null,
+                p.kind === 'blocks' && p.block_count ? `${p.block_count} grupos` : null,
+                p.cut_size ? `entran ${p.cut_size}` : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </Text>
+          </View>
+          <Pill
+            label={p.status === 'completed' ? 'Terminada' : p.status === 'in_progress' ? 'En juego' : 'Pendiente'}
+            color={p.status === 'completed' ? colors.inkDim : p.status === 'in_progress' ? accent.neon : colors.streak}
+          />
+        </Card>
+      ))}
+
+      {/* Un cuerpo arbitral se convoca para el evento: sin jueces nombrados, los
+          resultados de este torneo se quedan esperando. */}
+      <Button label="⚖️  CUERPO DE JUECES" variant="ghost" onPress={onJudges} />
+    </View>
+  );
+}
+
+function InfoLine({ glyph, label, value }: { glyph: string; label: string; value: string }) {
+  return (
+    <View style={styles.infoLine}>
+      <Text style={styles.infoGlyph}>{glyph}</Text>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.infoLabel}>{label.toUpperCase()}</Text>
+        <Text style={styles.infoValue}>{value}</Text>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   list: { paddingHorizontal: space.xl, paddingBottom: space.xxxl, gap: space.sm },
-  header: { gap: space.md, paddingTop: space.md, marginBottom: space.sm },
+  absFill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+
+  topBar: { flexDirection: 'row', alignItems: 'center', paddingTop: space.md },
   back: { color: colors.ink, fontSize: 30, lineHeight: 32, width: 22 },
-  cover: { borderRadius: radius.lg, overflow: 'hidden', marginBottom: space.md },
-  combat: { fontSize: 12, color: colors.inkSoft },
-  photoBtn: { paddingVertical: space.md, alignItems: 'center', backgroundColor: colors.card },
-  photoBtnText: { color: colors.blue, fontSize: 12.5, fontWeight: '700' },
-  hero: { alignItems: 'center', gap: space.sm, paddingVertical: space.md },
-  title: { ...type.display, fontSize: 22, textAlign: 'center' },
-  pills: { flexDirection: 'row', gap: space.sm },
-  modeNote: { fontSize: 11, color: colors.streak, textAlign: 'center' },
+  iconBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconBtnText: { fontSize: 15 },
 
-  stats: { flexDirection: 'row', alignItems: 'center' },
-  stat: { flex: 1, alignItems: 'center', gap: 2 },
-  statLabel: { fontSize: 8.5, fontWeight: '800', letterSpacing: 0.8, color: colors.inkDim },
-  statVal: { fontSize: 18, fontWeight: '800', color: colors.ink },
-  vDiv: { width: 1, height: 28, backgroundColor: colors.line },
+  headCard: {
+    height: 236,
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    backgroundColor: colors.card,
+    overflow: 'hidden',
+    padding: space.lg,
+    justifyContent: 'space-between',
+  },
+  headTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: space.sm },
 
-  done: { alignItems: 'center', borderColor: colors.win },
-  doneText: { color: colors.win, fontWeight: '700', fontSize: 13.5 },
-  hint: { fontSize: 11, color: colors.inkDim, textAlign: 'center' },
+  tabCard: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.lg,
+    backgroundColor: colors.card,
+    overflow: 'hidden',
+  },
+  tabBody: { padding: space.lg, gap: space.md },
 
-  row: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  seed: { width: 20, fontSize: 12, fontWeight: '800', color: colors.inkDim, textAlign: 'center' },
-  name: { fontSize: 14, fontWeight: '700', color: colors.ink },
-  meta: { fontSize: 11, color: colors.inkSoft, marginTop: 2 },
-  waiting: { fontSize: 11, color: colors.inkDim },
+  actionRow: { flexDirection: 'row', gap: space.sm },
+  action: {
+    flex: 1,
+    borderRadius: radius.md,
+    paddingVertical: space.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionText: { fontSize: 13.5, fontWeight: '800', letterSpacing: 1, color: '#fff' },
+  qrBtn: {
+    width: 54,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  qrWrap: { alignItems: 'center', gap: space.sm },
+  qrBox: { backgroundColor: '#fff', padding: space.md, borderRadius: radius.md },
+
+  doneCard: {
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingVertical: space.lg,
+    alignItems: 'center',
+    backgroundColor: colors.winSoft,
+  },
+  doneText: { color: colors.win, fontWeight: '800', fontSize: 13.5 },
+
+  linkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.md,
+    paddingVertical: space.lg,
+    paddingHorizontal: space.lg,
+  },
+  linkGlyph: { fontSize: 16 },
+  linkText: { flex: 1, fontSize: 12, fontWeight: '800', letterSpacing: 0.8, color: colors.ink },
+
+  sectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  sectionLink: { fontSize: 11, fontWeight: '800', letterSpacing: 0.6 },
+  listTitle: { fontSize: 11, fontWeight: '800', letterSpacing: 1, color: colors.inkSoft },
+
+  playerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.md,
+    backgroundColor: colors.card,
+    padding: space.md,
+  },
+  seedBox: {
+    width: 24,
+    height: 24,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: colors.line,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  seedText: { fontSize: 11, fontWeight: '800', color: colors.inkSoft },
+  playerName: { fontSize: 14, fontWeight: '700', color: colors.ink },
+  checkText: { fontSize: 10.5, color: colors.inkDim },
+
+  youCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    padding: space.md,
+    backgroundColor: colors.surface,
+  },
+  youLabel: { fontSize: 8.5, fontWeight: '800', letterSpacing: 0.8, color: colors.inkDim },
+  youValue: { fontSize: 19, fontWeight: '800' },
+
+  tag: { borderWidth: 1, borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 3 },
+  tagText: { fontSize: 8, fontWeight: '800', letterSpacing: 0.6 },
+
+  meta: { fontSize: 11.5, color: colors.inkSoft, marginTop: 2 },
+
+  phaseRow: { flexDirection: 'row', gap: space.sm, flexWrap: 'wrap' },
+  phaseChip: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.md,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.md,
+    gap: 1,
+  },
+  phaseChipText: { fontSize: 10.5, fontWeight: '800', letterSpacing: 0.6, color: colors.inkSoft },
+  phaseChipSub: { fontSize: 9.5, color: colors.inkDim },
+  phaseHead: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  phaseTitle: { fontSize: 15, fontWeight: '800', color: colors.ink },
+
+  table: { borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, overflow: 'hidden' },
+  tableHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.line,
+    backgroundColor: colors.surface,
+  },
+  th: { fontSize: 8.5, fontWeight: '800', letterSpacing: 0.8, color: colors.inkDim },
+  thNum: { fontSize: 8.5, fontWeight: '800', letterSpacing: 0.8, color: colors.inkDim, textAlign: 'center' },
+  tableRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    paddingHorizontal: space.md,
+    paddingVertical: space.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.line,
+  },
+  td: { fontSize: 12.5, color: colors.inkSoft },
+  tdNum: { fontSize: 12.5, fontWeight: '700', color: colors.inkSoft, textAlign: 'center' },
+
+  roundHead: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginTop: space.sm },
+  roundLine: { flex: 1, height: 1, backgroundColor: colors.line },
+  roundTitle: { fontSize: 9.5, fontWeight: '800', letterSpacing: 1.4, color: colors.inkSoft },
+  sideLabel: { fontSize: 9, fontWeight: '800', letterSpacing: 1, color: colors.inkDim },
+
+  match: { flexDirection: 'row', alignItems: 'center' },
+  matchCenter: { alignItems: 'center', gap: 4, paddingHorizontal: space.sm },
+  vs: { fontSize: 10, fontWeight: '800', fontStyle: 'italic', color: colors.inkDim, letterSpacing: 1 },
+  score: { fontSize: 15, fontWeight: '800', color: colors.ink },
+  side: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  sideName: { flex: 1, fontSize: 12.5, fontWeight: '700', color: colors.ink },
+
+  bye: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  byeText: { flex: 1, fontSize: 12, color: colors.inkSoft },
+  byeName: { color: colors.ink, fontWeight: '700' },
+
+  champ: { gap: space.md, borderColor: colors.streak },
+  champTag: { fontSize: 9, fontWeight: '800', letterSpacing: 1.2, color: colors.streak },
+  champRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  champName: { ...type.display, fontSize: 19 },
+
+  next: { gap: 3 },
+  nextTag: { fontSize: 9, fontWeight: '800', letterSpacing: 1 },
+  nextText: { fontSize: 14.5, fontWeight: '800', color: colors.ink },
+
+  prize: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  prizeTag: { fontSize: 9, fontWeight: '800', letterSpacing: 1, color: colors.elite },
+  prizeText: { fontSize: 13, color: colors.ink, lineHeight: 19, marginTop: 2 },
+
+  infoLine: { flexDirection: 'row', alignItems: 'flex-start', gap: space.md },
+  infoGlyph: { fontSize: 16, width: 22, textAlign: 'center' },
+  infoLabel: { fontSize: 8.5, fontWeight: '800', letterSpacing: 0.8, color: colors.inkDim },
+  infoValue: { fontSize: 13, color: colors.ink, lineHeight: 18, marginTop: 1 },
+
+  phaseInfo: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  phaseNum: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  phaseNumText: { fontSize: 13, fontWeight: '800' },
+
+  hint: { fontSize: 11, color: colors.inkDim, lineHeight: 16 },
+  hintCenter: { fontSize: 11, color: colors.inkDim, textAlign: 'center', lineHeight: 16 },
+
+  empty: { alignItems: 'center', gap: space.md, paddingVertical: space.xl },
+  emptyTitle: { fontSize: 15, fontWeight: '700', color: colors.ink },
 });

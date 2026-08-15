@@ -213,6 +213,84 @@ export function OptionCard({
   );
 }
 
+/* ─────────────── Pestañas ───────────────
+   Una pantalla con cuatro caras (resumen, jugadores, bracket, información) no
+   cabe en una lista larga: obliga a recorrerla entera para llegar a lo de
+   abajo. Las pestañas van pegadas debajo del encabezado, no flotando, para que
+   se lea que pertenecen a ESTE torneo y no a la app entera. */
+
+export function Tabs<T extends string>({
+  tabs,
+  current,
+  onChange,
+  color = colors.blue,
+  variant = 'plain',
+}: {
+  tabs: { key: T; label: string; glyph?: string; badge?: number }[];
+  current: T;
+  onChange: (key: T) => void;
+  color?: string;
+  // 'boxed' es el filtro de una lista (vive dentro de un recuadro propio);
+  // 'plain' son las caras de UNA cosa, pegadas a su contenido.
+  variant?: 'plain' | 'boxed';
+}) {
+  const boxed = variant === 'boxed';
+  return (
+    <View style={boxed ? styles.tabsBoxed : styles.tabs}>
+      {tabs.map((t) => {
+        const on = t.key === current;
+        return (
+          <Pressable
+            key={t.key}
+            onPress={() => onChange(t.key)}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: on }}
+            style={[
+              styles.tab,
+              boxed && styles.tabBoxed,
+              on && { borderBottomColor: color },
+              boxed && on && { backgroundColor: colors.card },
+            ]}
+          >
+            {t.glyph ? (
+              <Text style={[styles.tabGlyph, on && { opacity: 1 }]}>{t.glyph}</Text>
+            ) : null}
+            <Text style={[styles.tabText, on && { color: colors.ink }]} numberOfLines={1}>
+              {t.label}
+            </Text>
+            {t.badge ? (
+              <View style={[styles.tabBadge, { backgroundColor: color }]}>
+                <Text style={styles.tabBadgeText}>{t.badge}</Text>
+              </View>
+            ) : null}
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/** Barra de avance. Se usa para el cupo: un número solo no dice si urge. */
+export function Meter({
+  value,
+  max,
+  color = colors.blue,
+  warnAt = 0.85,
+}: {
+  value: number;
+  max: number;
+  color?: string;
+  warnAt?: number;
+}) {
+  const ratio = max > 0 ? Math.min(1, value / max) : 0;
+  const tint = ratio >= 1 ? colors.loss : ratio >= warnAt ? colors.streak : color;
+  return (
+    <View style={styles.meter}>
+      <View style={[styles.meterFill, { width: `${Math.max(2, ratio * 100)}%`, backgroundColor: tint }]} />
+    </View>
+  );
+}
+
 // Chip corto para días, filtros y categorías.
 export function Chip({
   label,
@@ -305,6 +383,35 @@ const styles = StyleSheet.create({
   optionGlyph: { fontSize: 20, marginBottom: 2 },
   optionTitle: { fontSize: 14, fontWeight: '700', color: colors.ink },
   optionDesc: { fontSize: 11, color: colors.inkSoft, lineHeight: 15 },
+
+  tabs: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.line },
+  tabsBoxed: {
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    overflow: 'hidden',
+  },
+  tabBoxed: { borderBottomWidth: 2, marginBottom: 0, paddingVertical: space.md },
+  tabGlyph: { fontSize: 13, opacity: 0.75 },
+  tab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingVertical: space.md,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+    marginBottom: -1,
+  },
+  tabText: { fontSize: 10.5, fontWeight: '800', letterSpacing: 0.7, color: colors.inkDim },
+  tabBadge: { minWidth: 16, borderRadius: 8, paddingHorizontal: 4, alignItems: 'center' },
+  tabBadgeText: { fontSize: 9, fontWeight: '800', color: '#fff' },
+
+  meter: { height: 5, borderRadius: 3, backgroundColor: colors.line, overflow: 'hidden' },
+  meterFill: { height: 5, borderRadius: 3 },
 
   chip: {
     paddingHorizontal: 14,

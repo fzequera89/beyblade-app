@@ -15,7 +15,6 @@ import LeagueDetailScreen from '../screens/LeagueDetailScreen';
 import TournamentsScreen from '../screens/TournamentsScreen';
 import CreateTournamentScreen from '../screens/CreateTournamentScreen';
 import TournamentDetailScreen from '../screens/TournamentDetailScreen';
-import BracketScreen from '../screens/BracketScreen';
 import MatchDetailScreen from '../screens/MatchDetailScreen';
 import LeagueStandingsScreen from '../screens/LeagueStandingsScreen';
 import AdminScreen from '../screens/AdminScreen';
@@ -70,7 +69,6 @@ function Inicio() {
       <InicioStack.Screen name="PlayerProfile" component={PlayerProfileScreen} />
       <InicioStack.Screen name="Passport" component={PassportScreen} />
       <InicioStack.Screen name="TournamentDetail" component={TournamentDetailScreen} />
-      <InicioStack.Screen name="Bracket" component={BracketScreen} />
       <InicioStack.Screen name="Challenges" component={ChallengesScreen} />
       <InicioStack.Screen name="Venues" component={VenuesScreen} />
       <InicioStack.Screen name="CreateVenue" component={CreateVenueScreen} />
@@ -104,7 +102,10 @@ function Batallas() {
       <BatallasStack.Screen name="Tournaments" component={TournamentsScreen} />
       <BatallasStack.Screen name="CreateTournament" component={CreateTournamentScreen} />
       <BatallasStack.Screen name="TournamentDetail" component={TournamentDetailScreen} />
-      <BatallasStack.Screen name="Bracket" component={BracketScreen} />
+      {/* El detalle de torneo ofrece escanear el QR de check-in, y esta pila es
+          desde donde más se llega a él: sin registrarla aquí, ese botón no
+          hace nada — la trampa de los enlaces muertos entre pilas. */}
+      <BatallasStack.Screen name="ScanCheckIn" component={ScanCheckInScreen} />
       <BatallasStack.Screen name="ClubDetail" component={ClubDetailScreen} />
       <BatallasStack.Screen name="Disputes" component={DisputesScreen} />
       <BatallasStack.Screen name="Judges" component={JudgesScreen} />

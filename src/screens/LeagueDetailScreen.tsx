@@ -10,7 +10,7 @@ import { Field } from '../ui/Field';
 import { Card, Hex, SectionTitle } from '../ui/primitives';
 import Cover, { coverAccent } from '../ui/Cover';
 import { pickCoverPhoto, uploadCover } from '../lib/cover';
-import { leagueEmblem } from '../lib/emblem';
+import { leagueEmblem, emblemFont } from '../lib/emblem';
 import { IconChevron } from '../ui/icons';
 import { colors, space, type, radius } from '../theme';
 
@@ -181,11 +181,17 @@ export default function LeagueDetailScreen({ route, navigation }: any) {
         <View style={styles.emblemWrap} pointerEvents="none">
           <Hex size={78} color={accent.neon} solid>
             <View style={{ alignItems: 'center' }}>
-              <Text style={styles.emblemText} numberOfLines={1}>
+              <Text
+                style={[styles.emblemText, { fontSize: emblemFont(leagueEmblem(league.name).top, 17) }]}
+                numberOfLines={1}
+              >
                 {leagueEmblem(league.name).top}
               </Text>
               {leagueEmblem(league.name).bottom ? (
-                <Text style={styles.emblemSub} numberOfLines={1}>
+                <Text
+                  style={[styles.emblemSub, { fontSize: emblemFont(leagueEmblem(league.name).bottom!, 9) }]}
+                  numberOfLines={1}
+                >
                   {leagueEmblem(league.name).bottom}
                 </Text>
               ) : null}

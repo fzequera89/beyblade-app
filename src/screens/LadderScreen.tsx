@@ -34,24 +34,38 @@ export default function LadderScreen({ route, navigation }: any) {
 
   const [rows, setRows] = useState<Row[]>([]);
   const [isOrganizer, setIsOrganizer] = useState(false);
+  const [otherSeasons, setOtherSeasons] = useState<{ id: string; name: string }[]>([]);
+  const [closing, setClosing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
 
-    const [{ data, error }, { data: membership }, { data: admin }] = await Promise.all([
-      supabase.rpc('season_standings_ordered', { p_season_id: seasonId, p_category: null }),
-      leagueId
-        ? supabase
-            .from('league_members')
-            .select('role')
-            .eq('league_id', leagueId)
-            .eq('player_id', playerId)
-            .maybeSingle()
-        : Promise.resolve({ data: null }),
-      supabase.from('players').select('is_admin').eq('id', playerId).maybeSingle(),
-    ]);
+    const [{ data, error }, { data: membership }, { data: admin }, { data: seasonRows }] =
+      await Promise.all([
+        supabase.rpc('season_standings_ordered', { p_season_id: seasonId, p_category: null }),
+        leagueId
+          ? supabase
+              .from('league_members')
+              .select('role')
+              .eq('league_id', leagueId)
+              .eq('player_id', playerId)
+              .maybeSingle()
+          : Promise.resolve({ data: null }),
+        supabase.from('players').select('is_admin').eq('id', playerId).maybeSingle(),
+        // Las OTRAS temporadas de la liga: son los destinos posibles al cerrar
+        // esta. `close_season` exige que la siguiente ya exista y sea de la
+        // misma liga (se crean desde el detalle de la liga).
+        leagueId
+          ? supabase
+              .from('seasons')
+              .select('id, name')
+              .eq('league_id', leagueId)
+              .neq('id', seasonId)
+              .order('created_at', { ascending: false })
+          : Promise.resolve({ data: [] }),
+      ]);
 
     if (error) {
       setLoading(false);
@@ -60,6 +74,7 @@ export default function LadderScreen({ route, navigation }: any) {
 
     setRows(((data as any) ?? []) as Row[]);
     setIsOrganizer((membership as any)?.role === 'organizer' || (admin as any)?.is_admin === true);
+    setOtherSeasons(((seasonRows as any) ?? []) as { id: string; name: string }[]);
     setLoading(false);
   }, [seasonId, leagueId, playerId]);
 
@@ -115,6 +130,31 @@ export default function LadderScreen({ route, navigation }: any) {
     if (error) return Alert.alert('Error', error.message);
     Alert.alert('Listo', 'Las categorías que pasaban de cupo quedaron partidas en divisiones.');
     load();
+  }
+
+  function closeSeason(nextId: string, nextName: string) {
+    Alert.alert(
+      'Cerrar temporada',
+      `Se cierra "${seasonName ?? 'esta temporada'}" y se siembra "${nextName}": cada quien conserva su categoría; se reinician posiciones, VP y marcadores. Quien llegó 1º suma un título (5 = Challenger). Los inactivos reingresan al final de Porcelana. ¿Seguro?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Cerrar y sembrar',
+          style: 'destructive',
+          onPress: async () => {
+            setBusy(true);
+            const { error } = await supabase.rpc('close_season', {
+              p_season_id: seasonId,
+              p_next_season_id: nextId,
+            });
+            setBusy(false);
+            if (error) return Alert.alert('No se pudo cerrar', error.message);
+            setClosing(false);
+            navigation.replace('Ladder', { seasonId: nextId, leagueId, seasonName: nextName });
+          },
+        },
+      ]
+    );
   }
 
   if (loading) {
@@ -260,6 +300,41 @@ export default function LadderScreen({ route, navigation }: any) {
             Parte en A/B las categorías que pasaron de cupo, repartiendo en zigzag por posición
             para que queden parejas.
           </Text>
+
+          {/* Cerrar la temporada es manual (como el reglamento: "al finalizar se
+              realiza un reinicio", un acto de la administración). Necesita una
+              temporada destino ya creada, para no reiniciar sobre la misma. */}
+          {closing ? (
+            <Card style={{ gap: space.md, marginTop: space.md }}>
+              <Text style={styles.closeTitle}>¿A qué temporada se siembra?</Text>
+              {otherSeasons.length === 0 ? (
+                <Text style={styles.hint}>
+                  Primero crea la temporada siguiente desde el detalle de la liga. Al cerrar, esta
+                  se siembra en esa: cada quien conserva su categoría.
+                </Text>
+              ) : (
+                otherSeasons.map((s) => (
+                  <Pressable
+                    key={s.id}
+                    style={styles.destRow}
+                    onPress={() => closeSeason(s.id, s.name)}
+                    disabled={busy}
+                  >
+                    <Text style={styles.destName}>{s.name}</Text>
+                    <Text style={styles.destGo}>Sembrar aquí ›</Text>
+                  </Pressable>
+                ))
+              )}
+              <Button label="Cancelar" variant="ghost" onPress={() => setClosing(false)} />
+            </Card>
+          ) : (
+            <Button
+              label="CERRAR TEMPORADA"
+              variant="ghost"
+              onPress={() => setClosing(true)}
+              loading={busy}
+            />
+          )}
         </View>
       )}
     </Screen>
@@ -304,4 +379,18 @@ const styles = StyleSheet.create({
     paddingVertical: space.sm,
     paddingHorizontal: space.xs,
   },
+
+  closeTitle: { fontSize: 13, fontWeight: '800', color: colors.ink },
+  destRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.md,
+    paddingVertical: space.md,
+    paddingHorizontal: space.lg,
+  },
+  destName: { fontSize: 14, fontWeight: '700', color: colors.ink },
+  destGo: { fontSize: 12, fontWeight: '800', color: colors.streak },
 });

@@ -22,6 +22,7 @@ import {
 } from '../lib/formatsRepo';
 import { categoryLabel, categoryColor } from '../lib/categories';
 import { DeckCard, deckSizeFor, usesDeckCard, loadDeckCard, deckCountFor } from '../lib/decks';
+import { recordInspection } from '../lib/wear';
 import { fmtDate, fmtDateFull, fmtDateTime } from '../lib/when';
 import { IconChevron } from '../ui/icons';
 import { colors, space, type, radius, glow } from '../theme';
@@ -377,6 +378,42 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
     );
   }
 
+  // La revisión del deck en la mesa: el juez desarma, compara contra la guía de
+  // desgaste y deja constancia. Aprobar congela la tarjeta; rechazar la deja
+  // editable para que el jugador corrija y vuelva.
+  function inspect(target: string, name: string) {
+    Alert.alert(
+      `Revisión de deck · ${name}`,
+      'Compara las piezas contra la guía de desgaste. Al aprobar, su deck queda congelado.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Rechazar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await recordInspection(tournamentId, target, false, 'Rechazado en revisión de desgaste');
+              load();
+            } catch (e: any) {
+              Alert.alert('No se pudo', e.message ?? String(e));
+            }
+          },
+        },
+        {
+          text: 'Aprobar',
+          onPress: async () => {
+            try {
+              await recordInspection(tournamentId, target, true);
+              load();
+            } catch (e: any) {
+              Alert.alert('No se pudo', e.message ?? String(e));
+            }
+          },
+        },
+      ]
+    );
+  }
+
   async function lockDecks() {
     Alert.alert(
       'Bloquear los decks',
@@ -694,6 +731,7 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
               phases={phases}
               accent={accent}
               onJudges={() => navigation.navigate('Judges', { tournamentId, title: tournament.name })}
+              onWearGuide={() => navigation.navigate('WearGuide')}
             />
           </View>
         )}
@@ -784,6 +822,11 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
             me={item.player_id === playerId}
             accent={accent}
             onPress={isOrganizer ? () => toggleCheckIn(item.player_id, !!item.checked_in_at) : undefined}
+            onInspect={
+              isOrganizer && usesDeckCard(tournament.combat_mode, tournament.mode)
+                ? () => inspect(item.player_id, item.players?.display_name ?? 'jugador')
+                : undefined
+            }
           />
         )}
         ListEmptyComponent={
@@ -876,12 +919,14 @@ function PlayerRow({
   me,
   accent,
   onPress,
+  onInspect,
 }: {
   reg: Registration;
   index: number;
   me: boolean;
   accent: { neon: string; warm: string };
   onPress?: () => void;
+  onInspect?: () => void;
 }) {
   const p = reg.players;
   const here = !!reg.checked_in_at;
@@ -908,6 +953,14 @@ function PlayerRow({
           {here ? '✓ Presente' : 'Check-in pendiente'}
         </Text>
       )}
+
+      {/* La lupa va aparte del resto de la fila: tocar la fila da check-in, y
+          confundir las dos cosas congelaría un deck sin querer. */}
+      {onInspect ? (
+        <Pressable onPress={onInspect} style={styles.inspectBtn} hitSlop={6}>
+          <Text style={{ fontSize: 15 }}>🔍</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 
@@ -1320,11 +1373,13 @@ function InfoTab({
   phases,
   accent,
   onJudges,
+  onWearGuide,
 }: {
   tournament: Tournament;
   phases: Phase[];
   accent: { neon: string; warm: string };
   onJudges: () => void;
+  onWearGuide: () => void;
 }) {
   const venue = tournament.venues;
   const deckSize = COMBAT_MODES.find((m) => m.key === tournament.combat_mode)?.deckSize ?? 1;
@@ -1417,6 +1472,7 @@ function InfoTab({
       {/* Un cuerpo arbitral se convoca para el evento: sin jueces nombrados, los
           resultados de este torneo se quedan esperando. */}
       <Button label="⚖️  CUERPO DE JUECES" variant="ghost" onPress={onJudges} />
+      <Button label="🔍  GUÍA DE VERIFICACIÓN DE DESGASTE" variant="ghost" onPress={onWearGuide} />
     </View>
   );
 }
@@ -1526,6 +1582,15 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     backgroundColor: colors.card,
     padding: space.md,
+  },
+  inspectBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.line,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   seedBox: {
     width: 24,

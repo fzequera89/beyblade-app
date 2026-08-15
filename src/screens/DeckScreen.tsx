@@ -163,6 +163,40 @@ export default function DeckScreen({ route, navigation }: any) {
         })}
       </View>
 
+      {/* La inspección del juez: es lo que convierte "revisado y autorizado" en
+          un hecho con nombre y hora, en vez de un acuerdo de palabra. */}
+      {deck?.inspected_at ? (
+        <Card
+          style={[
+            styles.inspect,
+            { borderColor: deck.inspection_passed ? colors.win : colors.loss },
+          ]}
+        >
+          <Text
+            style={[
+              styles.inspectTitle,
+              { color: deck.inspection_passed ? colors.win : colors.loss },
+            ]}
+          >
+            {deck.inspection_passed ? '✓ Deck revisado y autorizado' : '✕ Deck rechazado en revisión'}
+          </Text>
+          {deck.inspection_notes ? (
+            <Text style={styles.inspectNote}>{deck.inspection_notes}</Text>
+          ) : null}
+          <Text style={styles.hint}>
+            {deck.inspection_passed
+              ? 'Después de autorizar no se cambian piezas ni lanzadores.'
+              : 'Corrige lo señalado y vuelve a presentarlo con el juez.'}
+          </Text>
+        </Card>
+      ) : null}
+
+      <Pressable style={styles.guideRow} onPress={() => navigation.navigate('WearGuide')}>
+        <Text style={styles.guideGlyph}>🔍</Text>
+        <Text style={styles.guideText}>QUÉ REVISA EL JUEZ (GUÍA DE DESGASTE)</Text>
+        <Text style={styles.guideChevron}>›</Text>
+      </Pressable>
+
       {repeated.length > 0 && (
         <Card style={[styles.warn, { borderColor: colors.loss }]}>
           <Text style={styles.warnTitle}>Piezas repetidas</Text>
@@ -270,6 +304,25 @@ const styles = StyleSheet.create({
   warn: { gap: 3, marginBottom: space.lg },
   warnTitle: { fontSize: 12, fontWeight: '800', color: colors.loss, letterSpacing: 0.5 },
   warnText: { fontSize: 12, color: colors.ink, lineHeight: 17 },
+
+  inspect: { gap: 4, marginBottom: space.lg },
+  inspectTitle: { fontSize: 13, fontWeight: '800' },
+  inspectNote: { fontSize: 12.5, color: colors.ink, lineHeight: 18 },
+
+  guideRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.md,
+    paddingVertical: space.md,
+    paddingHorizontal: space.lg,
+    marginBottom: space.lg,
+  },
+  guideGlyph: { fontSize: 15 },
+  guideText: { flex: 1, fontSize: 11, fontWeight: '800', letterSpacing: 0.7, color: colors.inkSoft },
+  guideChevron: { fontSize: 18, color: colors.inkDim },
 
   combo: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginBottom: space.sm },
   comboName: { fontSize: 14, fontWeight: '700', color: colors.ink },

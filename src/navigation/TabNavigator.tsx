@@ -18,6 +18,7 @@ import CreateTournamentScreen from '../screens/CreateTournamentScreen';
 import TournamentDetailScreen from '../screens/TournamentDetailScreen';
 import MatchDetailScreen from '../screens/MatchDetailScreen';
 import DeckScreen from '../screens/DeckScreen';
+import WearGuideScreen from '../screens/WearGuideScreen';
 import LeagueStandingsScreen from '../screens/LeagueStandingsScreen';
 import AdminScreen from '../screens/AdminScreen';
 import AdminPlayersScreen from '../screens/AdminPlayersScreen';
@@ -72,6 +73,7 @@ function Inicio() {
       <InicioStack.Screen name="Passport" component={PassportScreen} />
       <InicioStack.Screen name="TournamentDetail" component={TournamentDetailScreen} />
       <InicioStack.Screen name="Deck" component={DeckScreen} />
+      <InicioStack.Screen name="WearGuide" component={WearGuideScreen} />
       <InicioStack.Screen name="Challenges" component={ChallengesScreen} />
       <InicioStack.Screen name="Venues" component={VenuesScreen} />
       <InicioStack.Screen name="CreateVenue" component={CreateVenueScreen} />
@@ -106,6 +108,7 @@ function Batallas() {
       <BatallasStack.Screen name="CreateTournament" component={CreateTournamentScreen} />
       <BatallasStack.Screen name="TournamentDetail" component={TournamentDetailScreen} />
       <BatallasStack.Screen name="Deck" component={DeckScreen} />
+      <BatallasStack.Screen name="WearGuide" component={WearGuideScreen} />
       {/* El detalle de torneo ofrece escanear el QR de check-in, y esta pila es
           desde donde más se llega a él: sin registrarla aquí, ese botón no
           hace nada — la trampa de los enlaces muertos entre pilas. */}

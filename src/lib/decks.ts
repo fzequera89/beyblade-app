@@ -16,6 +16,9 @@ export type Combo = { id: string; name: string; parts: ComboParts };
 export type DeckCard = {
   id: string;
   locked_at: string | null;
+  inspected_at: string | null;
+  inspection_passed: boolean | null;
+  inspection_notes: string | null;
   combos: { slot: number; is_spare: boolean; combo: Combo }[];
 };
 
@@ -80,7 +83,7 @@ export async function loadMyCombos(playerId: string): Promise<Combo[]> {
 export async function loadDeckCard(tournamentId: string, playerId: string): Promise<DeckCard | null> {
   const { data, error } = await supabase
     .from('deck_cards')
-    .select('id, locked_at, deck_card_combos(slot, is_spare, combos(id, name, parts))')
+    .select('id, locked_at, inspected_at, inspection_passed, inspection_notes, deck_card_combos(slot, is_spare, combos(id, name, parts))')
     .eq('tournament_id', tournamentId)
     .eq('player_id', playerId)
     .maybeSingle();
@@ -91,6 +94,9 @@ export async function loadDeckCard(tournamentId: string, playerId: string): Prom
   return {
     id: (data as any).id,
     locked_at: (data as any).locked_at ?? null,
+    inspected_at: (data as any).inspected_at ?? null,
+    inspection_passed: (data as any).inspection_passed ?? null,
+    inspection_notes: (data as any).inspection_notes ?? null,
     combos: rows
       .map((r) => ({
         slot: r.slot,

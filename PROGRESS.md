@@ -545,10 +545,34 @@ compila, producción sirve el bundle nuevo y la app monta sin errores de consola
 **Sin probar con sesión iniciada** (falta cuenta de prueba): el render logueado de
 las dos sub-pestañas sigue pendiente de QA.
 
+### ✅ Portadas de eventos y clubes (commit `4b0cba6`, migración 0036, 2026-08-15)
+
+Cierra la regla visual "todo lo que se crea lleva portada". El bucket `covers` y
+`cover.ts` ya soportaban `event`/`club`; faltaban la columna y el permiso.
+
+- **0036** (CORRIDA vía Management API): `photo_url` en `events` y `clubs`, y
+  **amplía la política del bucket `covers`**. Ojo: la de 0034 solo dejaba subir a
+  admin/moderador de liga, pero **un club lo funda cualquiera (0018) y un evento
+  abierto lo crea cualquiera (0016)** — así que se agregó, por ruta
+  (`foldername(name)[1]`/`[2]`), que el **dueño del club** suba `club/<id>/…` y el
+  **creador del evento** suba `event/<id>/…`.
+- **`cover.ts` `changeCover(kind, table, id)`**: pick → upload → update, el flujo
+  completo compartido por los 4 detalles (liga, torneo, evento, club).
+- **EventDetail / ClubDetail:** banner de portada a sangre arriba + botón editar
+  🖼️ para quien puede (creador/dueño/admin).
+- **EventsScreen / ClubsScreen:** portada de fondo en la tarjeta héroe. **Las
+  filas siguen con su glifo** (🏆/🌀/🛡️) a propósito: a tamaño chico una arena
+  dibujada se ve confusa; el glifo lee mejor. La portada luce en el héroe y en el
+  detalle. Es la lectura de "solo cuando suma y no resta".
+
+Verificado: typecheck limpio, el bundle compila, producción sirve el bundle nuevo
+y monta sin errores de consola. Sin probar con sesión iniciada (subir una foto
+real necesita build/dispositivo y cuenta).
+
 **LO QUE SIGUE:**
-1. Portadas de eventos y clubes (~5x), mismo patrón de portada que ligas/torneos.
-2. Partir VP local vs. interclubes (⚠️ ver decisión de arriba: 0030 los juntó).
-3. QA con sesión iniciada del flujo de torneo completo y del hub.
+1. Partir VP local vs. interclubes (⚠️ ver decisión de arriba: 0030 los juntó).
+2. QA con sesión iniciada del flujo de torneo completo y del hub.
+3. Completar el escalafón: round robin por categoría, UI de cierre de temporada, torneo inicial G3.
 
 **Correr migraciones sin pegarlas a mano:** el `SUPABASE_ACCESS_TOKEN` del entorno es de OTRA cuenta y no ve este proyecto. Con un token de la cuenta `fzequera89` sí se puede, vía Management API:
 `POST https://api.supabase.com/v1/projects/vgffwqmpiunxzmlfmtyo/database/query` con `{"query": "..."}`.
@@ -558,7 +582,7 @@ las dos sub-pestañas sigue pendiente de QA.
 
 1. `git clone` / `git pull` del repo.
 2. Copiar `.env.example` a `.env` y llenar `EXPO_PUBLIC_SUPABASE_URL` y `EXPO_PUBLIC_SUPABASE_ANON_KEY` (Supabase → Settings → API del proyecto "CML Beyblade").
-3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-15 las 0001–0035 están corridas y verificadas contra la base** (el lobby/detalle/avance de torneos no agregó ninguna migración nueva) — si se agrega una nueva, actualizar esta línea.
+3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-15 las 0001–0036 están corridas y verificadas contra la base** (0036 = portadas de eventos y clubes) — si se agrega una nueva, actualizar esta línea.
 4. `npm install`, luego `npm run web` para verificar rápido en el preview del navegador (no requiere emulador Android).
 5. Para un build real: `npx eas-cli build --platform android --profile preview --non-interactive` (requiere `eas login` ya hecho en la máquina).
 

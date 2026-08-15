@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import Screen from '../ui/Screen';
 import Button from '../ui/Button';
 import { Card, Hex, Pill } from '../ui/primitives';
+import Cover from '../ui/Cover';
 import { IconChevron, IconCalendar, IconPin } from '../ui/icons';
 import { eventLabel } from '../lib/eventTypes';
 import { colors, space, type, radius, glow } from '../theme';
@@ -15,6 +16,7 @@ type EventRow = {
   description: string | null;
   type: string;
   starts_at: string;
+  photo_url: string | null;
   league_id: string | null;
   venues: { name: string; city: string | null } | null;
   leagues: { name: string } | null;
@@ -53,7 +55,7 @@ export default function EventsScreen({ navigation }: any) {
     const { data, error } = await supabase
       .from('events')
       .select(
-        'id, title, description, type, starts_at, league_id, venues(name, city), leagues(name), event_rsvps(count)'
+        'id, title, description, type, starts_at, photo_url, league_id, venues(name, city), leagues(name), event_rsvps(count)'
       )
       .gte('starts_at', since)
       .order('starts_at', { ascending: true });
@@ -96,52 +98,63 @@ export default function EventsScreen({ navigation }: any) {
           // es cronológico, así que el primero sí es el más relevante.
           if (index === 0) {
             return (
-              <Card
-                style={[styles.hero, glow(colors.blue, 10)]}
+              <Pressable
                 onPress={() => navigation.navigate('EventDetail', { eventId: item.id })}
+                style={({ pressed }) => pressed && { opacity: 0.9 }}
               >
-                <View style={styles.heroTop}>
-                  <Pill label={countdown(item.starts_at)} color={colors.blue} />
-                  <Pill
-                    label={official ? 'Oficial' : 'Abierto'}
-                    color={official ? colors.streak : colors.win}
-                  />
-                </View>
-
-                <Text style={styles.heroTitle} numberOfLines={2}>
-                  {item.title}
-                </Text>
-                <Text style={styles.heroType}>{eventLabel(item.type)}</Text>
-
-                {item.description ? (
-                  <Text style={styles.heroDesc} numberOfLines={2}>
-                    {item.description}
-                  </Text>
-                ) : null}
-
-                <View style={styles.heroLines}>
-                  <View style={styles.line}>
-                    <IconCalendar size={15} color={colors.inkSoft} />
-                    <Text style={styles.lineText}>{whenText(item.starts_at)}</Text>
-                  </View>
-                  {item.venues ? (
-                    <View style={styles.line}>
-                      <IconPin size={15} color={colors.inkSoft} />
-                      <Text style={styles.lineText} numberOfLines={1}>
-                        {item.venues.name}
-                        {item.venues.city ? ` · ${item.venues.city}` : ''}
-                      </Text>
+                <View style={[styles.hero, glow(colors.blue, 10)]}>
+                  {/* Portada del próximo evento: su foto si la subieron, si no una
+                      arena dibujada del id. Las etiquetas van encima. */}
+                  <View style={styles.heroBanner}>
+                    <View style={styles.absFill} pointerEvents="none">
+                      <Cover id={item.id} photoUrl={item.photo_url} height={128} live />
                     </View>
-                  ) : null}
-                </View>
+                    <View style={styles.heroTop}>
+                      <Pill label={countdown(item.starts_at)} color={colors.blue} />
+                      <Pill
+                        label={official ? 'Oficial' : 'Abierto'}
+                        color={official ? colors.streak : colors.win}
+                      />
+                    </View>
+                  </View>
 
-                <View style={styles.heroFoot}>
-                  <Text style={styles.goingBig}>
-                    {going} <Text style={styles.goingLabel}>van a ir</Text>
-                  </Text>
-                  <Text style={styles.heroCta}>Ver detalle ›</Text>
+                  <View style={styles.heroBody}>
+                    <Text style={styles.heroTitle} numberOfLines={2}>
+                      {item.title}
+                    </Text>
+                    <Text style={styles.heroType}>{eventLabel(item.type)}</Text>
+
+                    {item.description ? (
+                      <Text style={styles.heroDesc} numberOfLines={2}>
+                        {item.description}
+                      </Text>
+                    ) : null}
+
+                    <View style={styles.heroLines}>
+                      <View style={styles.line}>
+                        <IconCalendar size={15} color={colors.inkSoft} />
+                        <Text style={styles.lineText}>{whenText(item.starts_at)}</Text>
+                      </View>
+                      {item.venues ? (
+                        <View style={styles.line}>
+                          <IconPin size={15} color={colors.inkSoft} />
+                          <Text style={styles.lineText} numberOfLines={1}>
+                            {item.venues.name}
+                            {item.venues.city ? ` · ${item.venues.city}` : ''}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
+
+                    <View style={styles.heroFoot}>
+                      <Text style={styles.goingBig}>
+                        {going} <Text style={styles.goingLabel}>van a ir</Text>
+                      </Text>
+                      <Text style={styles.heroCta}>Ver detalle ›</Text>
+                    </View>
+                  </View>
                 </View>
-              </Card>
+              </Pressable>
             );
           }
 
@@ -195,8 +208,17 @@ const styles = StyleSheet.create({
   title: { ...type.title, fontSize: 20 },
   sub: { ...type.soft, fontSize: 12.5 },
 
-  hero: { gap: space.sm, borderColor: colors.blue },
-  heroTop: { flexDirection: 'row', gap: space.sm },
+  hero: {
+    borderWidth: 1,
+    borderColor: colors.blue,
+    borderRadius: radius.lg,
+    backgroundColor: colors.card,
+    overflow: 'hidden',
+  },
+  absFill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  heroBanner: { height: 128 },
+  heroTop: { flexDirection: 'row', gap: space.sm, padding: space.md },
+  heroBody: { padding: space.lg, gap: space.sm },
   heroTitle: { ...type.display, fontSize: 21, marginTop: 4 },
   heroType: { fontSize: 11.5, color: colors.blue, fontWeight: '700' },
   heroDesc: { fontSize: 12.5, color: colors.inkSoft, lineHeight: 18, marginTop: 2 },

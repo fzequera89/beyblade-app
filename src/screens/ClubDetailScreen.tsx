@@ -7,13 +7,16 @@ import Screen from '../ui/Screen';
 import Button from '../ui/Button';
 import Avatar from '../ui/Avatar';
 import { Card, Hex, Pill, SectionTitle } from '../ui/primitives';
-import { colors, space, type } from '../theme';
+import Cover from '../ui/Cover';
+import { changeCover } from '../lib/cover';
+import { colors, space, type, radius } from '../theme';
 
 type Club = {
   id: string;
   name: string;
   city: string | null;
   description: string | null;
+  photo_url: string | null;
   owner_player_id: string | null;
 };
 
@@ -35,11 +38,12 @@ export default function ClubDetailScreen({ route, navigation }: any) {
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     const [{ data, error }, { data: roster }] = await Promise.all([
-      supabase.from('clubs').select('id, name, city, description, owner_player_id').eq('id', clubId).single(),
+      supabase.from('clubs').select('id, name, city, description, photo_url, owner_player_id').eq('id', clubId).single(),
       supabase
         .from('club_members')
         .select('player_id, players(display_name, elo_rating, matches_played, avatar_key, avatar_url)')
@@ -94,6 +98,13 @@ export default function ClubDetailScreen({ route, navigation }: any) {
     load();
   }
 
+  async function onChangeCover() {
+    setUploading(true);
+    const ok = await changeCover('club', 'clubs', clubId);
+    setUploading(false);
+    if (ok) load();
+  }
+
   function remove() {
     Alert.alert('Borrar club', `¿Seguro que quieres borrar "${club?.name}"?`, [
       { text: 'No', style: 'cancel' },
@@ -111,13 +122,25 @@ export default function ClubDetailScreen({ route, navigation }: any) {
 
   return (
     <Screen scroll padded={false}>
-      <View style={styles.headRow}>
+      <View style={styles.topBar}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={8}>
           <Text style={styles.back}>‹</Text>
         </Pressable>
+        <View style={{ flex: 1 }} />
+        {(isOwner || isAdmin) && (
+          <Pressable style={styles.iconBtn} onPress={onChangeCover} disabled={uploading} hitSlop={6}>
+            <Text style={styles.iconBtnText}>{uploading ? '…' : '🖼️'}</Text>
+          </Pressable>
+        )}
       </View>
 
       <View style={styles.pad}>
+        {/* Portada del club: la foto real del equipo si la subieron; si no, una
+            arena dibujada del id, para no dejar un hueco. */}
+        <View style={styles.banner}>
+          <Cover id={clubId} photoUrl={club.photo_url} height={150} />
+        </View>
+
         <View style={styles.hero}>
           <Hex size={84} color={colors.elite}>
             <Text style={{ fontSize: 32 }}>🛡️</Text>
@@ -204,9 +227,26 @@ function Stat({ label, value, tint }: { label: string; value: string; tint?: str
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  headRow: { paddingHorizontal: space.xl, paddingTop: space.md },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: space.xl,
+    paddingTop: space.md,
+  },
   back: { color: colors.ink, fontSize: 30, lineHeight: 32, width: 22 },
+  iconBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconBtnText: { fontSize: 15 },
   pad: { paddingHorizontal: space.xl },
+  banner: { borderRadius: radius.lg, overflow: 'hidden', marginBottom: space.sm },
 
   hero: { alignItems: 'center', gap: space.sm, paddingVertical: space.lg },
   title: { ...type.display, fontSize: 24, textAlign: 'center' },

@@ -9,6 +9,7 @@ import { supabase } from './supabase';
 // recorte tiene que cambiar en un solo lugar.
 
 export type CoverKind = 'league' | 'tournament' | 'event' | 'club';
+export type CoverTable = 'leagues' | 'tournaments' | 'events' | 'clubs';
 
 export async function pickCoverPhoto(): Promise<string | null> {
   const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -48,4 +49,23 @@ export async function uploadCover(kind: CoverKind, id: string, uri: string): Pro
     Alert.alert('No se pudo subir la foto', `${e.message ?? e}. Se queda la portada dibujada.`);
     return null;
   }
+}
+
+/**
+ * Elegir foto → subirla → guardar la URL en la fila. Devuelve true si algo
+ * cambió, para que la pantalla recargue. Es el flujo completo de "cambiar
+ * portada" que comparten los detalles de liga, torneo, evento y club: tenerlo
+ * aquí evita copiarlo en cada pantalla.
+ */
+export async function changeCover(kind: CoverKind, table: CoverTable, id: string): Promise<boolean> {
+  const uri = await pickCoverPhoto();
+  if (!uri) return false;
+  const url = await uploadCover(kind, id, uri);
+  if (!url) return false;
+  const { error } = await supabase.from(table).update({ photo_url: url }).eq('id', id);
+  if (error) {
+    Alert.alert('No se pudo guardar la portada', error.message);
+    return false;
+  }
+  return true;
 }

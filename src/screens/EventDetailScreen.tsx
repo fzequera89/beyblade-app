@@ -7,6 +7,8 @@ import Screen from '../ui/Screen';
 import Button from '../ui/Button';
 import Avatar from '../ui/Avatar';
 import { Card, Hex, Pill, SectionTitle } from '../ui/primitives';
+import Cover from '../ui/Cover';
+import { changeCover } from '../lib/cover';
 import { IconCalendar, IconPin } from '../ui/icons';
 import { eventLabel } from '../lib/eventTypes';
 import { colors, space, type, radius, glow } from '../theme';
@@ -18,6 +20,7 @@ type EventDetail = {
   type: string;
   starts_at: string;
   ends_at: string | null;
+  photo_url: string | null;
   created_by: string | null;
   league_id: string | null;
   venues: { id: string; name: string; city: string | null; address: string | null } | null;
@@ -41,6 +44,7 @@ export default function EventDetailScreen({ route, navigation }: any) {
   const [attendees, setAttendees] = useState<Attendee[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -48,7 +52,7 @@ export default function EventDetailScreen({ route, navigation }: any) {
       supabase
         .from('events')
         .select(
-          'id, title, description, type, starts_at, ends_at, created_by, league_id, venues(id, name, city, address), leagues(name)'
+          'id, title, description, type, starts_at, ends_at, photo_url, created_by, league_id, venues(id, name, city, address), leagues(name)'
         )
         .eq('id', eventId)
         .single(),
@@ -94,6 +98,13 @@ export default function EventDetailScreen({ route, navigation }: any) {
     load();
   }
 
+  async function onChangeCover() {
+    setUploading(true);
+    const ok = await changeCover('event', 'events', eventId);
+    setUploading(false);
+    if (ok) load();
+  }
+
   function remove() {
     Alert.alert('Cancelar evento', '¿Seguro que quieres borrarlo? Los asistentes lo perderán de su lista.', [
       { text: 'No', style: 'cancel' },
@@ -111,13 +122,25 @@ export default function EventDetailScreen({ route, navigation }: any) {
 
   return (
     <Screen scroll padded={false}>
-      <View style={styles.headRow}>
+      <View style={styles.topBar}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={8}>
           <Text style={styles.back}>‹</Text>
         </Pressable>
+        <View style={{ flex: 1 }} />
+        {canDelete && (
+          <Pressable style={styles.iconBtn} onPress={onChangeCover} disabled={uploading} hitSlop={6}>
+            <Text style={styles.iconBtnText}>{uploading ? '…' : '🖼️'}</Text>
+          </Pressable>
+        )}
       </View>
 
       <View style={styles.pad}>
+        {/* Portada: la foto real del lugar/quedada si la subieron; si no, una
+            arena dibujada del id, para que no quede un hueco. */}
+        <View style={styles.banner}>
+          <Cover id={eventId} photoUrl={event.photo_url} height={150} live={start > new Date()} />
+        </View>
+
         <View style={styles.hero}>
           <Hex size={76} color={official ? colors.streak : colors.blue}>
             <Text style={{ fontSize: 28 }}>{official ? '🏆' : '🌀'}</Text>
@@ -227,9 +250,26 @@ export default function EventDetailScreen({ route, navigation }: any) {
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  headRow: { paddingHorizontal: space.xl, paddingTop: space.md },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: space.xl,
+    paddingTop: space.md,
+  },
   back: { color: colors.ink, fontSize: 30, lineHeight: 32, width: 22 },
+  iconBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconBtnText: { fontSize: 15 },
   pad: { paddingHorizontal: space.xl },
+  banner: { borderRadius: radius.lg, overflow: 'hidden', marginBottom: space.sm },
 
   hero: { alignItems: 'center', gap: space.sm, paddingVertical: space.lg },
   title: { ...type.display, fontSize: 24, textAlign: 'center', marginTop: 4 },

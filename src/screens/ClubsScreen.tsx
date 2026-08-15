@@ -7,6 +7,7 @@ import Screen from '../ui/Screen';
 import Button from '../ui/Button';
 import { Field } from '../ui/Field';
 import { Card, Hex, Pill } from '../ui/primitives';
+import Cover from '../ui/Cover';
 import { IconChevron } from '../ui/icons';
 import { colors, space, type, radius } from '../theme';
 
@@ -15,6 +16,7 @@ type Club = {
   name: string;
   city: string | null;
   description: string | null;
+  photo_url: string | null;
   club_members: { count: number }[];
 };
 
@@ -30,7 +32,7 @@ export default function ClubsScreen({ navigation }: any) {
   const load = useCallback(async () => {
     setLoading(true);
     const [{ data, error }, { data: mine }] = await Promise.all([
-      supabase.from('clubs').select('id, name, city, description, club_members(count)'),
+      supabase.from('clubs').select('id, name, city, description, photo_url, club_members(count)'),
       supabase.from('club_members').select('club_id').eq('player_id', playerId),
     ]);
     setLoading(false);
@@ -132,31 +134,43 @@ export default function ClubsScreen({ navigation }: any) {
 
           if (hero) {
             return (
-              <Card
-                style={styles.hero}
+              <Pressable
                 onPress={() => navigation.navigate('ClubDetail', { clubId: item.id })}
+                style={({ pressed }) => pressed && { opacity: 0.9 }}
               >
-                <Text style={styles.heroTag}>TU CLUB</Text>
-                <View style={styles.heroTop}>
-                  <Hex size={62} color={colors.elite}>
-                    <Text style={{ fontSize: 24 }}>🛡️</Text>
-                  </Hex>
-                  <View style={{ flex: 1, gap: 3 }}>
-                    <Text style={styles.heroName} numberOfLines={1}>
-                      {item.name}
-                    </Text>
-                    <Text style={styles.meta}>
-                      {item.city ?? 'Sin ciudad'} · {count} miembro{count === 1 ? '' : 's'}
-                    </Text>
+                <View style={styles.hero}>
+                  {/* Portada del club: su foto si la subieron, si no una arena
+                      dibujada del id. El escudo va encima, montado sobre el borde. */}
+                  <View style={styles.heroBanner}>
+                    <View style={styles.absFill} pointerEvents="none">
+                      <Cover id={item.id} photoUrl={item.photo_url} height={120} />
+                    </View>
+                    <Text style={styles.heroTag}>TU CLUB</Text>
+                  </View>
+
+                  <View style={styles.heroBody}>
+                    <View style={styles.heroTop}>
+                      <Hex size={62} color={colors.elite}>
+                        <Text style={{ fontSize: 24 }}>🛡️</Text>
+                      </Hex>
+                      <View style={{ flex: 1, gap: 3 }}>
+                        <Text style={styles.heroName} numberOfLines={1}>
+                          {item.name}
+                        </Text>
+                        <Text style={styles.meta}>
+                          {item.city ?? 'Sin ciudad'} · {count} miembro{count === 1 ? '' : 's'}
+                        </Text>
+                      </View>
+                    </View>
+                    {item.description ? (
+                      <Text style={styles.heroDesc} numberOfLines={2}>
+                        {item.description}
+                      </Text>
+                    ) : null}
+                    <Text style={styles.heroCta}>Ver el roster ›</Text>
                   </View>
                 </View>
-                {item.description ? (
-                  <Text style={styles.heroDesc} numberOfLines={2}>
-                    {item.description}
-                  </Text>
-                ) : null}
-                <Text style={styles.heroCta}>Ver el roster ›</Text>
-              </Card>
+              </Pressable>
             );
           }
 
@@ -202,8 +216,17 @@ const styles = StyleSheet.create({
   sub: { ...type.soft, fontSize: 12.5 },
   textarea: { minHeight: 70, textAlignVertical: 'top' },
 
-  hero: { gap: space.md, borderColor: colors.elite },
+  hero: {
+    borderWidth: 1,
+    borderColor: colors.elite,
+    borderRadius: radius.lg,
+    backgroundColor: colors.card,
+    overflow: 'hidden',
+  },
+  absFill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  heroBanner: { height: 120, padding: space.md },
   heroTag: { fontSize: 9, fontWeight: '800', letterSpacing: 1, color: colors.elite },
+  heroBody: { padding: space.lg, gap: space.md },
   heroTop: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   heroName: { ...type.display, fontSize: 20 },
   heroDesc: { fontSize: 12.5, color: colors.inkSoft, lineHeight: 18 },

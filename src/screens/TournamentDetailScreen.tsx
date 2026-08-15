@@ -12,7 +12,16 @@ import Cover, { coverAccent } from '../ui/Cover';
 import { CountdownBox, ClosingBar, InfoRow, StatStrip, TournamentName } from '../ui/tournament';
 import { pickCoverPhoto, uploadCover } from '../lib/cover';
 import { COMBAT_MODES, PHASE_KINDS, Standing } from '../lib/formats';
-import { Phase, loadPhases, generatePhaseRound, phaseStandings } from '../lib/formatsRepo';
+import {
+  Phase,
+  CategoryGroup,
+  loadPhases,
+  generatePhaseRound,
+  phaseStandings,
+  loadCategoryGroups,
+} from '../lib/formatsRepo';
+import { categoryLabel, categoryColor } from '../lib/categories';
+import { DeckCard, deckSizeFor, loadDeckCard, deckCountFor } from '../lib/decks';
 import { fmtDate, fmtDateFull, fmtDateTime } from '../lib/when';
 import { IconChevron } from '../ui/icons';
 import { colors, space, type, radius, glow } from '../theme';
@@ -62,6 +71,7 @@ type Tournament = {
   name: string;
   status: string;
   mode: string | null;
+  season_id: string | null;
   photo_url: string | null;
   combat_mode: string | null;
   deck_order: string | null;
@@ -124,6 +134,9 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
   const [byes, setByes] = useState<Bye[]>([]);
   const [phaseId, setPhaseId] = useState<string | null>(null);
   const [standings, setStandings] = useState<Standing[] | null>(null);
+  const [groups, setGroups] = useState<CategoryGroup[] | null>(null);
+  const [myDeck, setMyDeck] = useState<DeckCard | null>(null);
+  const [decks, setDecks] = useState<{ total: number; locked: number }>({ total: 0, locked: 0 });
   const [showQr, setShowQr] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -135,7 +148,7 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
       supabase
         .from('tournaments')
         .select(
-          'id, name, status, mode, photo_url, combat_mode, deck_order, swiss_tiebreak, created_at, starts_at, registration_closes_at, capacity, level, prize, venues(name, city, address)'
+          'id, name, status, mode, season_id, photo_url, combat_mode, deck_order, swiss_tiebreak, created_at, starts_at, registration_closes_at, capacity, level, prize, venues(name, city, address)'
         )
         .eq('id', tournamentId)
         .single(),
@@ -173,6 +186,23 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
     setMatches((matchRows as any) ?? []);
     setByes((byeRows as any) ?? []);
 
+    // El deck solo existe en las modalidades que lo piden; en 1 vs 1 ni se
+    // consulta.
+    if (deckSizeFor((row as any)?.combat_mode) > 1 && playerId) {
+      try {
+        const [card, counts] = await Promise.all([
+          loadDeckCard(tournamentId, playerId),
+          deckCountFor(tournamentId),
+        ]);
+        setMyDeck(card);
+        setDecks(counts);
+      } catch {
+        // Si la 0040 todavía no corrió, la pantalla sigue sirviendo para todo
+        // lo demás: el deck es una sección, no la pantalla.
+        setMyDeck(null);
+      }
+    }
+
     try {
       const list = await loadPhases(tournamentId);
       setPhases(list);
@@ -188,7 +218,7 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
     }
 
     setLoading(false);
-  }, [tournamentId]);
+  }, [tournamentId, playerId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -219,6 +249,27 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
       alive = false;
     };
   }, [phase, phases]);
+
+  // En una fase por categoría la tabla NO es una: es una por rango. Mezclarlas
+  // en un solo listado diría que un Porcelana va arriba de un Oro, cuando ni
+  // siquiera jugaron entre ellos.
+  useEffect(() => {
+    let alive = true;
+    if (phase?.kind !== 'category_rr') {
+      setGroups(null);
+      return;
+    }
+    loadCategoryGroups(tournamentId)
+      .then((g) => {
+        if (alive) setGroups(g);
+      })
+      .catch(() => {
+        if (alive) setGroups([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [phase, tournamentId, registrations.length]);
 
   const nameOf = useMemo(() => {
     const map = new Map<string, PlayerLite>();
@@ -297,6 +348,56 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
       .eq('player_id', target);
     if (error) return Alert.alert('Error', error.message);
     load();
+  }
+
+  // El torneo inicial (G3) del reglamento: su resultado fija la posición de
+  // arranque de cada quien DENTRO de su categoría. No cambia de categoría a
+  // nadie — para eso está el reto de ascenso.
+  async function seedSeason() {
+    if (!tournament?.season_id) return;
+    Alert.alert(
+      'Fijar posiciones de la temporada',
+      'El orden de llegada de este torneo pasa a ser la posición inicial de cada jugador dentro de su categoría. Se puede volver a correr si el torneo se corrige.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Fijar posiciones',
+          onPress: async () => {
+            setBusy(true);
+            const { data, error } = await supabase.rpc('seed_season_from_tournament', {
+              p_season_id: tournament.season_id,
+              p_tournament_id: tournamentId,
+            });
+            setBusy(false);
+            if (error) return Alert.alert('No se pudo sembrar', error.message);
+            Alert.alert('Escalafón sembrado', `${data ?? 0} jugador(es) quedaron colocados.`);
+          },
+        },
+      ]
+    );
+  }
+
+  async function lockDecks() {
+    Alert.alert(
+      'Bloquear los decks',
+      'Después de esto nadie puede cambiar su deck en este torneo. Hazlo al cerrar el registro.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Bloquear',
+          onPress: async () => {
+            setBusy(true);
+            const { data, error } = await supabase.rpc('lock_tournament_decks', {
+              p_tournament_id: tournamentId,
+            });
+            setBusy(false);
+            if (error) return Alert.alert('No se pudo', error.message);
+            Alert.alert('Decks bloqueados', `${data ?? 0} tarjeta(s) quedaron congeladas.`);
+            load();
+          },
+        },
+      ]
+    );
   }
 
   async function advance() {
@@ -455,6 +556,52 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
               accent={accent.neon}
             />
 
+            {/* En modalidad con deck, registrar la tarjeta es un paso propio
+                del torneo y con fecha límite: después de que se bloquea, ya no
+                se toca. Por eso vive aquí y no en "mis combos". */}
+            {deckSizeFor(tournament.combat_mode) > 1 && (mine || isOrganizer) && (
+              <Pressable
+                style={[styles.linkRow, { borderColor: myDeck?.locked_at ? colors.streak : colors.lineHi }]}
+                onPress={() =>
+                  navigation.navigate('Deck', {
+                    tournamentId,
+                    tournamentName: tournament.name,
+                    combatMode: tournament.combat_mode,
+                    status: tournament.status,
+                  })
+                }
+              >
+                <Text style={styles.linkGlyph}>🎴</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.linkText}>TU DECK</Text>
+                  <Text style={styles.meta}>
+                    {myDeck?.locked_at
+                      ? `Bloqueado · ${myDeck.combos.length} combinaciones`
+                      : myDeck
+                      ? `Registrado · ${myDeck.combos.length} de ${deckSizeFor(tournament.combat_mode)}`
+                      : `Sin registrar · hacen falta ${deckSizeFor(tournament.combat_mode)} combinaciones`}
+                  </Text>
+                </View>
+                <IconChevron />
+              </Pressable>
+            )}
+
+            {isOrganizer && deckSizeFor(tournament.combat_mode) > 1 && (
+              <View style={{ gap: space.sm }}>
+                <Button
+                  label={`🔒  BLOQUEAR DECKS (${decks.total} registrados)`}
+                  variant="ghost"
+                  onPress={lockDecks}
+                  disabled={busy || decks.total === 0 || decks.locked === decks.total}
+                />
+                <Text style={styles.hintCenter}>
+                  {decks.locked === decks.total && decks.total > 0
+                    ? 'Los decks ya están bloqueados: nadie los puede cambiar.'
+                    : 'Bloquéalos al cerrar el registro: después nadie puede cambiar su deck.'}
+                </Text>
+              </View>
+            )}
+
             <MyAction
               tournament={tournament}
               accent={accent}
@@ -525,6 +672,7 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
               byes={byes}
               nameOf={nameOf}
               standings={standings}
+              groups={groups}
               playerId={playerId}
               accent={accent}
               champion={champion}
@@ -532,6 +680,8 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
               isOrganizer={isOrganizer}
               busy={busy}
               onAdvance={advance}
+              canSeedSeason={!!tournament.season_id && phase?.kind === 'single_elim'}
+              onSeedSeason={seedSeason}
               onOpenMatch={(id: string) => navigation.navigate('MatchDetail', { matchId: id })}
             />
           </View>
@@ -774,6 +924,7 @@ function BracketTab({
   byes,
   nameOf,
   standings,
+  groups,
   playerId,
   accent,
   champion,
@@ -782,6 +933,8 @@ function BracketTab({
   busy,
   onAdvance,
   onOpenMatch,
+  canSeedSeason,
+  onSeedSeason,
 }: any) {
   if (!phase) {
     return (
@@ -895,47 +1048,50 @@ function BracketTab({
       {/* La tabla solo tiene sentido donde todos siguen jugando. En eliminación
           la posición es "hasta dónde llegó", y eso lo cuenta la llave. */}
       {standings && standings.length > 0 && (
-        <View style={{ gap: space.sm }}>
-          <Text style={styles.listTitle}>TABLA DE LA FASE</Text>
-          <View style={styles.table}>
-            <View style={styles.tableHead}>
-              <Text style={[styles.thNum, { width: 24 }]}>#</Text>
-              <Text style={[styles.th, { flex: 1 }]}>JUGADOR</Text>
-              <Text style={[styles.thNum, { width: 30 }]}>G</Text>
-              <Text style={[styles.thNum, { width: 30 }]}>P</Text>
-              <Text style={[styles.thNum, { width: 42 }]}>DIF</Text>
-            </View>
-            {standings.map((s: Standing, i: number) => {
-              const me = s.player_id === playerId;
-              const cut = phase.cut_size && i < phase.cut_size;
+        <View style={{ gap: space.md }}>
+          {/* Por categoría son VARIAS tablas. Una sola diría que un Porcelana va
+              arriba de un Oro, cuando ni siquiera se enfrentaron. */}
+          {groups && groups.length > 0 ? (
+            groups.map((g: CategoryGroup) => {
+              const inGroup = standings.filter((s: Standing) => g.players.includes(s.player_id));
+              if (inGroup.length === 0) return null;
+              const tint = categoryColor(g.category_code);
               return (
-                <View
-                  key={s.player_id}
-                  style={[
-                    styles.tableRow,
-                    me && { backgroundColor: colors.surface },
-                    cut ? { borderLeftWidth: 2, borderLeftColor: colors.win } : null,
-                  ]}
-                >
-                  <Text style={[styles.tdNum, { width: 24 }, me && { color: accent.warm }]}>{i + 1}</Text>
-                  <Text
-                    style={[styles.td, { flex: 1 }, me && { color: colors.ink, fontWeight: '800' }]}
-                    numberOfLines={1}
-                  >
-                    {me ? 'Tú' : nameOf.get(s.player_id)?.display_name ?? '—'}
-                  </Text>
-                  <Text style={[styles.tdNum, { width: 30, color: colors.win }]}>{s.wins}</Text>
-                  <Text style={[styles.tdNum, { width: 30, color: colors.loss }]}>{s.losses}</Text>
-                  <Text style={[styles.tdNum, { width: 42 }]}>{s.diff > 0 ? `+${s.diff}` : s.diff}</Text>
+                <View key={g.key} style={{ gap: space.sm }}>
+                  <View style={styles.groupHead}>
+                    <View style={[styles.groupDot, { backgroundColor: tint }]} />
+                    <Text style={[styles.groupName, { color: tint }]}>
+                      {categoryLabel(g.category_code)}
+                      {g.division ? ` · División ${g.division}` : ''}
+                    </Text>
+                  </View>
+                  <StandingsTable
+                    rows={inGroup}
+                    nameOf={nameOf}
+                    playerId={playerId}
+                    accent={accent}
+                    cutSize={null}
+                  />
                 </View>
               );
-            })}
-          </View>
-          {phase.cut_size ? (
-            <Text style={styles.hint}>
-              La línea verde marca a los {phase.cut_size} que pasan a la fase siguiente.
-            </Text>
-          ) : null}
+            })
+          ) : (
+            <View style={{ gap: space.sm }}>
+              <Text style={styles.listTitle}>TABLA DE LA FASE</Text>
+              <StandingsTable
+                rows={standings}
+                nameOf={nameOf}
+                playerId={playerId}
+                accent={accent}
+                cutSize={phase.cut_size}
+              />
+              {phase.cut_size ? (
+                <Text style={styles.hint}>
+                  La línea verde marca a los {phase.cut_size} que pasan a la fase siguiente.
+                </Text>
+              ) : null}
+            </View>
+          )}
         </View>
       )}
 
@@ -955,9 +1111,26 @@ function BracketTab({
         rounds.map((round) => {
           const roundMatches = phaseMatches.filter((m) => m.bracket_round === round);
           const roundByes = byes.filter((b: Bye) => b.phase_id === phase.id && b.bracket_round === round);
-          // En eliminación doble las dos llaves se juegan a la vez: separarlas es
-          // la única forma de leer la ronda sin adivinar quién sigue vivo.
-          const sides = [...new Set(roundMatches.map((m) => m.bracket_side ?? 'none'))];
+
+          // Una ronda puede traer varios frentes a la vez y hay que separarlos o
+          // no se entiende: en eliminación doble, las dos llaves; por categoría
+          // o por grupos, un bloque por cada uno. El criterio cambia, el
+          // problema es el mismo.
+          const byBlock = phase.kind === 'category_rr' || phase.kind === 'blocks';
+          const sections = [
+            ...new Set(
+              roundMatches.map((m) => (byBlock ? String(m.block_number ?? '') : m.bracket_side ?? 'none'))
+            ),
+          ];
+          const sectionLabel = (key: string) => {
+            if (!byBlock) return SIDE_LABEL[key] ?? '';
+            if (phase.kind === 'blocks') return `GRUPO ${key}`;
+            // El bloque de una fase por categoría ES el tier de la categoría.
+            const g = (groups ?? []).find((x: CategoryGroup) => String(x.tier) === key);
+            return g
+              ? `${categoryLabel(g.category_code).toUpperCase()}${g.division ? ` · DIVISIÓN ${g.division}` : ''}`
+              : 'CATEGORÍA';
+          };
 
           return (
             <View key={round} style={{ gap: space.sm }}>
@@ -967,13 +1140,15 @@ function BracketTab({
                 <View style={styles.roundLine} />
               </View>
 
-              {sides.map((side) =>
+              {sections.map((key) =>
                 roundMatches
-                  .filter((m) => (m.bracket_side ?? 'none') === side)
+                  .filter(
+                    (m) => (byBlock ? String(m.block_number ?? '') : m.bracket_side ?? 'none') === key
+                  )
                   .map((m, i) => (
                     <View key={m.id} style={{ gap: space.sm }}>
-                      {i === 0 && sides.length > 1 && side !== 'none' ? (
-                        <Text style={styles.sideLabel}>{SIDE_LABEL[side] ?? ''}</Text>
+                      {i === 0 && sections.length > 1 && key !== 'none' && key !== '' ? (
+                        <Text style={styles.sideLabel}>{sectionLabel(key)}</Text>
                       ) : null}
                       <MatchCard match={m} onPress={() => onOpenMatch(m.id)} />
                     </View>
@@ -1002,6 +1177,74 @@ function BracketTab({
           {blocked ? <Text style={styles.hintCenter}>{blocked}</Text> : null}
         </View>
       )}
+
+      {/* El torneo inicial (G3) no reparte VP: reparte PUESTOS. Por eso el
+          sembrado es un acto aparte, y del organizador. */}
+      {isOrganizer && canSeedSeason && rounds.length > 0 && (
+        <View style={{ gap: space.sm, marginTop: space.sm }}>
+          <Button
+            label="🎯  FIJAR POSICIONES DE LA TEMPORADA"
+            variant="ghost"
+            onPress={onSeedSeason}
+            disabled={busy}
+          />
+          <Text style={styles.hintCenter}>
+            El orden de llegada de este torneo pasa a ser la posición inicial de cada quien dentro de
+            su categoría.
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+function StandingsTable({
+  rows,
+  nameOf,
+  playerId,
+  accent,
+  cutSize,
+}: {
+  rows: Standing[];
+  nameOf: Map<string, PlayerLite>;
+  playerId: string;
+  accent: { neon: string; warm: string };
+  cutSize: number | null;
+}) {
+  return (
+    <View style={styles.table}>
+      <View style={styles.tableHead}>
+        <Text style={[styles.thNum, { width: 24 }]}>#</Text>
+        <Text style={[styles.th, { flex: 1 }]}>JUGADOR</Text>
+        <Text style={[styles.thNum, { width: 30 }]}>G</Text>
+        <Text style={[styles.thNum, { width: 30 }]}>P</Text>
+        <Text style={[styles.thNum, { width: 42 }]}>DIF</Text>
+      </View>
+      {rows.map((s, i) => {
+        const me = s.player_id === playerId;
+        const cut = cutSize && i < cutSize;
+        return (
+          <View
+            key={s.player_id}
+            style={[
+              styles.tableRow,
+              me && { backgroundColor: colors.surface },
+              cut ? { borderLeftWidth: 2, borderLeftColor: colors.win } : null,
+            ]}
+          >
+            <Text style={[styles.tdNum, { width: 24 }, me && { color: accent.warm }]}>{i + 1}</Text>
+            <Text
+              style={[styles.td, { flex: 1 }, me && { color: colors.ink, fontWeight: '800' }]}
+              numberOfLines={1}
+            >
+              {me ? 'Tú' : nameOf.get(s.player_id)?.display_name ?? '—'}
+            </Text>
+            <Text style={[styles.tdNum, { width: 30, color: colors.win }]}>{s.wins}</Text>
+            <Text style={[styles.tdNum, { width: 30, color: colors.loss }]}>{s.losses}</Text>
+            <Text style={[styles.tdNum, { width: 42 }]}>{s.diff > 0 ? `+${s.diff}` : s.diff}</Text>
+          </View>
+        );
+      })}
     </View>
   );
 }
@@ -1327,6 +1570,10 @@ const styles = StyleSheet.create({
   phaseChipSub: { fontSize: 9.5, color: colors.inkDim },
   phaseHead: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   phaseTitle: { fontSize: 15, fontWeight: '800', color: colors.ink },
+
+  groupHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  groupDot: { width: 8, height: 8, borderRadius: 4 },
+  groupName: { fontSize: 12, fontWeight: '800', letterSpacing: 0.5 },
 
   table: { borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, overflow: 'hidden' },
   tableHead: {

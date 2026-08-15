@@ -108,6 +108,54 @@ export async function createTournament(spec: TournamentSpec): Promise<string> {
   return tournamentId;
 }
 
+/**
+ * El torneo de una temporada, armado desde el escalafón.
+ *
+ * Es la conexión que el reglamento da por hecha y el software no: un torneo de
+ * ranking no es un evento suelto al que la gente se apunta, es LA temporada
+ * jugándose. Por eso nace atado (`season_id`, sin el cual no puntúa) y con la
+ * temporada entera ya inscrita.
+ *
+ * Dos formas, las dos del reglamento:
+ *   'category_rr'  — el torneo de ranking: cada quien contra los de su rango.
+ *   'single_elim'  — el torneo inicial (G3), que fija la posición de arranque.
+ */
+export async function createSeasonTournament(opts: {
+  leagueId: string;
+  seasonId: string;
+  name: string;
+  kind: 'category_rr' | 'single_elim';
+  pointsToWin?: number;
+  startsAt?: string | null;
+}): Promise<{ tournamentId: string; enrolled: number }> {
+  const tournamentId = await createTournament({
+    leagueId: opts.leagueId,
+    seasonId: opts.seasonId,
+    name: opts.name,
+    mode: 'ranking',
+    combat_mode: 'solo',
+    deck_order: 'fixed',
+    swiss_tiebreak: 'dml',
+    starts_at: opts.startsAt ?? null,
+    // Sin cupo: la temporada entera ya está dentro, y un límite solo podría
+    // dejar fuera a alguien que sí pertenece.
+    capacity: null,
+    level: 'Ranking DML',
+    phases: [{ kind: opts.kind, points_to_win: opts.pointsToWin ?? 4 }],
+  });
+
+  const { data, error } = await supabase.rpc('enroll_season_in_tournament', {
+    p_tournament_id: tournamentId,
+  });
+  if (error) {
+    // El torneo ya existe y se puede usar igual inscribiendo a mano; se avisa
+    // en vez de borrarlo, porque borrarlo perdería la estructura ya creada.
+    throw new Error(`El torneo se creó, pero no se pudo inscribir a la temporada: ${error.message}`);
+  }
+
+  return { tournamentId, enrolled: (data as any as number) ?? 0 };
+}
+
 export async function loadPhases(tournamentId: string): Promise<Phase[]> {
   const { data, error } = await supabase
     .from('tournament_phases')
@@ -171,6 +219,47 @@ export async function phaseParticipants(phase: Phase, phases: Phase[]): Promise<
   const ranked = sortStandings(buildStandings(prevPlayers, prevMatches), prevMatches, tiebreak);
   const cut = phase.cut_size ?? ranked.length;
   return ranked.slice(0, cut).map((s) => s.player_id);
+}
+
+export type CategoryGroup = {
+  key: string;
+  category_code: string;
+  division: string | null;
+  tier: number;
+  players: string[];
+};
+
+/**
+ * Los grupos de una fase por categoría: quién juega con quién según el
+ * escalafón de la temporada, no según la siembra.
+ *
+ * El cruce lo hace el servidor (`tournament_category_groups`, 0039) porque son
+ * tres tablas —inscripciones, escalafón y catálogo—; el emparejamiento se
+ * queda en el motor puro, que sí se puede probar sin base.
+ */
+export async function loadCategoryGroups(tournamentId: string): Promise<CategoryGroup[]> {
+  const { data, error } = await supabase.rpc('tournament_category_groups', {
+    p_tournament_id: tournamentId,
+  });
+  if (error) throw error;
+
+  const groups: CategoryGroup[] = [];
+  for (const row of ((data as any[]) ?? [])) {
+    const key = `${row.category_code}::${row.division ?? ''}`;
+    let g = groups.find((x) => x.key === key);
+    if (!g) {
+      g = {
+        key,
+        category_code: row.category_code,
+        division: row.division ?? null,
+        tier: row.tier,
+        players: [],
+      };
+      groups.push(g);
+    }
+    g.players.push(row.player_id);
+  }
+  return groups;
 }
 
 export type GeneratedRound = {
@@ -253,6 +342,33 @@ export async function generatePhaseRound(
     });
     if (pairs.length === 0) finished = true;
     else note = `Ronda ${nextRound} de ${maxRounds} · ${blockCount} grupos`;
+  } else if (phase.kind === 'category_rr') {
+    // Un round robin por cada categoría, todos avanzando al mismo paso: la
+    // ronda 2 de Oro se juega la misma tarde que la ronda 2 de Bronce.
+    const groups = await loadCategoryGroups(phase.tournament_id);
+    const usable = groups.filter((g) => g.players.length >= 2);
+    if (usable.length === 0) {
+      throw new Error(
+        'Ninguna categoría tiene 2 jugadores con check-in. El escalafón de la temporada es el que arma los grupos.'
+      );
+    }
+
+    let maxRounds = 0;
+    for (const g of usable) {
+      const groupRounds = roundRobinRounds(g.players);
+      const groupByes = roundRobinByes(g.players);
+      maxRounds = Math.max(maxRounds, groupRounds.length);
+      if (nextRound <= groupRounds.length) {
+        // El bloque es el tier de la categoría: así el combate sabe de qué
+        // grupo salió sin tener que volver a cruzar el escalafón para leerlo.
+        pairs.push(...groupRounds[nextRound - 1].map((p) => ({ ...p, block: g.tier })));
+        const b = groupByes[nextRound - 1];
+        if (b) byes.push(b);
+      }
+    }
+
+    if (pairs.length === 0) finished = true;
+    else note = `Ronda ${nextRound} de ${maxRounds} · ${usable.length} categoría(s)`;
   } else if (phase.kind === 'swiss') {
     const total = phase.rounds ?? 5;
     if (nextRound > total) {

@@ -9,6 +9,7 @@ import Avatar from '../ui/Avatar';
 import { Card, Pill, SectionTitle } from '../ui/primitives';
 import { colors, space, type, radius } from '../theme';
 import { categoryLabel, categoryColor, VP_BY_CATEGORY, formatVp } from '../lib/categories';
+import { createSeasonTournament as createSeasonTournamentInDb } from '../lib/formatsRepo';
 
 type Row = {
   player_id: string;
@@ -116,6 +117,64 @@ export default function LadderScreen({ route, navigation }: any) {
             setBusy(false);
             if (error) return Alert.alert('No se pudo abrir', error.message);
             Alert.alert('Reto abierto', 'El combate ya aparece en Batallas.');
+            load();
+          },
+        },
+      ]
+    );
+  }
+
+  // El torneo de ranking del reglamento: fase 1 round robin DENTRO de cada
+  // categoría. Nace atado a la temporada y con la temporada entera inscrita —
+  // un torneo de ranking no es un evento suelto al que la gente se apunta, es
+  // la temporada jugándose.
+  async function createSeasonTournament(kind: 'category_rr' | 'single_elim') {
+    const label = kind === 'category_rr' ? 'Torneo de ranking' : 'Torneo inicial (G3)';
+    setBusy(true);
+    try {
+      const { tournamentId, enrolled } = await createSeasonTournamentInDb({
+        leagueId,
+        seasonId,
+        name: `${label} · ${seasonName ?? 'temporada'}`,
+        kind,
+        pointsToWin: 4,
+      });
+      Alert.alert(
+        `${label} creado`,
+        `Quedaron ${enrolled} jugador(es) inscritos. Da check-in a quienes lleguen y genera la primera ronda desde la pestaña BRACKET.`
+      );
+      navigation.navigate('TournamentDetail', { tournamentId, leagueId, isOrganizer: true });
+    } catch (e: any) {
+      Alert.alert('No se pudo crear', e.message ?? String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // La asistencia no es un detalle administrativo: sin ella no existe la
+  // eliminación por inasistencia ni el reingreso a Porcelana que pide el
+  // reglamento. La función está desde 0031 y no la llamaba ninguna pantalla.
+  function toggleAttendance(row: Row) {
+    const off = row.active;
+    Alert.alert(
+      off ? 'Marcar inasistencia' : 'Reactivar jugador',
+      off
+        ? `${row.display_name} deja de contar para esta temporada: no entra al torneo de ranking y al cerrar reingresa al último puesto de Porcelana.`
+        : `${row.display_name} vuelve a contar en esta temporada, en el puesto donde estaba.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: off ? 'Marcar inasistencia' : 'Reactivar',
+          style: off ? 'destructive' : 'default',
+          onPress: async () => {
+            setBusy(true);
+            const { error } = await supabase.rpc('set_season_attendance', {
+              p_season_id: seasonId,
+              p_player_id: row.player_id,
+              p_active: !off,
+            });
+            setBusy(false);
+            if (error) return Alert.alert('No se pudo', error.message);
             load();
           },
         },
@@ -246,6 +305,7 @@ export default function LadderScreen({ route, navigation }: any) {
               {g.rows.map((r) => (
                 <Card
                   key={r.player_id}
+                  onPress={isOrganizer ? () => toggleAttendance(r) : undefined}
                   style={[
                     styles.row,
                     r.player_id === playerId && { borderColor: tint },
@@ -294,7 +354,32 @@ export default function LadderScreen({ route, navigation }: any) {
 
       {isOrganizer && (
         <View style={styles.block}>
+          <SectionTitle>Jugar esta temporada</SectionTitle>
+          <Text style={styles.hint}>
+            El torneo de ranking del reglamento: cada quien enfrenta a los de SU categoría. Se crea
+            con la temporada entera inscrita y atado a ella, así que sus combates sí mueven el
+            escalafón y el VP.
+          </Text>
+          <Button
+            label="＋  TORNEO DE RANKING (POR CATEGORÍA)"
+            onPress={() => createSeasonTournament('category_rr')}
+            loading={busy}
+          />
+          <Text style={styles.hint}>
+            El torneo INICIAL es distinto: eliminación directa (G3) que sirve para fijar la posición
+            de arranque. Al terminarlo, desde el torneo se siembran las posiciones de la temporada.
+          </Text>
+          <Button
+            label="＋  TORNEO INICIAL (G3)"
+            variant="ghost"
+            onPress={() => createSeasonTournament('single_elim')}
+            loading={busy}
+          />
+
           <SectionTitle>Organización</SectionTitle>
+          <Text style={styles.hint}>
+            Toca a un jugador de la tabla para marcar su inasistencia o reactivarlo.
+          </Text>
           <Button label="REORGANIZAR DIVISIONES" variant="ghost" onPress={rebalance} loading={busy} />
           <Text style={styles.hint}>
             Parte en A/B las categorías que pasaron de cupo, repartiendo en zigzag por posición

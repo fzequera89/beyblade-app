@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
+import { loadDeckCard } from '../lib/decks';
 import { useAuth } from '../context/AuthContext';
 import Screen from '../ui/Screen';
 import Button from '../ui/Button';
@@ -138,7 +139,24 @@ export default function MatchDetailScreen({ route, navigation }: any) {
 
     setIsOrganizer((membership as any)?.role === 'organizer');
     setSavedRounds((roundRows as any) ?? []);
-    setCombos((comboRows as any) ?? []);
+
+    // Si el combate es de un torneo con deck registrado, solo se puede jugar
+    // con las combinaciones de ESE deck: es la tarjeta que se bloqueó antes de
+    // empezar. Sin deck registrado, valen todos los combos de siempre.
+    let usable = ((comboRows as any) ?? []) as { id: string; name: string }[];
+    if (data.tournament_id && playerId) {
+      try {
+        const deck = await loadDeckCard(data.tournament_id, playerId);
+        if (deck && deck.combos.length > 0) {
+          const allowedIds = new Set(deck.combos.map((c) => c.combo.id));
+          usable = usable.filter((c) => allowedIds.has(c.id));
+        }
+      } catch {
+        // La 0040 puede no haber corrido todavía: el reporte no se bloquea por
+        // eso, simplemente no se filtra.
+      }
+    }
+    setCombos(usable);
 
     // Quién puede arbitrar lo decide el servidor, no el cliente: es la misma
     // función que después rechaza la llamada si no le corresponde.

@@ -8,7 +8,16 @@
 // Quien las conecta con la base es formatsRepo.ts.
 
 export type CombatMode = 'solo' | 'deck3' | 'deck5' | 'stock';
-export type PhaseKind = 'round_robin' | 'blocks' | 'swiss' | 'single_elim' | 'double_elim';
+export type PhaseKind =
+  | 'round_robin'
+  | 'blocks'
+  | 'swiss'
+  | 'single_elim'
+  | 'double_elim'
+  // Todos contra todos DENTRO de cada categoría del escalafón. Es 'blocks' con
+  // una diferencia que lo cambia todo: el grupo no sale de la siembra, sale de
+  // la categoría en que está cada quien esta temporada.
+  | 'category_rr';
 export type SwissTiebreak = 'dml' | 'opponents';
 
 export type PlayerRef = { id: string; display_name: string; elo_rating: number };
@@ -41,6 +50,7 @@ export const PHASE_KINDS: { key: PhaseKind; label: string; desc: string }[] = [
   { key: 'swiss', label: 'Suizo', desc: 'Rondas fijas emparejando a quienes llevan el mismo puntaje. Nadie queda fuera.' },
   { key: 'single_elim', label: 'Eliminación directa', desc: 'Quien pierde queda fuera.' },
   { key: 'double_elim', label: 'Eliminación doble', desc: 'Hay segunda oportunidad: quien pierde cae a la llave de perdedores.' },
+  { key: 'category_rr', label: 'Por categoría (DML)', desc: 'Cada quien enfrenta a los de SU categoría del escalafón. Es la fase 1 del torneo de ranking del reglamento.' },
 ];
 
 // ─────────────────────────── Baraja determinista ───────────────────────────

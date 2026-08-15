@@ -113,7 +113,7 @@ Lo que quedó:
 - Configurar el cliente OAuth de Google en Supabase (para que el botón "Continuar con Google" funcione en producción).
 - Cambiar `is_admin` del correo de prueba de Farid al correo real del cliente cuando se decida.
 - Mapa visual (MapLibre) si el cliente lo pide de verdad — no está en el MVP actual.
-- Avatar de perfil (selector de imagen + Supabase Storage) — pospuesto.
+- ~~Avatar de perfil~~ ✅ hecho (selector de imagen + Storage, en `EditProfileScreen`).
 
 ## Brecha contra el reglamento DML (~110x, sin empezar)
 
@@ -125,19 +125,19 @@ Medido el 2026-08-14 cruzando `Reglamento DML Beyblade actualizado pro.docx` con
 
 | Bloque | x | Qué implica |
 |---|---|---|
-| Categorías | 25 | Los 8 estratos (Porcelana→Challenger), cupo 2-10, divisiones A/B, Porcelana al doble, nuevos entran en Porcelana |
-| Ascenso y VP | 20 | Round robin por categoría, reto de ascenso 1º↔último de la superior, VP 3/2/1 por nivel, 4 criterios de desempate |
-| Deck 3+1 | 15 | Modelar Blade/Ratchet/Bit por separado, deck card registrada y bloqueada durante el torneo, validar "no repetir piezas" |
+| ~~Categorías~~ ✅ 0030 | 25 | Los 8 estratos (Porcelana→Challenger), cupo 2-10, divisiones A/B, Porcelana al doble, nuevos entran en Porcelana |
+| ~~Ascenso y VP~~ ✅ 0030/0031/0039 | 20 | ~~Round robin por categoría, reto de ascenso, VP por nivel, 4 criterios de desempate~~ — el round robin por categoría es la fase `category_rr` de 0039 |
+| ~~Deck 3+1~~ ✅ 0040 | 15 | ~~Deck card registrada y bloqueada durante el torneo, validar "no repetir piezas"~~ — hecho en 0040 |
 | Arbitraje | 12 | Rol de juez (Principal / Apoyo), resolución de disputa, un Challenger/Diamante nunca arbitra su categoría |
 | Penalizaciones | 12 | Tabla leves/graves/críticas; 2 leves iguales = 1 punto al rival, graves = pierde el combate, críticas = expulsión |
-| Temporadas | 10 | Reseteo a los 3 meses, torneo inicial G3, asistencia (sin ella no hay eliminación por inasistencia ni reingreso) |
+| ~~Temporadas~~ ✅ 0031+0039 | 10 | ~~Reseteo a los 3 meses, torneo inicial G3, asistencia~~ — reseteo en 0031; G3 y asistencia en 0039 |
 | ~~Reglas de ronda~~ ✅ 0028 | 8 | ~~Lanzamiento nulo (advertencia → 1 punto al rival), empate = repetir ronda, self-over sin contacto~~ — hecho en 0028 |
 | Sueltos | 8 | Elegir modalidad casual, torneos a 5/7/10, temática por votación, premios, checklist de desgaste |
 
 **Tres hallazgos verificados en el código, importantes:**
 1. `RANKS` existe en `src/theme.ts` pero **no lo usa ninguna pantalla** — es decoración, no un escalafón.
 2. **La disputa es un callejón sin salida:** un jugador la marca (`MatchDetailScreen`), el panel de admin la cuenta, pero **no hay RPC ni pantalla para resolverla**. Entra y se queda ahí. Es lo único de esta lista que ya está roto en producción.
-3. ~~`matches.mode` y `matches.points_to_win` existen desde 0020, pero nadie los escribe~~ — **`mode` resuelto en 0026**: el torneo tiene modalidad y baja a cada combate del bracket, así que el Aerial ya es alcanzable en casual. Sigue pendiente `points_to_win` (torneos a 5/7/10, nadie lo escribe). Los retos ya se resolvieron: `accept_challenge` los crea como `casual` desde 0027 (no mueven ELO).
+3. ~~`matches.mode` y `matches.points_to_win` existen desde 0020, pero nadie los escribe~~ — **`mode` resuelto en 0026**: el torneo tiene modalidad y baja a cada combate del bracket, así que el Aerial ya es alcanzable en casual. ~~Sigue pendiente `points_to_win`~~ — **resuelto con el motor de fases**: cada fase lleva su meta (4/5/7/10), `generatePhaseRound` la baja a cada combate y `report_match_result` la respeta, así que un torneo a 7 puntos ya se juega a 7. Los retos ya se resolvieron: `accept_challenge` los crea como `casual` desde 0027 (no mueven ELO).
 
 **Decisiones del cliente ya cerradas:**
 - **Challenger y Contender son lo mismo** (2026-08-14): confundió los nombres. Una sola categoría élite.
@@ -234,6 +234,68 @@ torneo ya atado a la temporada.
 contra la base (catálogo con los 8 tiers, las 3 tablas, las 9 funciones, las
 columnas de Challenger), las internas devuelven 42501, typecheck limpio con el
 código de salida real y el bundle compila.
+
+### ✅ Round robin por categoría, torneo inicial G3 y deck 3+1 — CONSTRUIDO (0039 y 0040, 2026-08-15)
+
+⚠️ **LAS MIGRACIONES 0039 Y 0040 NO ESTÁN CORRIDAS.** El `SUPABASE_ACCESS_TOKEN`
+del entorno sigue siendo el de la otra cuenta (403 comprobado hoy), así que hay
+que pegarlas en el SQL Editor de Supabase, en orden. **Hasta que corran, la app
+funciona igual pero estas funciones nuevas dan error al usarlas** (el resto de
+la pantalla no se cae: el deck se consulta dentro de un try).
+
+**0039 — el torneo de ranking del reglamento:**
+- Fase nueva `category_rr`: todos contra todos **dentro de cada categoría**. El
+  motor ya sabía hacer "grupos", pero los repartía por siembra; para el
+  reglamento el grupo ES la categoría, así que el cruce lo hace
+  `tournament_category_groups` (inscripciones × escalafón × catálogo) y el
+  emparejamiento se queda en el motor puro, que sí se prueba sin base.
+- `enroll_season_in_tournament`: inscribe a la temporada entera de una vez, solo
+  a los **activos** — quien está marcado por inasistencia no entra hasta
+  reingresar. Sin check-in: presentarse sigue siendo un acto aparte.
+- `seed_season_from_tournament`: el **torneo inicial (G3)**. El orden sale de
+  hasta dónde llegó cada quien (ronda más alta jugada, si la ganó, victorias,
+  diferencia) y reordena **dentro de cada categoría**. Un torneo no cambia de
+  categoría a nadie: para eso está el reto de ascenso.
+- **UI:** en `LadderScreen`, la organización crea el torneo de la temporada con
+  un botón ("por categoría" o "inicial G3"); nace atado a la temporada y con
+  todos inscritos. En el detalle del torneo, la pestaña BRACKET muestra **una
+  tabla por categoría** (una sola diría que un Porcelana va arriba de un Oro sin
+  haber jugado contra él) y los combates agrupados por rango. Al terminar un G3
+  aparece "FIJAR POSICIONES DE LA TEMPORADA".
+- **Asistencia:** `set_season_attendance` existía desde 0031 y **no la llamaba
+  ninguna pantalla**. Ahora la organización toca a un jugador del escalafón para
+  marcar inasistencia o reactivarlo.
+
+**0040 — deck card (el "3+1"):**
+- `deck_cards` + `deck_card_combos`, una tarjeta **por torneo** y no por jugador:
+  el mismo jugador lleva decks distintos a torneos distintos, y el del torneo
+  pasado tiene que quedar como se jugó.
+- `save_deck_card` valida las dos reglas que el software no podía ni
+  representar: **cantidad exacta** según la modalidad (3 en 3v3, 5 en 5G) y
+  **ninguna pieza repetida** entre las combinaciones — comparando en minúsculas
+  y sin espacios, porque "Wizard Rod" y "wizard  rod" son la misma pieza escrita
+  por dos personas.
+- `lock_tournament_decks`: los bloquea la **organización**, todos de una vez. Si
+  dependiera del jugador, nadie bloquearía el propio; y con el bracket ya armado,
+  editar el deck sería elegirlo después de ver contra quién te tocó.
+- **Las piezas NO son catálogo**: `combos.parts` ya guarda blade/ratchet/bit como
+  texto, y una tabla cerrada obligaría a migrar cada vez que sale una pieza.
+- **UI:** `DeckScreen` — los espacios se ven vacíos como una tarjeta que llenar,
+  cada combo enseña sus piezas y se atenúa el que choca con lo ya elegido, en vez
+  de dejar que lo descubras al guardar. Y **`MatchDetailScreen` solo ofrece los
+  combos del deck** cuando el torneo tiene uno registrado.
+- La validación de "no repetir" vive **dos veces a propósito**: en el cliente
+  para que se vea mientras armas, en el servidor para que sea cierta.
+
+**Verificado:** typecheck limpio con el código de salida real, `npm run
+test:formats` sigue en verde (58 comprobaciones), el bundle compila y la app
+monta. **Nada de esto se ha probado contra la base**, porque las migraciones no
+han corrido.
+
+> Nota de consola: en el preview de desarrollo aparecen avisos de
+> `react-native-svg` ("rect attribute height: a negative value is not valid")
+> durante el primer layout. Se comprobó que **ya estaban en `main` antes de este
+> trabajo** y que **no aparecen en producción**; el DOM final es válido.
 
 ### Reglamento extraído (referencia, para no releer el .docx)
 
@@ -665,9 +727,10 @@ producción monta sin errores. **Sin datos de temporada reales**, así que el VP
 acumulándose de combates de verdad sigue sin probarse punta a punta.
 
 **LO QUE SIGUE:**
-1. QA con sesión iniciada del flujo completo (torneo → VP local + interclubes) y del hub. **Ya se puede hacer punta a punta desde la app:** el torneo de ranking se crea atado a una temporada (eslabón cerrado el 2026-08-15), así que sus combates sí alimentan el escalafón y el VP sin tocar la base a mano.
-2. Completar el escalafón: **round robin por categoría** (generándolo desde el escalafón, con el torneo ya atado a la temporada) y **torneo inicial G3**. La UI de cierre de temporada ya está (`30ae233`).
-3. Portadas de eventos/clubes ya están; falta solo pulido y publicación en tiendas.
+1. **Correr la 0039 y la 0040 en el SQL Editor** (en ese orden). Es lo único que separa al escalafón completo de estar en vivo.
+2. QA con sesión iniciada del flujo completo, ya con todo construido: crear el torneo de la temporada desde el escalafón → check-in → generar rondas por categoría → reportar y aprobar → ver moverse la tabla, el VP local y el interclubes.
+3. Lo que no puede cerrar un agente: **notificaciones push** y **date picker** (los dos exigen dependencia nativa + dev client, contra la decisión 2/9 de este documento), **OAuth de Google**, `is_admin` al correo del cliente, cuentas de tienda, íconos/capturas/política de privacidad.
+4. Paginación de listas: hoy todo carga completo. A escala de liga regional aguanta.
 
 **Correr migraciones sin pegarlas a mano:** el `SUPABASE_ACCESS_TOKEN` del entorno es de OTRA cuenta y no ve este proyecto. Con un token de la cuenta `fzequera89` sí se puede, vía Management API:
 `POST https://api.supabase.com/v1/projects/vgffwqmpiunxzmlfmtyo/database/query` con `{"query": "..."}`.
@@ -677,7 +740,7 @@ acumulándose de combates de verdad sigue sin probarse punta a punta.
 
 1. `git clone` / `git pull` del repo.
 2. Copiar `.env.example` a `.env` y llenar `EXPO_PUBLIC_SUPABASE_URL` y `EXPO_PUBLIC_SUPABASE_ANON_KEY` (Supabase → Settings → API del proyecto "CML Beyblade").
-3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-15 las 0001–0038 están corridas y verificadas contra la base** (0036 = portadas de eventos y clubes; 0037 = tabla local por victorias + escala VP 5/4/3/2/1; 0038 = Ranking Unificado Interclubes) — si se agrega una nueva, actualizar esta línea.
+3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-15 las 0001–0038 están corridas y verificadas contra la base; la 0039 y la 0040 están escritas y SIN CORRER** (0036 = portadas de eventos y clubes; 0037 = tabla local por victorias + escala VP 5/4/3/2/1; 0038 = Ranking Unificado Interclubes) — si se agrega una nueva, actualizar esta línea.
 4. `npm install`, luego `npm run web` para verificar rápido en el preview del navegador (no requiere emulador Android).
 5. Para un build real: `npx eas-cli build --platform android --profile preview --non-interactive` (requiere `eas login` ya hecho en la máquina).
 
@@ -716,7 +779,7 @@ Es la única línea del roadmap que queda, y buena parte **no la puede cerrar un
 
 **Pulido pendiente:**
 - Fecha/hora de eventos como texto (decisión 9) — cambiar a date picker exige dev client.
-- Avatar de perfil (pospuesto desde Fase 1).
+- ~~Avatar de perfil~~ ✅ hecho: `EditProfileScreen` sube foto a Storage y guarda `players.avatar_url`.
 - Sin notificaciones push todavía (estaban en el stack acordado: FCM/Expo Push).
 - Sin paginación en listas: hoy todo carga completo. A escala de liga regional aguanta; con miles de matches habría que paginar.
 

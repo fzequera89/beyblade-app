@@ -10,16 +10,9 @@ import { Field } from '../ui/Field';
 import { Card, Hex, SectionTitle } from '../ui/primitives';
 import Cover, { coverAccent } from '../ui/Cover';
 import { pickCoverPhoto, uploadCover } from '../lib/cover';
+import { leagueEmblem } from '../lib/emblem';
 import { IconChevron } from '../ui/icons';
 import { colors, space, type, radius } from '../theme';
-
-// Las tres letras del escudo. Se salta las palabras que llevan TODAS las ligas:
-// "Liga CML Central" tiene que dar CML, no LIG.
-const FILLER = /^(liga|league|la|el|los|las|de|del|the)$/i;
-function emblemOf(name: string): string {
-  const words = name.split(/\s+/).filter((w) => w && !FILLER.test(w));
-  return (words[0] ?? name).slice(0, 3).toUpperCase();
-}
 
 type Season = { id: string; name: string; start_date: string | null; end_date: string | null };
 type League = { id: string; name: string; description: string | null; photo_url: string | null };
@@ -187,9 +180,16 @@ export default function LeagueDetailScreen({ route, navigation }: any) {
         {/* El emblema monta sobre la portada, como un escudo. */}
         <View style={styles.emblemWrap} pointerEvents="none">
           <Hex size={78} color={accent.neon} solid>
-            <Text style={styles.emblemText} numberOfLines={1}>
-              {emblemOf(league.name)}
-            </Text>
+            <View style={{ alignItems: 'center' }}>
+              <Text style={styles.emblemText} numberOfLines={1}>
+                {leagueEmblem(league.name).top}
+              </Text>
+              {leagueEmblem(league.name).bottom ? (
+                <Text style={styles.emblemSub} numberOfLines={1}>
+                  {leagueEmblem(league.name).bottom}
+                </Text>
+              ) : null}
+            </View>
           </Hex>
         </View>
       </View>
@@ -451,6 +451,7 @@ const styles = StyleSheet.create({
   coverEditText: { fontSize: 15 },
   emblemWrap: { position: 'absolute', bottom: -22, left: 0, right: 0, alignItems: 'center' },
   emblemText: { fontSize: 17, fontWeight: '800', fontStyle: 'italic', color: colors.ink, letterSpacing: -0.5 },
+  emblemSub: { fontSize: 8, fontWeight: '800', letterSpacing: 0.6, color: colors.inkSoft, marginTop: -1 },
 
   pad: { paddingHorizontal: space.xl },
   hero: { alignItems: 'center', gap: space.sm, paddingTop: space.xxl, paddingBottom: space.lg },

@@ -6,7 +6,8 @@ import { useAuth } from '../context/AuthContext';
 import Screen from '../ui/Screen';
 import Button from '../ui/Button';
 import { Card, Hex, Pill } from '../ui/primitives';
-import Cover from '../ui/Cover';
+import Cover, { coverAccent } from '../ui/Cover';
+import { leagueEmblem } from '../lib/emblem';
 import { IconChevron } from '../ui/icons';
 import { colors, space, type, radius } from '../theme';
 
@@ -18,6 +19,7 @@ type LeagueRow = {
   role: 'member' | 'organizer' | null;
   myRank: number | null;
   memberCount: number;
+  tournamentCount: number;
 };
 
 export default function LeaguesScreen({ navigation }: any) {
@@ -63,11 +65,20 @@ export default function LeaguesScreen({ navigation }: any) {
       if (index >= 0) rankByLeague.set(leagueId, index + 1);
     }
 
+    // Torneos por liga: una sola consulta y se agrupa aquí. Una por liga
+    // serían tantas consultas como ligas existan.
+    const { data: tourneys } = await supabase.from('tournaments').select('league_id');
+    const tournamentsByLeague = new Map<string, number>();
+    for (const t of ((tourneys as any[]) ?? [])) {
+      tournamentsByLeague.set(t.league_id, (tournamentsByLeague.get(t.league_id) ?? 0) + 1);
+    }
+
     const list = ((allLeagues as any[]) ?? []).map((l) => ({
       ...l,
       role: roleByLeague.get(l.id) ?? null,
       myRank: rankByLeague.get(l.id) ?? null,
       memberCount: countByLeague.get(l.id) ?? 0,
+      tournamentCount: tournamentsByLeague.get(l.id) ?? 0,
     }));
     // Las tuyas primero: son las que vienes a consultar.
     list.sort((a, b) => (b.role ? 1 : 0) - (a.role ? 1 : 0));
@@ -114,43 +125,68 @@ export default function LeaguesScreen({ navigation }: any) {
             )}
           </View>
         }
-        renderItem={({ item, index }) => {
+        renderItem={({ item }) => {
           const mine = !!item.role;
-          // Solo se destaca si es TUYA: en una lista de ligas ajenas, la
-          // primera no vale más que las demás.
-          const hero = index === 0 && mine;
+          const accent = coverAccent(item.id);
 
           return (
             <Pressable
               onPress={() => navigation.navigate('LeagueDetail', { leagueId: item.id })}
               style={({ pressed }) => pressed && { opacity: 0.85 }}
             >
-              <View style={[styles.card, mine && { borderColor: colors.blue }]}>
-                <Cover id={item.id} photoUrl={item.photo_url} height={hero ? 140 : 92} />
-
-                <View style={styles.overlay}>
-                  {mine && <Text style={styles.mineTag}>TU LIGA</Text>}
-                  <Text style={[styles.name, hero && styles.nameHero]} numberOfLines={1}>
-                    {item.name}
-                  </Text>
-                  <Text style={styles.meta} numberOfLines={2}>
-                    {item.description ?? 'Sin descripción'}
-                  </Text>
+              <View style={[styles.card, { borderColor: mine ? accent.neon : colors.line }]}>
+                {/* La portada va de fondo, atenuada: acompaña sin tapar el dato. */}
+                <View style={styles.bg} pointerEvents="none">
+                  <Cover id={item.id} photoUrl={item.photo_url} height={132} />
                 </View>
+                <View style={styles.scrim} pointerEvents="none" />
 
-                <View style={styles.foot}>
-                  <Text style={styles.footText}>
-                    {item.memberCount} miembro{item.memberCount === 1 ? '' : 's'}
-                    {item.myRank ? ` · vas #${item.myRank}` : ''}
-                  </Text>
+                <View style={styles.cardRow}>
+                  <Hex size={72} color={accent.neon} solid>
+                    <View style={{ alignItems: 'center' }}>
+                      <Text style={styles.emblem} numberOfLines={1}>
+                        {leagueEmblem(item.name).top}
+                      </Text>
+                      {leagueEmblem(item.name).bottom ? (
+                        <Text style={styles.emblemSub} numberOfLines={1}>
+                          {leagueEmblem(item.name).bottom}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </Hex>
+
+                  <View style={{ flex: 1, gap: 3 }}>
+                    <View style={styles.titleRow}>
+                      <Text style={styles.name} numberOfLines={1}>
+                        {item.name}
+                      </Text>
+                      {item.role === 'organizer' && (
+                        <View style={[styles.roleTag, { borderColor: accent.neon }]}>
+                          <Text style={[styles.roleTagText, { color: accent.warm }]}>MODERADOR</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.desc} numberOfLines={2}>
+                      {item.description ?? 'Sin descripción'}
+                    </Text>
+
+                    <View style={styles.statsRow}>
+                      <MiniStat glyph="👥" value={String(item.memberCount)} label="Miembros" tint={accent.neon} />
+                      <MiniStat glyph="🏆" value={String(item.tournamentCount ?? 0)} label="Torneos" tint={accent.neon} />
+                      <MiniStat
+                        glyph="📊"
+                        value={item.myRank ? `#${item.myRank}` : '—'}
+                        label="Tu posición"
+                        tint={accent.neon}
+                      />
+                    </View>
+                  </View>
+
                   {mine ? (
-                    <>
-                      {item.role === 'organizer' && <Pill label="Moderador" />}
-                      <Text style={styles.cta}>Ver liga ›</Text>
-                    </>
+                    <IconChevron />
                   ) : (
-                    <Pressable style={styles.join} onPress={() => join(item.id)}>
-                      <Text style={styles.joinText}>UNIRME</Text>
+                    <Pressable style={[styles.join, { borderColor: accent.neon }]} onPress={() => join(item.id)}>
+                      <Text style={[styles.joinText, { color: accent.warm }]}>UNIRME</Text>
                     </Pressable>
                   )}
                 </View>
@@ -176,48 +212,75 @@ export default function LeaguesScreen({ navigation }: any) {
   );
 }
 
+function MiniStat({
+  glyph,
+  value,
+  label,
+  tint,
+}: {
+  glyph: string;
+  value: string;
+  label: string;
+  tint: string;
+}) {
+  return (
+    <View style={styles.miniStat}>
+      <Text style={styles.miniGlyph}>{glyph}</Text>
+      <View>
+        <Text style={[styles.miniValue, { color: tint }]}>{value}</Text>
+        <Text style={styles.miniLabel}>{label}</Text>
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   list: { paddingHorizontal: space.xl, paddingBottom: space.xxxl, gap: space.md },
+
+  card: {
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    backgroundColor: colors.card,
+    overflow: 'hidden',
+  },
+  bg: { position: 'absolute', top: 0, left: 0, right: 0, opacity: 0.5 },
+  scrim: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(4,6,12,0.62)',
+  },
+  cardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    padding: space.lg,
+  },
+  emblem: { fontSize: 15, fontWeight: '800', fontStyle: 'italic', color: colors.ink, letterSpacing: -0.5 },
+  emblemSub: { fontSize: 7.5, fontWeight: '800', letterSpacing: 0.5, color: colors.inkSoft, marginTop: -1 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  name: { flex: 1, fontSize: 16, fontWeight: '800', color: colors.ink },
+  roleTag: { borderWidth: 1, borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 3 },
+  roleTagText: { fontSize: 8.5, fontWeight: '800', letterSpacing: 0.6 },
+  desc: { fontSize: 11.5, color: colors.inkSoft, lineHeight: 16 },
+  statsRow: { flexDirection: 'row', gap: space.lg, marginTop: space.sm },
+  miniStat: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  miniGlyph: { fontSize: 13 },
+  miniValue: { fontSize: 14, fontWeight: '800' },
+  miniLabel: { fontSize: 9, color: colors.inkDim },
+  join: { borderWidth: 1, borderRadius: 8, paddingVertical: 7, paddingHorizontal: 12 },
+  joinText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
   header: { gap: space.md, paddingTop: space.md, marginBottom: space.sm },
   headRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   back: { color: colors.ink, fontSize: 30, lineHeight: 32, width: 22 },
   title: { ...type.title, fontSize: 20 },
   sub: { ...type.soft, fontSize: 12.5 },
 
-  card: {
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: radius.lg,
-    backgroundColor: colors.card,
-    overflow: 'hidden',
-  },
-  overlay: { paddingHorizontal: space.lg, paddingTop: space.md, gap: 3 },
-  mineTag: { fontSize: 9, fontWeight: '800', letterSpacing: 1, color: colors.blue },
-  nameHero: { fontSize: 20 },
-  foot: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.sm,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.md,
-    marginTop: space.sm,
-    borderTopWidth: 1,
-    borderTopColor: colors.line,
-  },
-  footText: { flex: 1, fontSize: 11, color: colors.inkDim },
-  cta: { fontSize: 12, fontWeight: '800', color: colors.blue },
 
 
-  name: { fontSize: 15.5, fontWeight: '800', fontStyle: 'italic', color: colors.ink, letterSpacing: -0.2 },
   meta: { fontSize: 11.5, color: colors.inkSoft, marginTop: 2 },
-  join: {
-    borderWidth: 1,
-    borderColor: colors.blue,
-    borderRadius: 8,
-    paddingVertical: 7,
-    paddingHorizontal: 12,
-  },
-  joinText: { color: colors.blue, fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
 
   empty: { alignItems: 'center', gap: space.md, paddingVertical: space.xl },
   emptyTitle: { fontSize: 15, fontWeight: '700', color: colors.ink },

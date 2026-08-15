@@ -18,17 +18,18 @@ export function categoryColor(code?: string | null): string {
 // De más alta a más baja, que es como se lee una tabla de posiciones.
 export const CATEGORIES_TOP_DOWN = [...RANKS].reverse();
 
-// Cuánto arriesga cada categoría por combate. Es el mismo valor que la columna
+// Cuánto vale cada categoría en VP del INTERCLUBES (no de la tabla local, que
+// se ordena por victorias desde 0037). Es el mismo valor que la columna
 // `vp_value` de la base — aquí solo para pintarlo sin pedir otra consulta. La
 // base manda: si el cliente lo cambia allá, esto es solo un rótulo.
 export const VP_BY_CATEGORY: Record<string, number> = {
-  challenger: 3,
-  diamante: 3,
-  platino: 3,
-  oro: 2,
-  plata: 2,
-  bronce: 1,
-  hierro: 1,
+  challenger: 5,
+  diamante: 4,
+  platino: 4,
+  oro: 3,
+  plata: 3,
+  bronce: 2,
+  hierro: 2,
   porcelana: 1,
 };
 

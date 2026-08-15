@@ -154,8 +154,9 @@ export default function LadderScreen({ route, navigation }: any) {
 
       <Card style={{ marginBottom: space.lg }}>
         <Text style={styles.hint}>
-          Esta es la tabla oficial de la liga: categoría, posición y VP de la temporada. Es un
-          sistema aparte del ELO — el ELO mide tu habilidad y no se resetea nunca; esto se
+          Tabla oficial de la liga: se ordena por VICTORIAS, con la diferencia de puntos como
+          desempate. Los VP son de otro ranking —el interclubes, que cruza ligas— y no mueven esta
+          tabla. Y nada de esto es el ELO: el ELO mide tu habilidad y no se resetea; esto se
           reinicia cada temporada.
         </Text>
       </Card>
@@ -169,8 +170,10 @@ export default function LadderScreen({ route, navigation }: any) {
               {mine.division ? ` ${mine.division}` : ''} · #{mine.place}
             </Text>
             <Text style={styles.meta}>
-              {formatVp(mine.vp)} VP · diferencia {formatVp(mine.point_diff)} · arriesgas{' '}
-              {VP_BY_CATEGORY[mine.category_code] ?? 1} por combate
+              {mine.matches_won}G – {mine.matches_lost}P · diferencia {formatVp(mine.point_diff)}
+            </Text>
+            <Text style={styles.metaDim}>
+              {formatVp(mine.vp)} VP interclubes · aportas {VP_BY_CATEGORY[mine.category_code] ?? 1} por combate
             </Text>
           </View>
         </Card>
@@ -217,12 +220,17 @@ export default function LadderScreen({ route, navigation }: any) {
                       {!r.active ? ' · inactivo' : ''}
                     </Text>
                     <Text style={styles.meta}>
-                      {r.matches_won}G · {r.matches_lost}P · dif {formatVp(r.point_diff)}
+                      dif {formatVp(r.point_diff)} · {formatVp(r.vp)} VP interclubes
                     </Text>
                   </View>
-                  <Text style={[styles.vp, { color: r.vp >= 0 ? colors.win : colors.loss }]}>
-                    {formatVp(r.vp)}
-                  </Text>
+                  {/* La tabla se ordena por victorias, así que el récord es lo
+                      que manda a la vista; el VP quedó en la meta. */}
+                  <View style={styles.recordBox}>
+                    <Text style={styles.record}>
+                      {r.matches_won}<Text style={styles.recordDash}>–</Text>{r.matches_lost}
+                    </Text>
+                    <Text style={styles.recordLabel}>G – P</Text>
+                  </View>
                 </Card>
               ))}
 
@@ -284,7 +292,11 @@ const styles = StyleSheet.create({
   place: { fontSize: 13, fontWeight: '800', color: colors.inkDim, width: 20, textAlign: 'center' },
   name: { fontSize: 14, fontWeight: '700', color: colors.ink },
   meta: { fontSize: 11.5, color: colors.inkSoft, marginTop: 2 },
-  vp: { fontSize: 16, fontWeight: '800', fontStyle: 'italic' },
+  metaDim: { fontSize: 10.5, color: colors.inkDim, marginTop: 1 },
+  recordBox: { alignItems: 'center', minWidth: 42 },
+  record: { fontSize: 16, fontWeight: '800', fontStyle: 'italic', color: colors.ink },
+  recordDash: { color: colors.inkDim, fontWeight: '600' },
+  recordLabel: { fontSize: 8, fontWeight: '800', letterSpacing: 0.6, color: colors.inkDim },
 
   challenge: {
     fontSize: 12,

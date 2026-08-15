@@ -41,6 +41,8 @@ export default function CreateTournamentScreen({ route, navigation }: any) {
   const [name, setName] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [mode, setMode] = useState<'ranking' | 'casual'>('ranking');
+  const [seasons, setSeasons] = useState<{ id: string; name: string }[]>([]);
+  const [seasonId, setSeasonId] = useState<string | null>(null);
 
   // Paso 2 — dónde y cuándo
   const [date, setDate] = useState('');
@@ -86,6 +88,27 @@ export default function CreateTournamentScreen({ route, navigation }: any) {
       setVenues((data as any) ?? []);
     })();
   }, []);
+
+  // Las temporadas de la liga: un torneo de ranking que pertenece a una es lo
+  // ÚNICO que alimenta el escalafón y el VP (apply_vp_for_match lo exige).
+  //
+  // Viene marcada la más reciente A PROPÓSITO. El error que esto vino a
+  // arreglar es de omisión, no de elección: nadie ataba el torneo a la
+  // temporada, y un torneo de ranking suelto se ve idéntico hasta que alguien
+  // nota, semanas después, que el escalafón no se movió. "Suelto" sigue ahí
+  // para quien lo quiera, pero hay que pedirlo.
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from('seasons')
+        .select('id, name')
+        .eq('league_id', leagueId)
+        .order('created_at', { ascending: false });
+      const list = ((data as any) ?? []) as { id: string; name: string }[];
+      setSeasons(list);
+      setSeasonId((current) => current ?? list[0]?.id ?? null);
+    })();
+  }, [leagueId]);
 
   // La locación nueva se guarda en Locaciones, no suelta dentro del torneo:
   // el mismo lugar sirve para el siguiente torneo y para el check-in por QR.
@@ -155,6 +178,7 @@ export default function CreateTournamentScreen({ route, navigation }: any) {
     try {
       const id = await createTournament({
         leagueId,
+        seasonId: mode === 'ranking' ? seasonId : null,
         name,
         mode,
         combat_mode: combatMode,
@@ -248,6 +272,48 @@ export default function CreateTournamentScreen({ route, navigation }: any) {
                 </Pressable>
               ))}
             </View>
+
+            {/* La temporada solo aplica a ranking: es lo que conecta el torneo con
+                el escalafón. Un torneo sin temporada se juega igual, pero no
+                mueve categorías ni VP. */}
+            {mode === 'ranking' && seasons.length === 0 && (
+              <Card style={styles.whyCard}>
+                <Text style={styles.whyTag}>ESTA LIGA NO TIENE TEMPORADAS</Text>
+                <Text style={styles.whyText}>
+                  El torneo se puede crear igual, pero sus combates no van a mover el escalafón ni
+                  el VP: eso solo pasa dentro de una temporada.
+                </Text>
+                <Text style={styles.hint}>
+                  Se crea desde el detalle de la liga, en "Temporadas".
+                </Text>
+              </Card>
+            )}
+
+            {mode === 'ranking' && seasons.length > 0 && (
+              <>
+                <SectionTitle>¿De qué temporada?</SectionTitle>
+                <Text style={styles.hint}>
+                  Sus combates suman al escalafón y al VP de esa temporada. "Suelto" se juega igual
+                  pero no mueve el ranking de categorías.
+                </Text>
+                <Pressable
+                  onPress={() => setSeasonId(null)}
+                  style={[styles.opt, seasonId === null && styles.optOn]}
+                >
+                  <Text style={[styles.optName, seasonId === null && styles.optNameOn]}>Suelto</Text>
+                  <Text style={styles.optDesc}>No pertenece a ninguna temporada.</Text>
+                </Pressable>
+                {seasons.map((s) => (
+                  <Pressable
+                    key={s.id}
+                    onPress={() => setSeasonId(s.id)}
+                    style={[styles.opt, seasonId === s.id && styles.optOn]}
+                  >
+                    <Text style={[styles.optName, seasonId === s.id && styles.optNameOn]}>{s.name}</Text>
+                  </Pressable>
+                ))}
+              </>
+            )}
 
             <Button label="SIGUIENTE" onPress={() => setStep(1)} disabled={!name.trim()} />
           </View>
@@ -537,6 +603,15 @@ export default function CreateTournamentScreen({ route, navigation }: any) {
                 {COMBAT_MODES.find((m) => m.key === combatMode)?.label} ·{' '}
                 {mode === 'casual' ? 'Casual' : 'Ranking'}
               </Text>
+              {/* Que se lea ANTES de crear si va a mover el escalafón o no: es
+                  lo que nadie podía saber hasta que la temporada no llegaba. */}
+              {mode === 'ranking' ? (
+                <Text style={styles.previewLine}>
+                  {seasonId
+                    ? `Temporada: ${seasons.find((s) => s.id === seasonId)?.name ?? '—'} · suma al escalafón y al VP`
+                    : 'Sin temporada · no mueve el escalafón ni el VP'}
+                </Text>
+              ) : null}
               {phases.map((p, i) => (
                 <Text key={i} style={styles.previewLine}>
                   {i + 1}. {PHASE_KINDS.find((k) => k.key === p.kind)?.label}

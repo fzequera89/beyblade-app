@@ -43,6 +43,9 @@ export type PhaseSpec = {
 
 export type TournamentSpec = {
   leagueId: string;
+  /** Temporada a la que pertenece: solo así sus combates alimentan el escalafón
+   *  y el VP (apply_vp_for_match exige tournaments.season_id). Null = suelto. */
+  seasonId?: string | null;
   name: string;
   mode: 'ranking' | 'casual';
   combat_mode: 'solo' | 'deck3' | 'deck5' | 'stock';
@@ -64,6 +67,7 @@ export async function createTournament(spec: TournamentSpec): Promise<string> {
     .from('tournaments')
     .insert({
       league_id: spec.leagueId,
+      season_id: spec.seasonId ?? null,
       name: spec.name.trim(),
       mode: spec.mode,
       combat_mode: spec.combat_mode,

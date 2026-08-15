@@ -207,14 +207,28 @@ posiciones/VP/marcadores, cuenta títulos y reingresa inactivos a Porcelana.
 Siguen pendientes el **round robin por categoría** (hoy el bracket sigue siendo
 eliminación directa) y el **torneo inicial G3**.
 
-⚠️ **ESLABÓN FALTANTE encontrado el 2026-08-15:** `CreateTournamentScreen` **nunca
-fija `tournaments.season_id`**, y `apply_vp_for_match` solo puntúa combates cuyo
-torneo tiene `season_id`. O sea: **hoy ningún torneo creado desde la app alimenta
-el escalafón ni el VP** — el QA de VP funcionó porque el combate de prueba se ató
-a mano a una temporada. Antes (o dentro) del round robin por categoría hay que
-**conectar torneo↔temporada en la UI** (elegir temporada al crear un torneo de
-ranking, o generar el round robin desde el escalafón creando el torneo atado).
-Es un pedido de decisión al cliente sobre por dónde entra esa conexión.
+### ✅ El eslabón torneo↔temporada — CERRADO (2026-08-15)
+
+Estaba anotado aquí como el eslabón faltante: `CreateTournamentScreen` **nunca
+fijaba `tournaments.season_id`**, y `apply_vp_for_match` solo puntúa combates
+cuyo torneo tiene temporada. O sea que **ningún torneo creado desde la app
+alimentaba el escalafón ni el VP** — el QA de VP funcionó porque el combate de
+prueba se ató a mano a una temporada.
+
+Ahora el armador pregunta **"¿De qué temporada?"** en el paso de identidad, solo
+para torneos de **ranking** (`TournamentSpec.seasonId` → `tournaments.season_id`).
+
+**Por qué viene marcada la temporada más reciente y no "Suelto":** el error que
+esto vino a arreglar es de **omisión, no de elección**. Un torneo de ranking
+suelto se ve idéntico a uno atado, y la diferencia solo se nota semanas después,
+cuando alguien pregunta por qué el escalafón no se movió. "Suelto" sigue
+disponible, pero hay que pedirlo. Y si la liga **no tiene ninguna temporada**, el
+armador lo dice ahí mismo en vez de dejar que se cree un torneo que no va a
+puntuar; la vista previa ("ASÍ VA A QUEDAR") también lo declara antes de crear.
+
+Queda pendiente la otra mitad de la conexión, que es un pedido de decisión al
+cliente: **generar el round robin por categoría desde el escalafón**, creando el
+torneo ya atado a la temporada.
 
 **Sin probar con datos reales.** Verificado: 0030 y 0031 corridas y comprobadas
 contra la base (catálogo con los 8 tiers, las 3 tablas, las 9 funciones, las
@@ -651,8 +665,8 @@ producción monta sin errores. **Sin datos de temporada reales**, así que el VP
 acumulándose de combates de verdad sigue sin probarse punta a punta.
 
 **LO QUE SIGUE:**
-1. QA con sesión iniciada del flujo completo (torneo → VP local + interclubes) y del hub.
-2. Completar el escalafón: round robin por categoría, UI de cierre de temporada, torneo inicial G3.
+1. QA con sesión iniciada del flujo completo (torneo → VP local + interclubes) y del hub. **Ya se puede hacer punta a punta desde la app:** el torneo de ranking se crea atado a una temporada (eslabón cerrado el 2026-08-15), así que sus combates sí alimentan el escalafón y el VP sin tocar la base a mano.
+2. Completar el escalafón: **round robin por categoría** (generándolo desde el escalafón, con el torneo ya atado a la temporada) y **torneo inicial G3**. La UI de cierre de temporada ya está (`30ae233`).
 3. Portadas de eventos/clubes ya están; falta solo pulido y publicación en tiendas.
 
 **Correr migraciones sin pegarlas a mano:** el `SUPABASE_ACCESS_TOKEN` del entorno es de OTRA cuenta y no ve este proyecto. Con un token de la cuenta `fzequera89` sí se puede, vía Management API:

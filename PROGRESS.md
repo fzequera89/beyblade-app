@@ -569,8 +569,41 @@ Verificado: typecheck limpio, el bundle compila, producción sirve el bundle nue
 y monta sin errores de consola. Sin probar con sesión iniciada (subir una foto
 real necesita build/dispositivo y cuenta).
 
+### ✅ Corte VP local vs. interclubes — PRIMERA MITAD (commit `dc0e505`, migración 0037, 2026-08-15)
+
+Decisión del cliente (2026-08-15): la tabla local y los VP son **dos sistemas
+distintos**. La 0030 había construido el VP como si fuera la tabla local
+(`season_standings_ordered` ordenaba por `vp desc`).
+
+- **0037** (CORRIDA y verificada): `season_standings_ordered` ahora ordena por
+  **VICTORIAS** (`matches_won desc`), con diferencia de puntos como 1er
+  desempate, luego enfrentamiento directo, antigüedad y alfabético. El
+  enfrentamiento directo ahora empata por victorias+diferencia (antes por VP).
+  Como todo lo que usa "1er lugar" (ascensos, títulos, divisiones) sale de
+  `season_standings_ordered.place`, el nuevo orden se propaga solo.
+- **Escala de VP corregida a 5/4/3/2/1** (Challenger 5, Diamante/Platino 4,
+  Oro/Plata 3, Bronce/Hierro 2, Porcelana 1) en `categories.vp_value` y en
+  `src/lib/categories.ts`. ⚠️ **Decisión que tomé:** la nota del cliente del
+  15-ago da esta escala, distinta de la tabla textual del reglamento que puso la
+  0030 (3/3/3/2/2/1/1/1). Cambiarla es un UPDATE.
+- **LadderScreen:** el récord **G–P** es ahora la métrica principal a la vista;
+  el VP pasó a secundario, etiquetado "VP interclubes". Texto explicativo al día.
+
+**⚠️ Falta la SEGUNDA MITAD (el interclubes de verdad), señalada con el cliente:**
+el **Ranking Unificado Interclubes** completo — VP acumulado **cruzando ligas y
+ciudades** (hoy el VP sigue viviendo por-liga-temporada en `season_standings`),
+con su propia pantalla y su periodo de ~6 meses. El cliente dijo "interclubes van
+ahora", pero construirlo entero es ~18x y no confirmó alcance ni respondió las
+preguntas; se hizo el corte local (lo claramente decidido, bajo riesgo) y esto
+queda como el siguiente paso grande.
+
+**Verificado:** typecheck limpio, la función desplegada ordena por `matches_won`
+y ya no por `vp` (comprobado con `pg_get_functiondef`), el bundle compila y
+producción monta sin errores. Sin datos de temporada sembrados, así que la tabla
+con jugadores reales sigue sin probarse.
+
 **LO QUE SIGUE:**
-1. Partir VP local vs. interclubes (⚠️ ver decisión de arriba: 0030 los juntó).
+1. Ranking Unificado Interclubes completo (VP cruzando ligas/ciudades + pantalla + periodo).
 2. QA con sesión iniciada del flujo de torneo completo y del hub.
 3. Completar el escalafón: round robin por categoría, UI de cierre de temporada, torneo inicial G3.
 
@@ -582,7 +615,7 @@ real necesita build/dispositivo y cuenta).
 
 1. `git clone` / `git pull` del repo.
 2. Copiar `.env.example` a `.env` y llenar `EXPO_PUBLIC_SUPABASE_URL` y `EXPO_PUBLIC_SUPABASE_ANON_KEY` (Supabase → Settings → API del proyecto "CML Beyblade").
-3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-15 las 0001–0036 están corridas y verificadas contra la base** (0036 = portadas de eventos y clubes) — si se agrega una nueva, actualizar esta línea.
+3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-15 las 0001–0037 están corridas y verificadas contra la base** (0036 = portadas de eventos y clubes; 0037 = tabla local por victorias + escala VP 5/4/3/2/1) — si se agrega una nueva, actualizar esta línea.
 4. `npm install`, luego `npm run web` para verificar rápido en el preview del navegador (no requiere emulador Android).
 5. Para un build real: `npx eas-cli build --platform android --profile preview --non-interactive` (requiere `eas login` ya hecho en la máquina).
 

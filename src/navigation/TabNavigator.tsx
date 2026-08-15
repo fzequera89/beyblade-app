@@ -13,6 +13,7 @@ import LeaguesScreen from '../screens/LeaguesScreen';
 import CreateLeagueScreen from '../screens/CreateLeagueScreen';
 import LeagueDetailScreen from '../screens/LeagueDetailScreen';
 import TournamentsScreen from '../screens/TournamentsScreen';
+import CreateTournamentScreen from '../screens/CreateTournamentScreen';
 import TournamentDetailScreen from '../screens/TournamentDetailScreen';
 import BracketScreen from '../screens/BracketScreen';
 import MatchDetailScreen from '../screens/MatchDetailScreen';
@@ -101,6 +102,7 @@ function Batallas() {
       <BatallasStack.Screen name="LeagueDetail" component={LeagueDetailScreen} />
       <BatallasStack.Screen name="LeagueStandings" component={LeagueStandingsScreen} />
       <BatallasStack.Screen name="Tournaments" component={TournamentsScreen} />
+      <BatallasStack.Screen name="CreateTournament" component={CreateTournamentScreen} />
       <BatallasStack.Screen name="TournamentDetail" component={TournamentDetailScreen} />
       <BatallasStack.Screen name="Bracket" component={BracketScreen} />
       <BatallasStack.Screen name="ClubDetail" component={ClubDetailScreen} />

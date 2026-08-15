@@ -4,7 +4,6 @@ import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import Screen from '../ui/Screen';
 import Button from '../ui/Button';
-import { Field } from '../ui/Field';
 import { Card, Hex, Pill } from '../ui/primitives';
 import { IconChevron } from '../ui/icons';
 import { colors, space, type } from '../theme';
@@ -13,29 +12,21 @@ type Tournament = {
   id: string;
   name: string;
   status: string;
+  photo_url: string | null;
+  combat_mode: string | null;
   tournament_registrations: { count: number }[];
 };
-
-// Las dos modalidades del reglamento. La elección baja a cada combate del
-// bracket y decide el emparejamiento, el Aerial y si mueve el ELO.
-const MODES = [
-  { value: 'ranking' as const, label: 'Ranking', desc: 'Cuenta para el ELO · sin Aerial' },
-  { value: 'casual' as const, label: 'Casual', desc: 'Al azar · Aerial vale · no toca el ELO' },
-];
 
 export default function TournamentsScreen({ route, navigation }: any) {
   const { leagueId, isOrganizer } = route.params;
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
-  const [name, setName] = useState('');
-  const [mode, setMode] = useState<'ranking' | 'casual'>('ranking');
-  const [creating, setCreating] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from('tournaments')
-      .select('id, name, status, tournament_registrations(count)')
+      .select('id, name, status, photo_url, combat_mode, tournament_registrations(count)')
       .eq('league_id', leagueId)
       .order('created_at', { ascending: false });
     setLoading(false);
@@ -54,18 +45,6 @@ export default function TournamentsScreen({ route, navigation }: any) {
     }, [load])
   );
 
-  async function create() {
-    if (!name.trim()) return;
-    const { error } = await supabase
-      .from('tournaments')
-      .insert({ league_id: leagueId, name: name.trim(), mode });
-    if (error) return Alert.alert('Error', error.message);
-    setName('');
-    setMode('ranking');
-    setCreating(false);
-    load();
-  }
-
   return (
     <Screen padded={false}>
       <FlatList
@@ -83,41 +62,13 @@ export default function TournamentsScreen({ route, navigation }: any) {
               <Text style={styles.title}>Torneos</Text>
             </View>
 
-            {isOrganizer &&
-              (creating ? (
-                <Card style={{ gap: space.md }}>
-                  <Field
-                    label="Nombre del torneo"
-                    placeholder="Copa Central — Septiembre"
-                    value={name}
-                    onChangeText={setName}
-                  />
-
-                  <View style={{ gap: space.xs }}>
-                    <Text style={styles.fieldLabel}>MODALIDAD</Text>
-                    <View style={styles.modeRow}>
-                      {MODES.map((m) => {
-                        const on = mode === m.value;
-                        return (
-                          <Pressable
-                            key={m.value}
-                            onPress={() => setMode(m.value)}
-                            style={[styles.modeCard, on && styles.modeCardOn]}
-                          >
-                            <Text style={[styles.modeName, on && styles.modeNameOn]}>{m.label}</Text>
-                            <Text style={styles.modeDesc}>{m.desc}</Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  </View>
-
-                  <Button label="CREAR TORNEO" onPress={create} />
-                  <Button label="Cancelar" variant="ghost" onPress={() => setCreating(false)} />
-                </Card>
-              ) : (
-                <Button label="＋  NUEVO TORNEO" variant="ghost" onPress={() => setCreating(true)} />
-              ))}
+            {isOrganizer && (
+              <Button
+                label="＋  NUEVO TORNEO"
+                variant="ghost"
+                onPress={() => navigation.navigate('CreateTournament', { leagueId })}
+              />
+            )}
           </View>
         }
         renderItem={({ item, index }) => {
@@ -205,21 +156,6 @@ const styles = StyleSheet.create({
   back: { color: colors.ink, fontSize: 30, lineHeight: 32, width: 22 },
   title: { ...type.title, fontSize: 20 },
 
-  fieldLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 0.8, color: colors.inkDim },
-  modeRow: { flexDirection: 'row', gap: space.sm },
-  modeCard: {
-    flex: 1,
-    gap: 3,
-    padding: space.md,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.card,
-  },
-  modeCardOn: { borderColor: colors.blue, backgroundColor: colors.blueDeep },
-  modeName: { fontSize: 14, fontWeight: '800', color: colors.inkSoft },
-  modeNameOn: { color: colors.ink },
-  modeDesc: { fontSize: 10.5, color: colors.inkSoft, lineHeight: 14 },
 
   hero: { gap: space.md, borderColor: colors.win },
   heroTop: { flexDirection: 'row', alignItems: 'center', gap: space.md },

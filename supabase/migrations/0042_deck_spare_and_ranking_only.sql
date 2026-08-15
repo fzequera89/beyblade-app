@@ -97,10 +97,11 @@ begin
 
   -- Ninguna pieza se repite, **incluido el extra**.
   --
-  -- Decisión a confirmar con el cliente: el reglamento prohíbe repetir piezas
-  -- dentro del deck sin distinguir al extra. Se aplica a los cuatro porque el
-  -- extra puede entrar a jugar completo, y en 3 vs 3 los tres principales están
-  -- en la mesa a la vez: una pieza duplicada podría terminar dos veces en juego.
+  -- CONFIRMADO por el cliente (2026-08-15): el extra cuenta para la regla. El
+  -- reglamento prohíbe repetir piezas dentro del deck sin distinguirlo, y tiene
+  -- sentido: el extra puede entrar a jugar completo, y en 3 vs 3 los tres
+  -- principales están en la mesa a la vez, así que una pieza duplicada podría
+  -- terminar dos veces en juego.
   select count(*) into v_dupes from (
     select lower(btrim(p.pieza)) as piece
     from combos c,

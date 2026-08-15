@@ -356,7 +356,7 @@ no cambió a propósito: el extra entra como último elemento del mismo arreglo.
 Agregar un parámetro habría creado una función nueva por sobrecarga y dejado
 viva la vieja —con la validación incompleta— para cualquier APK que siguiera
 llamándola. El extra también entra en la regla de no repetir piezas, porque
-puede entrar a jugar completo (**decisión a confirmar con el cliente**).
+puede entrar a jugar completo — **confirmado por el cliente el 2026-08-15**.
 
 **Paginación de 12.** No es un número redondo: las filas miden 72-88 pt y el
 área visible de una lista ronda 600, así que caben 7 u 8. Doce es pantalla y

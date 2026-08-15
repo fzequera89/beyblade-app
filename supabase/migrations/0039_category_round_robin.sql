@@ -107,7 +107,11 @@ returns table (
   category_code text,
   division text,
   tier int,
-  position int
+  -- Se llama `place` y no `position` a propósito: en la lista de columnas de un
+  -- `returns table`, Postgres no acepta `position` sin comillas (es palabra
+  -- reservada ahí, aunque sí valga como nombre de columna en un `create table`,
+  -- que es como está en `season_standings` desde 0030).
+  place int
 )
 language sql
 stable
@@ -118,7 +122,7 @@ as $$
          s.category_code,
          s.division,
          c.tier,
-         s.position
+         s.position as place
   from tournament_registrations r
   join tournaments t on t.id = r.tournament_id
   join season_standings s on s.season_id = t.season_id and s.player_id = r.player_id

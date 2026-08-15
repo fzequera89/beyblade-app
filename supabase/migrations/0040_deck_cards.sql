@@ -132,12 +132,12 @@ begin
   -- Se compara en minúsculas y sin espacios de sobra, porque "Wizard Rod" y
   -- "wizard  rod" son la misma pieza escrita por dos personas distintas.
   select count(*) into v_dupes from (
-    select lower(btrim(value)) as piece, count(*) as veces
+    select lower(btrim(p.pieza)) as piece, count(*) as veces
     from combos c,
-         lateral (values (c.parts->>'blade'), (c.parts->>'ratchet'), (c.parts->>'bit')) as p(value)
+         lateral (values (c.parts->>'blade'), (c.parts->>'ratchet'), (c.parts->>'bit')) as p(pieza)
     where c.id = any(p_combo_ids)
-      and nullif(btrim(coalesce(value, '')), '') is not null
-    group by lower(btrim(value))
+      and nullif(btrim(coalesce(p.pieza, '')), '') is not null
+    group by lower(btrim(p.pieza))
     having count(*) > 1
   ) repetidas;
 

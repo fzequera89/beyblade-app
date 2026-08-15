@@ -40,3 +40,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# salida del compilador para las pruebas del motor de emparejamiento
+/.tmp-test

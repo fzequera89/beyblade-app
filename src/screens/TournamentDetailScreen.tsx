@@ -8,7 +8,16 @@ import Screen from '../ui/Screen';
 import Button from '../ui/Button';
 import Avatar from '../ui/Avatar';
 import { Card, Hex, Pill, SectionTitle } from '../ui/primitives';
-import { colors, space, type } from '../theme';
+import Cover from '../ui/Cover';
+import { pickCoverPhoto, uploadCover } from '../lib/cover';
+import { COMBAT_MODES } from '../lib/formats';
+import { colors, space, type, radius } from '../theme';
+
+// La modalidad solo se nombra cuando NO es la de siempre.
+function combatLabel(mode?: string | null): string | null {
+  if (!mode || mode === 'solo') return null;
+  return COMBAT_MODES.find((m) => m.key === mode)?.label ?? null;
+}
 
 type Registration = {
   player_id: string;
@@ -27,15 +36,22 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
   const [name, setName] = useState('');
   const [status, setStatus] = useState('pending');
   const [mode, setMode] = useState<'ranking' | 'casual'>('ranking');
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [combatMode, setCombatMode] = useState<string | null>(null);
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [hasBracket, setHasBracket] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     const [{ data: tournament }, { data: regs }, { count: matchCount }] = await Promise.all([
-      supabase.from('tournaments').select('name, status, mode').eq('id', tournamentId).single(),
+      supabase
+        .from('tournaments')
+        .select('name, status, mode, photo_url, combat_mode')
+        .eq('id', tournamentId)
+        .single(),
       supabase
         .from('tournament_registrations')
         .select('player_id, checked_in_at, players(display_name, elo_rating, avatar_key, avatar_url)')
@@ -69,6 +85,21 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
 
   const mine = registrations.find((r) => r.player_id === playerId);
   const checkedIn = registrations.filter((r) => r.checked_in_at).length;
+
+  // La portada se puede cambiar después: al crear el torneo casi nunca se
+  // tiene la foto todavía, llega el día del evento.
+  async function changePhoto() {
+    const uri = await pickCoverPhoto();
+    if (!uri) return;
+    setUploading(true);
+    const url = await uploadCover('tournament', tournamentId, uri);
+    if (url) {
+      const { error } = await supabase.from('tournaments').update({ photo_url: url }).eq('id', tournamentId);
+      if (error) Alert.alert('No se pudo guardar', error.message);
+    }
+    setUploading(false);
+    load();
+  }
 
   async function register() {
     const { error } = await supabase
@@ -128,11 +159,29 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
               <Text style={styles.back}>‹</Text>
             </Pressable>
 
+            {/* La portada primero y a todo el ancho: entras al torneo, no a su
+                ficha. Si nadie subió foto, se dibuja una. */}
+            <View style={styles.cover}>
+              <Cover
+                id={tournamentId}
+                photoUrl={photoUrl}
+                live={status === 'pending'}
+                height={168}
+              />
+              {isOrganizer && (
+                <Pressable style={styles.photoBtn} onPress={changePhoto} disabled={uploading} hitSlop={6}>
+                  <Text style={styles.photoBtnText}>
+                    {uploading ? 'Subiendo…' : photoUrl ? '🖼️ Cambiar portada' : '🖼️ Poner portada'}
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+
             <View style={styles.hero}>
-              <Hex size={76} color={status === 'pending' ? colors.win : colors.inkDim}>
-                <Text style={{ fontSize: 28 }}>🏆</Text>
-              </Hex>
               <Text style={styles.title}>{name}</Text>
+              {combatLabel(combatMode) ? (
+                <Text style={styles.combat}>{combatLabel(combatMode)}</Text>
+              ) : null}
               <View style={styles.pills}>
                 <Pill
                   label={status === 'pending' ? 'Registro abierto' : 'Terminado'}
@@ -258,6 +307,10 @@ const styles = StyleSheet.create({
   list: { paddingHorizontal: space.xl, paddingBottom: space.xxxl, gap: space.sm },
   header: { gap: space.md, paddingTop: space.md, marginBottom: space.sm },
   back: { color: colors.ink, fontSize: 30, lineHeight: 32, width: 22 },
+  cover: { borderRadius: radius.lg, overflow: 'hidden', marginBottom: space.md },
+  combat: { fontSize: 12, color: colors.inkSoft },
+  photoBtn: { paddingVertical: space.md, alignItems: 'center', backgroundColor: colors.card },
+  photoBtnText: { color: colors.blue, fontSize: 12.5, fontWeight: '700' },
   hero: { alignItems: 'center', gap: space.sm, paddingVertical: space.md },
   title: { ...type.display, fontSize: 22, textAlign: 'center' },
   pills: { flexDirection: 'row', gap: space.sm },

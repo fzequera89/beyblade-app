@@ -6,6 +6,8 @@ import { useAuth } from '../context/AuthContext';
 import Screen from '../ui/Screen';
 import Avatar from '../ui/Avatar';
 import { Card, Pill, Hex, SectionTitle } from '../ui/primitives';
+import Cover from '../ui/Cover';
+import { COMBAT_MODES } from '../lib/formats';
 import { IconChevron, IconSwords } from '../ui/icons';
 import { colors, space, type, radius, glow } from '../theme';
 
@@ -14,6 +16,13 @@ import { colors, space, type, radius, glow } from '../theme';
 // y los torneos quedaban a cuatro toques, escondidos detrás de la liga.
 
 type Tab = 'jugar' | 'torneos' | 'ligas';
+
+// La modalidad se muestra solo si NO es la de siempre: decir "1 vs 1" en cada
+// tarjeta cuando casi todos lo son es ruido.
+function combatLabel(mode?: string | null): string | null {
+  if (!mode || mode === 'solo') return null;
+  return COMBAT_MODES.find((m) => m.key === mode)?.label ?? null;
+}
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'jugar', label: 'Por jugar' },
@@ -56,10 +65,13 @@ export default function BattlesScreen({ navigation }: any) {
           .order('created_at', { ascending: false }),
         supabase
           .from('tournaments')
-          .select('id, name, status, league_id, leagues(name), tournament_registrations(count)')
+          .select('id, name, status, league_id, photo_url, combat_mode, leagues(name), tournament_registrations(count)')
           .order('created_at', { ascending: false })
           .limit(20),
-        supabase.from('league_members').select('league_id, role, leagues(id, name, description)').eq('player_id', playerId),
+        supabase
+          .from('league_members')
+          .select('league_id, role, leagues(id, name, description, photo_url)')
+          .eq('player_id', playerId),
       ]);
 
     // Si arbitras, lo que está detenido esperándote va antes que lo tuyo.
@@ -356,29 +368,37 @@ export default function BattlesScreen({ navigation }: any) {
                 <Text style={type.soft}>Todavía no hay torneos. Los crea un moderador de liga.</Text>
               </Card>
             ) : (
-              tournaments.map((t) => (
-                <Card
-                  key={t.id}
-                  style={styles.row}
-                  onPress={() =>
-                    navigation.navigate('TournamentDetail', { tournamentId: t.id, leagueId: t.league_id })
-                  }
-                >
-                  <Hex size={44} color={t.status === 'pending' ? colors.win : colors.inkDim}>
-                    <Text style={{ fontSize: 17 }}>🏆</Text>
-                  </Hex>
-                  <View style={{ flex: 1, gap: 3 }}>
-                    <Text style={styles.name}>{t.name}</Text>
-                    <Text style={styles.meta}>
-                      {t.leagues?.name ?? 'Liga'} · {t.tournament_registrations?.[0]?.count ?? 0} inscritos
-                    </Text>
-                  </View>
-                  <Pill
-                    label={t.status === 'pending' ? 'Abierto' : 'Terminado'}
-                    color={t.status === 'pending' ? colors.win : colors.inkDim}
-                  />
-                </Card>
-              ))
+              tournaments.map((t) => {
+                const open = t.status === 'pending';
+                return (
+                  <Pressable
+                    key={t.id}
+                    onPress={() =>
+                      navigation.navigate('TournamentDetail', { tournamentId: t.id, leagueId: t.league_id })
+                    }
+                    style={({ pressed }) => pressed && { opacity: 0.85 }}
+                  >
+                    <View style={[styles.tCard, open && { borderColor: colors.win }]}>
+                      <Cover id={t.id} photoUrl={t.photo_url} live={open} height={92} />
+                      <View style={styles.tBody}>
+                        <View style={{ flex: 1, gap: 3 }}>
+                          <Text style={styles.tName} numberOfLines={1}>
+                            {t.name}
+                          </Text>
+                          <Text style={styles.meta} numberOfLines={1}>
+                            {t.leagues?.name ?? 'Liga'} · {t.tournament_registrations?.[0]?.count ?? 0} inscritos
+                            {combatLabel(t.combat_mode) ? ` · ${combatLabel(t.combat_mode)}` : ''}
+                          </Text>
+                        </View>
+                        <Pill
+                          label={open ? 'Abierto' : 'Terminado'}
+                          color={open ? colors.win : colors.inkDim}
+                        />
+                      </View>
+                    </View>
+                  </Pressable>
+                );
+              })
             )}
           </View>
         )}
@@ -403,22 +423,26 @@ export default function BattlesScreen({ navigation }: any) {
               </Card>
             ) : (
               leagues.map((m) => (
-                <Card
+                <Pressable
                   key={m.league_id}
-                  style={styles.row}
                   onPress={() => navigation.navigate('LeagueDetail', { leagueId: m.league_id })}
+                  style={({ pressed }) => pressed && { opacity: 0.85 }}
                 >
-                  <Hex size={44} color={colors.blue}>
-                    <Text style={{ fontSize: 17 }}>🏅</Text>
-                  </Hex>
-                  <View style={{ flex: 1, gap: 3 }}>
-                    <Text style={styles.name}>{m.leagues?.name ?? 'Liga'}</Text>
-                    <Text style={styles.meta} numberOfLines={1}>
-                      {m.leagues?.description ?? 'Sin descripción'}
-                    </Text>
+                  <View style={[styles.tCard, { borderColor: colors.blue }]}>
+                    <Cover id={m.league_id} photoUrl={m.leagues?.photo_url} height={92} />
+                    <View style={styles.tBody}>
+                      <View style={{ flex: 1, gap: 3 }}>
+                        <Text style={styles.tName} numberOfLines={1}>
+                          {m.leagues?.name ?? 'Liga'}
+                        </Text>
+                        <Text style={styles.meta} numberOfLines={1}>
+                          {m.leagues?.description ?? 'Sin descripción'}
+                        </Text>
+                      </View>
+                      {m.role === 'organizer' ? <Pill label="Moderador" /> : null}
+                    </View>
                   </View>
-                  {m.role === 'organizer' ? <Pill label="Moderador" /> : null}
-                </Card>
+                </Pressable>
               ))
             )}
           </View>
@@ -433,6 +457,22 @@ const styles = StyleSheet.create({
   title: { ...type.display, fontSize: 28 },
   sub: { ...type.soft, marginTop: 4 },
   pad: { paddingHorizontal: space.xl },
+
+  tCard: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.lg,
+    backgroundColor: colors.card,
+    overflow: 'hidden',
+  },
+  tBody: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
+  },
+  tName: { fontSize: 15, fontWeight: '800', fontStyle: 'italic', color: colors.ink, letterSpacing: -0.2 },
 
   judgeCall: { gap: 2, borderColor: colors.loss, marginBottom: space.lg },
   judgeTag: { fontSize: 9, fontWeight: '800', letterSpacing: 1.1, color: colors.loss },

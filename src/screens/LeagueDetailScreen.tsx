@@ -7,11 +7,13 @@ import Screen from '../ui/Screen';
 import Button from '../ui/Button';
 import { Field } from '../ui/Field';
 import { Card, Hex, Pill, SectionTitle } from '../ui/primitives';
+import Cover from '../ui/Cover';
+import { pickCoverPhoto, uploadCover } from '../lib/cover';
 import { IconChevron } from '../ui/icons';
-import { colors, space, type } from '../theme';
+import { colors, space, type, radius } from '../theme';
 
 type Season = { id: string; name: string; start_date: string | null; end_date: string | null };
-type League = { id: string; name: string; description: string | null };
+type League = { id: string; name: string; description: string | null; photo_url: string | null };
 
 export default function LeagueDetailScreen({ route, navigation }: any) {
   const { leagueId } = route.params;
@@ -24,13 +26,14 @@ export default function LeagueDetailScreen({ route, navigation }: any) {
   const [myRank, setMyRank] = useState<number | null>(null);
   const [newSeason, setNewSeason] = useState('');
   const [creating, setCreating] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
     const [{ data: leagueData }, { data: membership }, { data: seasonRows }, { data: roster }, { count: tCount }] =
       await Promise.all([
-        supabase.from('leagues').select('id, name, description').eq('id', leagueId).single(),
+        supabase.from('leagues').select('id, name, description, photo_url').eq('id', leagueId).single(),
         supabase
           .from('league_members')
           .select('role')
@@ -68,6 +71,21 @@ export default function LeagueDetailScreen({ route, navigation }: any) {
     }, [load])
   );
 
+  // La portada se puede cambiar después: al crear la liga casi nunca se tiene
+  // la foto todavía.
+  async function changeCover() {
+    const uri = await pickCoverPhoto();
+    if (!uri) return;
+    setUploading(true);
+    const url = await uploadCover('league', leagueId, uri);
+    if (url) {
+      const { error } = await supabase.from('leagues').update({ photo_url: url }).eq('id', leagueId);
+      if (error) Alert.alert('No se pudo guardar', error.message);
+    }
+    setUploading(false);
+    load();
+  }
+
   async function join() {
     const { error } = await supabase
       .from('league_members')
@@ -104,10 +122,19 @@ export default function LeagueDetailScreen({ route, navigation }: any) {
       </View>
 
       <View style={styles.pad}>
+        {/* La portada primero: entras a la liga, no a su ficha. */}
+        <View style={styles.cover}>
+          <Cover id={league.id} photoUrl={league.photo_url} height={160} />
+          {role === 'organizer' && (
+            <Pressable style={styles.coverBtn} onPress={changeCover} disabled={uploading} hitSlop={6}>
+              <Text style={styles.coverBtnText}>
+                {uploading ? 'Subiendo…' : league.photo_url ? '🖼️ Cambiar portada' : '🖼️ Poner portada'}
+              </Text>
+            </Pressable>
+          )}
+        </View>
+
         <View style={styles.hero}>
-          <Hex size={80} color={colors.blue}>
-            <Text style={{ fontSize: 30 }}>🏅</Text>
-          </Hex>
           <Text style={styles.title}>{league.name}</Text>
           {league.description ? <Text style={styles.desc}>{league.description}</Text> : null}
           {role && (
@@ -244,6 +271,9 @@ const styles = StyleSheet.create({
   back: { color: colors.ink, fontSize: 30, lineHeight: 32, width: 22 },
   pad: { paddingHorizontal: space.xl },
 
+  cover: { borderRadius: radius.lg, overflow: 'hidden', marginTop: space.md },
+  coverBtn: { paddingVertical: space.md, alignItems: 'center', backgroundColor: colors.card },
+  coverBtnText: { color: colors.blue, fontSize: 12.5, fontWeight: '700' },
   hero: { alignItems: 'center', gap: space.sm, paddingVertical: space.lg },
   title: { ...type.display, fontSize: 24, textAlign: 'center' },
   desc: { fontSize: 12.5, color: colors.inkSoft, textAlign: 'center', lineHeight: 18 },

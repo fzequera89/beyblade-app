@@ -4,9 +4,18 @@ import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import Screen from '../ui/Screen';
 import Button from '../ui/Button';
-import { Card, Hex, Pill } from '../ui/primitives';
+import { Card, Hex } from '../ui/primitives';
+import Cover from '../ui/Cover';
+import { COMBAT_MODES } from '../lib/formats';
 import { IconChevron } from '../ui/icons';
-import { colors, space, type } from '../theme';
+import { colors, space, type, radius } from '../theme';
+
+// La modalidad se muestra solo si NO es la de siempre: repetir "1 vs 1" en cada
+// tarjeta cuando casi todos lo son es ruido.
+function combatLabel(mode?: string | null): string | null {
+  if (!mode || mode === 'solo') return null;
+  return COMBAT_MODES.find((m) => m.key === mode)?.label ?? null;
+}
 
 type Tournament = {
   id: string;
@@ -78,57 +87,42 @@ export default function TournamentsScreen({ route, navigation }: any) {
           // no merece la tarjeta grande.
           const hero = index === 0 && open;
 
-          if (hero) {
-            return (
-              <Card
-                style={styles.hero}
-                onPress={() =>
-                  navigation.navigate('TournamentDetail', { tournamentId: item.id, leagueId, isOrganizer })
-                }
-              >
-                <Pill label="Registro abierto" color={colors.win} />
-                <View style={styles.heroTop}>
-                  <Hex size={62} color={colors.win}>
-                    <Text style={{ fontSize: 24 }}>🏆</Text>
-                  </Hex>
-                  <View style={{ flex: 1, gap: 3 }}>
-                    <Text style={styles.heroName} numberOfLines={2}>
-                      {item.name}
-                    </Text>
-                    <Text style={styles.meta}>
-                      {registered} inscrito{registered === 1 ? '' : 's'}
-                    </Text>
-                  </View>
-                </View>
-                <Text style={styles.heroCta}>Inscribirme ›</Text>
-              </Card>
-            );
-          }
-
           return (
-            <Card
-              style={styles.row}
+            <Pressable
               onPress={() =>
                 navigation.navigate('TournamentDetail', { tournamentId: item.id, leagueId, isOrganizer })
               }
+              style={({ pressed }) => pressed && { opacity: 0.85 }}
             >
-              <Hex size={44} color={open ? colors.win : colors.inkDim}>
-                <Text style={{ fontSize: 17 }}>🏆</Text>
-              </Hex>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.name} numberOfLines={1}>
-                  {item.name}
-                </Text>
-                <Text style={styles.meta}>
-                  {registered} inscrito{registered === 1 ? '' : 's'}
-                </Text>
+              <View style={[styles.card, open && { borderColor: colors.win }]}>
+                <Cover
+                  id={item.id}
+                  photoUrl={item.photo_url}
+                  live={open}
+                  height={hero ? 148 : 92}
+                />
+
+                {/* El nombre va SOBRE la portada: la imagen es el sujeto de la
+                    tarjeta, no un adorno arriba del texto. */}
+                <View style={styles.overlay}>
+                  {open && <Text style={styles.openTag}>REGISTRO ABIERTO</Text>}
+                  <Text style={[styles.name, hero && styles.nameHero]} numberOfLines={2}>
+                    {item.name}
+                  </Text>
+                  <Text style={styles.meta}>
+                    {registered} inscrito{registered === 1 ? '' : 's'}
+                    {combatLabel(item.combat_mode) ? ` · ${combatLabel(item.combat_mode)}` : ''}
+                  </Text>
+                </View>
+
+                <View style={styles.foot}>
+                  <Text style={styles.footText}>
+                    {open ? 'Todavía te puedes inscribir' : 'Terminado'}
+                  </Text>
+                  {open ? <Text style={styles.cta}>Ver torneo ›</Text> : <IconChevron />}
+                </View>
               </View>
-              <Pill
-                label={open ? 'Abierto' : 'Terminado'}
-                color={open ? colors.win : colors.inkDim}
-              />
-              <IconChevron />
-            </Card>
+            </Pressable>
           );
         }}
         ListEmptyComponent={
@@ -150,20 +144,39 @@ export default function TournamentsScreen({ route, navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  list: { paddingHorizontal: space.xl, paddingBottom: space.xxxl, gap: space.sm },
+  list: { paddingHorizontal: space.xl, paddingBottom: space.xxxl, gap: space.md },
   header: { gap: space.md, paddingTop: space.md, marginBottom: space.sm },
   headRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   back: { color: colors.ink, fontSize: 30, lineHeight: 32, width: 22 },
   title: { ...type.title, fontSize: 20 },
 
 
-  hero: { gap: space.md, borderColor: colors.win },
-  heroTop: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  heroName: { ...type.display, fontSize: 19 },
-  heroCta: { fontSize: 12, fontWeight: '800', color: colors.win },
+  card: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.lg,
+    backgroundColor: colors.card,
+    overflow: 'hidden',
+  },
+  overlay: { paddingHorizontal: space.lg, paddingTop: space.md, gap: 3 },
+  openTag: { fontSize: 9, fontWeight: '800', letterSpacing: 1, color: colors.win },
+  nameHero: { fontSize: 20 },
+  foot: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
+    marginTop: space.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
+  },
+  footText: { flex: 1, fontSize: 11, color: colors.inkDim },
+  cta: { fontSize: 12, fontWeight: '800', color: colors.win },
+
 
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  name: { fontSize: 14.5, fontWeight: '700', color: colors.ink },
+  name: { fontSize: 15.5, fontWeight: '800', fontStyle: 'italic', color: colors.ink, letterSpacing: -0.2 },
   meta: { fontSize: 11.5, color: colors.inkSoft, marginTop: 2 },
 
   empty: { alignItems: 'center', gap: space.md, paddingVertical: space.xl },

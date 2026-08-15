@@ -8,7 +8,7 @@ import { pickVenuePhoto, uploadVenuePhoto } from '../lib/venuePhoto';
 import Screen from '../ui/Screen';
 import Button from '../ui/Button';
 import Avatar from '../ui/Avatar';
-import VenueCover from '../ui/VenueCover';
+import Cover from '../ui/Cover';
 import { Card, Pill, SectionTitle } from '../ui/primitives';
 import { IconPin } from '../ui/icons';
 import { colors, space, type, radius } from '../theme';
@@ -128,7 +128,7 @@ export default function VenueDetailScreen({ route, navigation }: any) {
     <Screen scroll padded={false}>
       {/* La portada es lo primero: entras al lugar, no a una ficha. */}
       <View>
-        <VenueCover id={venue.id} photoUrl={venue.photo_url} live={live} height={190} />
+        <Cover id={venue.id} photoUrl={venue.photo_url} live={live} height={190} />
         <Pressable style={styles.backOverCover} onPress={() => navigation.goBack()} hitSlop={8}>
           <Text style={styles.back}>‹</Text>
         </Pressable>

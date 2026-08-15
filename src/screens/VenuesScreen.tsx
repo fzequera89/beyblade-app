@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import Screen from '../ui/Screen';
 import Button from '../ui/Button';
-import VenueCover from '../ui/VenueCover';
+import Cover from '../ui/Cover';
 import { Card, Hex, Pill } from '../ui/primitives';
 import { IconChevron, IconPin } from '../ui/icons';
 import { colors, space, type, radius, glow } from '../theme';
@@ -121,7 +121,7 @@ export default function VenuesScreen({ navigation }: any) {
               style={({ pressed }) => pressed && { opacity: 0.85 }}
             >
               <View style={[styles.card, live && styles.cardLive, hero && glow(colors.win, 10)]}>
-                <VenueCover
+                <Cover
                   id={item.id}
                   photoUrl={item.photo_url}
                   live={live}

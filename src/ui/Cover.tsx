@@ -47,7 +47,7 @@ function seedOf(key: string) {
   return h >>> 0;
 }
 
-export default function VenueCover({
+export default function Cover({
   id,
   photoUrl,
   height = 128,

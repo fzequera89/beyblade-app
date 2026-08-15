@@ -3,15 +3,18 @@ import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import Screen from '../ui/Screen';
+import Cover from '../ui/Cover';
+import { pickCoverPhoto, uploadCover } from '../lib/cover';
 import Button from '../ui/Button';
 import { Field } from '../ui/Field';
-import { Card, Hex } from '../ui/primitives';
-import { colors, space, type } from '../theme';
+import { Card } from '../ui/primitives';
+import { colors, space, type, radius } from '../theme';
 
 export default function CreateLeagueScreen({ navigation }: any) {
   const { playerId } = useAuth();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function create() {
@@ -30,6 +33,14 @@ export default function CreateLeagueScreen({ navigation }: any) {
       Alert.alert('Error', error.message);
       return;
     }
+    // La foto se sube DESPUÉS de crear porque la ruta lleva el id de la liga.
+    // Si falla, la liga ya existe y se queda con su portada dibujada: se pierde
+    // la foto, no la liga.
+    if (photoUri) {
+      const url = await uploadCover('league', data.id, photoUri);
+      if (url) await supabase.from('leagues').update({ photo_url: url }).eq('id', data.id);
+    }
+
     navigation.replace('LeagueDetail', { leagueId: data.id });
   }
 
@@ -42,10 +53,22 @@ export default function CreateLeagueScreen({ navigation }: any) {
           </Pressable>
         </View>
 
+        <View style={styles.coverWrap}>
+          <Cover id={name || 'liga-nueva'} photoUrl={photoUri} height={132} />
+          <Pressable
+            style={styles.coverBtn}
+            onPress={async () => {
+              const uri = await pickCoverPhoto();
+              if (uri) setPhotoUri(uri);
+            }}
+          >
+            <Text style={styles.coverBtnText}>
+              {photoUri ? '🖼️ Cambiar portada' : '🖼️ Poner foto de portada'}
+            </Text>
+          </Pressable>
+        </View>
+
         <View style={styles.hero}>
-          <Hex size={80} color={colors.blue}>
-            <Text style={{ fontSize: 30 }}>🏅</Text>
-          </Hex>
           <Text style={styles.title}>Nueva liga</Text>
           <Text style={styles.sub}>
             Una liga agrupa a sus miembros, sus torneos y su ranking. Tú quedas como moderador.
@@ -85,6 +108,15 @@ const styles = StyleSheet.create({
   headRow: { paddingTop: space.md },
   back: { color: colors.ink, fontSize: 30, lineHeight: 32, width: 22 },
 
+  coverWrap: {
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.line,
+    marginTop: space.md,
+  },
+  coverBtn: { paddingVertical: space.md, alignItems: 'center', backgroundColor: colors.card },
+  coverBtnText: { color: colors.blue, fontSize: 12.5, fontWeight: '700' },
   hero: { alignItems: 'center', gap: space.sm, paddingVertical: space.lg },
   title: { ...type.display, fontSize: 24, textAlign: 'center' },
   sub: { fontSize: 12.5, color: colors.inkSoft, textAlign: 'center', lineHeight: 18 },

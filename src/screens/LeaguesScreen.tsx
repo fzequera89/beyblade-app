@@ -6,13 +6,15 @@ import { useAuth } from '../context/AuthContext';
 import Screen from '../ui/Screen';
 import Button from '../ui/Button';
 import { Card, Hex, Pill } from '../ui/primitives';
+import Cover from '../ui/Cover';
 import { IconChevron } from '../ui/icons';
-import { colors, space, type } from '../theme';
+import { colors, space, type, radius } from '../theme';
 
 type LeagueRow = {
   id: string;
   name: string;
   description: string | null;
+  photo_url: string | null;
   role: 'member' | 'organizer' | null;
   myRank: number | null;
   memberCount: number;
@@ -26,7 +28,7 @@ export default function LeaguesScreen({ navigation }: any) {
   const load = useCallback(async () => {
     setLoading(true);
     const [{ data: allLeagues, error }, { data: memberships }] = await Promise.all([
-      supabase.from('leagues').select('id, name, description').order('created_at', { ascending: false }),
+      supabase.from('leagues').select('id, name, description, photo_url').order('created_at', { ascending: false }),
       supabase.from('league_members').select('league_id, role').eq('player_id', playerId),
     ]);
     setLoading(false);
@@ -118,64 +120,42 @@ export default function LeaguesScreen({ navigation }: any) {
           // primera no vale más que las demás.
           const hero = index === 0 && mine;
 
-          if (hero) {
-            return (
-              <Card
-                style={styles.hero}
-                onPress={() => navigation.navigate('LeagueDetail', { leagueId: item.id })}
-              >
-                <Text style={styles.heroTag}>TU LIGA</Text>
-                <View style={styles.heroTop}>
-                  <Hex size={60} color={colors.blue}>
-                    <Text style={{ fontSize: 23 }}>🏅</Text>
-                  </Hex>
-                  <View style={{ flex: 1, gap: 3 }}>
-                    <Text style={styles.heroName} numberOfLines={1}>
-                      {item.name}
-                    </Text>
-                    <Text style={styles.meta} numberOfLines={2}>
-                      {item.description ?? 'Sin descripción'}
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.heroFoot}>
-                  {item.myRank ? (
-                    <Text style={styles.rankBig}>
-                      #{item.myRank}
-                      <Text style={styles.rankOf}> de {item.memberCount}</Text>
-                    </Text>
-                  ) : (
-                    <Text style={styles.meta}>{item.memberCount} miembros</Text>
-                  )}
-                  {item.role === 'organizer' && <Pill label="Moderador" />}
-                  <Text style={styles.heroCta}>Ver liga ›</Text>
-                </View>
-              </Card>
-            );
-          }
-
           return (
-            <Card style={styles.row} onPress={() => navigation.navigate('LeagueDetail', { leagueId: item.id })}>
-              <Hex size={44} color={mine ? colors.blue : colors.inkDim}>
-                <Text style={{ fontSize: 17 }}>🏅</Text>
-              </Hex>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.name} numberOfLines={1}>
-                  {item.name}
-                </Text>
-                <Text style={styles.meta} numberOfLines={1}>
-                  {item.memberCount} miembro{item.memberCount === 1 ? '' : 's'}
-                  {item.myRank ? ` · vas #${item.myRank}` : ''}
-                </Text>
+            <Pressable
+              onPress={() => navigation.navigate('LeagueDetail', { leagueId: item.id })}
+              style={({ pressed }) => pressed && { opacity: 0.85 }}
+            >
+              <View style={[styles.card, mine && { borderColor: colors.blue }]}>
+                <Cover id={item.id} photoUrl={item.photo_url} height={hero ? 140 : 92} />
+
+                <View style={styles.overlay}>
+                  {mine && <Text style={styles.mineTag}>TU LIGA</Text>}
+                  <Text style={[styles.name, hero && styles.nameHero]} numberOfLines={1}>
+                    {item.name}
+                  </Text>
+                  <Text style={styles.meta} numberOfLines={2}>
+                    {item.description ?? 'Sin descripción'}
+                  </Text>
+                </View>
+
+                <View style={styles.foot}>
+                  <Text style={styles.footText}>
+                    {item.memberCount} miembro{item.memberCount === 1 ? '' : 's'}
+                    {item.myRank ? ` · vas #${item.myRank}` : ''}
+                  </Text>
+                  {mine ? (
+                    <>
+                      {item.role === 'organizer' && <Pill label="Moderador" />}
+                      <Text style={styles.cta}>Ver liga ›</Text>
+                    </>
+                  ) : (
+                    <Pressable style={styles.join} onPress={() => join(item.id)}>
+                      <Text style={styles.joinText}>UNIRME</Text>
+                    </Pressable>
+                  )}
+                </View>
               </View>
-              {mine ? (
-                <IconChevron />
-              ) : (
-                <Pressable style={styles.join} onPress={() => join(item.id)}>
-                  <Text style={styles.joinText}>UNIRME</Text>
-                </Pressable>
-              )}
-            </Card>
+            </Pressable>
           );
         }}
         ListEmptyComponent={
@@ -197,31 +177,38 @@ export default function LeaguesScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  list: { paddingHorizontal: space.xl, paddingBottom: space.xxxl, gap: space.sm },
+  list: { paddingHorizontal: space.xl, paddingBottom: space.xxxl, gap: space.md },
   header: { gap: space.md, paddingTop: space.md, marginBottom: space.sm },
   headRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   back: { color: colors.ink, fontSize: 30, lineHeight: 32, width: 22 },
   title: { ...type.title, fontSize: 20 },
   sub: { ...type.soft, fontSize: 12.5 },
 
-  hero: { gap: space.md, borderColor: colors.blue },
-  heroTag: { fontSize: 9, fontWeight: '800', letterSpacing: 1, color: colors.blue },
-  heroTop: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  heroName: { ...type.display, fontSize: 20 },
-  heroFoot: {
+  card: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.lg,
+    backgroundColor: colors.card,
+    overflow: 'hidden',
+  },
+  overlay: { paddingHorizontal: space.lg, paddingTop: space.md, gap: 3 },
+  mineTag: { fontSize: 9, fontWeight: '800', letterSpacing: 1, color: colors.blue },
+  nameHero: { fontSize: 20 },
+  foot: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.md,
+    gap: space.sm,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
+    marginTop: space.sm,
     borderTopWidth: 1,
     borderTopColor: colors.line,
-    paddingTop: space.md,
   },
-  rankBig: { flex: 1, fontSize: 20, fontWeight: '800', fontStyle: 'italic', color: colors.blue },
-  rankOf: { fontSize: 12, fontWeight: '400', fontStyle: 'normal', color: colors.inkSoft },
-  heroCta: { fontSize: 12, fontWeight: '800', color: colors.blue },
+  footText: { flex: 1, fontSize: 11, color: colors.inkDim },
+  cta: { fontSize: 12, fontWeight: '800', color: colors.blue },
 
-  row: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  name: { fontSize: 14.5, fontWeight: '700', color: colors.ink },
+
+  name: { fontSize: 15.5, fontWeight: '800', fontStyle: 'italic', color: colors.ink, letterSpacing: -0.2 },
   meta: { fontSize: 11.5, color: colors.inkSoft, marginTop: 2 },
   join: {
     borderWidth: 1,

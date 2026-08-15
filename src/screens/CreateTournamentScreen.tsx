@@ -3,11 +3,11 @@ import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
 import { supabase } from '../lib/supabase';
 import Screen from '../ui/Screen';
 import Button from '../ui/Button';
-import VenueCover from '../ui/VenueCover';
+import Cover from '../ui/Cover';
 import { Field } from '../ui/Field';
 import { Card, Pill, SectionTitle } from '../ui/primitives';
 import { colors, space, type, radius } from '../theme';
-import { pickVenuePhoto, uploadVenuePhoto } from '../lib/venuePhoto';
+import { pickCoverPhoto, uploadCover } from '../lib/cover';
 import {
   COMBAT_MODES,
   PHASE_KINDS,
@@ -106,7 +106,7 @@ export default function CreateTournamentScreen({ route, navigation }: any) {
   }
 
   async function pickPhoto() {
-    const uri = await pickVenuePhoto();
+    const uri = await pickCoverPhoto();
     if (uri) setPhotoUri(uri);
   }
 
@@ -130,7 +130,7 @@ export default function CreateTournamentScreen({ route, navigation }: any) {
       // Si algo falla aquí, el torneo ya existe y se queda con su portada
       // dibujada: se pierde la foto, no el torneo.
       if (photoUri) {
-        const url = await uploadVenuePhoto(id, photoUri);
+        const url = await uploadCover('tournament', id, photoUri);
         if (url) await supabase.from('tournaments').update({ photo_url: url }).eq('id', id);
       }
 
@@ -169,7 +169,7 @@ export default function CreateTournamentScreen({ route, navigation }: any) {
           <View style={{ gap: space.md }}>
             {/* La portada primero: un torneo es un evento, no un registro. */}
             <View style={styles.coverWrap}>
-              <VenueCover id={name || 'torneo-nuevo'} photoUrl={photoUri} height={140} />
+              <Cover id={name || 'torneo-nuevo'} photoUrl={photoUri} height={140} />
               <Pressable style={styles.coverBtn} onPress={pickPhoto}>
                 <Text style={styles.coverBtnText}>
                   {photoUri ? '🖼️ Cambiar portada' : '🖼️ Poner foto de portada'}

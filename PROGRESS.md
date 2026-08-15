@@ -484,11 +484,40 @@ Suizo con los DOS desempates que pidió el cliente: `dml` (diferencia de puntos 
 
 Dos errores que solo aparecieron al probar con nombres reales: el escudo daba "LIG" para "Liga CML Central" (la palabra "liga" la llevan todas), y "CML Central" y "CML Norte" daban el mismo escudo. Ahora son dos renglones (`src/lib/emblem.ts`). Y las fechas SIN hora (`2026-05-14`) se leían como UTC y en México retrocedían un día.
 
-**LO QUE SIGUE (~22x), con mockups ya aprobados por Farid:**
-1. **Lobby de torneos** — filtros TODOS/ABIERTOS/COMPLETADOS, tarjeta destacada con cuenta regresiva ("FALTAN 12 DÍAS") y barra de cierre de inscripciones, lista con escudo hexagonal, campeón en los terminados, banner "¿Organizas torneos?".
-2. **Detalle de torneo** — pestañas RESUMEN/JUGADORES/BRACKET/INFORMACIÓN, check-in con QR, lista de inscritos con "TU POSICIÓN", tarjeta de premio.
-3. **Avance de fases** — el detalle todavía NO sabe generar la ronda siguiente ni mostrar la tabla por fase. `generatePhaseRound()` ya existe en formatsRepo y está sin usar. **Sin esto no se puede jugar un torneo completo.**
-4. Portadas de eventos y clubes (~5x), mismo patrón.
+### ✅ Lobby de torneos, detalle con pestañas y avance de fases — CONSTRUIDO (commit `59cad88`, 2026-08-15)
+
+Los tres primeros puntos de "LO QUE SIGUE" ya están hechos y aprobados contra los
+mockups. Se construyó en otra sesión que se quedó sin créditos antes de pushear;
+esta sesión (2026-08-15) lo verificó y publicó.
+
+- **Lobby de torneos (`TournamentsScreen`)** — filtros TODOS/ABIERTOS/COMPLETADOS,
+  tarjeta héroe con portada, cuenta regresiva ("FALTAN 12 DÍAS"), barra de cierre
+  de inscripciones, filtro "MÍOS", lista con escudo hexagonal (`emblem.ts`),
+  campeón con ELO en los terminados y banner "¿Organizas torneos?". El orden lo
+  manda la relevancia (abierto y próximo primero), y el tratamiento de héroe solo
+  se aplica si lo primero DE VERDAD es lo más relevante.
+- **Detalle de torneo (`TournamentDetailScreen`)** — pestañas
+  RESUMEN/JUGADORES/BRACKET/INFORMACIÓN sobre una sola cabecera. Check-in propio y
+  QR del organizador, "TU POSICIÓN" e inscritos por ELO, tarjeta de premio,
+  "tu siguiente combate", campeón, y el enlace al cuerpo de jueces.
+- **Avance de fases** — `generatePhaseRound()` (antes sin usar) está cableado en
+  `advance()`: el organizador genera la primera ronda con los que hicieron
+  check-in y cada ronda siguiente, con la tabla por fase, byes, gran final y el
+  bloqueo "faltan N resultados por aprobar". Reconoce round robin, grupos, suizo,
+  eliminación simple y doble. **Ya se puede jugar un torneo de punta a punta.**
+- El viejo `src/lib/bracket.ts` y `BracketScreen.tsx` se borraron (los reemplaza
+  el motor `formats.ts` + `formatsRepo.ts`). `when.ts` centraliza fechas.
+
+**Verificado (2026-08-15):** typecheck limpio con código de salida real, `npm run
+test:formats` 58/58, el bundle compila y sirve sin errores de consola, y las
+pantallas reproducen los mockups elemento por elemento. **Sin probar con sesión
+iniciada** (los jugadores demo tienen `auth_user_id` nulo): el flujo completo
+desde la UI logueada sigue pendiente de la fase de QA.
+
+**LO QUE SIGUE:**
+1. Portadas de eventos y clubes (~5x), mismo patrón de portada que ligas/torneos.
+2. Partir VP local vs. interclubes (⚠️ ver decisión de arriba: 0030 los juntó).
+3. QA con sesión iniciada del flujo de torneo completo.
 
 **Correr migraciones sin pegarlas a mano:** el `SUPABASE_ACCESS_TOKEN` del entorno es de OTRA cuenta y no ve este proyecto. Con un token de la cuenta `fzequera89` sí se puede, vía Management API:
 `POST https://api.supabase.com/v1/projects/vgffwqmpiunxzmlfmtyo/database/query` con `{"query": "..."}`.
@@ -498,7 +527,7 @@ Dos errores que solo aparecieron al probar con nombres reales: el escudo daba "L
 
 1. `git clone` / `git pull` del repo.
 2. Copiar `.env.example` a `.env` y llenar `EXPO_PUBLIC_SUPABASE_URL` y `EXPO_PUBLIC_SUPABASE_ANON_KEY` (Supabase → Settings → API del proyecto "CML Beyblade").
-3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-14 las 0001–0028 están corridas** — si se agrega una nueva, actualizar esta línea.
+3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-15 las 0001–0035 están corridas y verificadas contra la base** (el lobby/detalle/avance de torneos no agregó ninguna migración nueva) — si se agrega una nueva, actualizar esta línea.
 4. `npm install`, luego `npm run web` para verificar rápido en el preview del navegador (no requiere emulador Android).
 5. Para un build real: `npx eas-cli build --platform android --profile preview --non-interactive` (requiere `eas login` ya hecho en la máquina).
 

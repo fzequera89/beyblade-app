@@ -41,11 +41,29 @@ export async function registerForPush(playerId: string | null): Promise<void> {
   if (!playerId || Platform.OS === 'web' || yaRegistrado) return;
 
   try {
-    const Notifications = await import('expo-notifications');
-    const Device = await import('expo-device');
+    // El import dinámico puede devolver el módulo directo o envuelto en
+    // `default`, según cómo Metro empaquete cada paquete. Leerlo de un solo
+    // lado deja las funciones en `undefined` sin que nada falle: el código
+    // simplemente se salta pasos, que es peor que un error.
+    const modNotif: any = await import('expo-notifications');
+    const Notifications: any = modNotif?.getPermissionsAsync ? modNotif : modNotif?.default;
+    const modDevice: any = await import('expo-device');
+    const Device: any = modDevice?.default ?? modDevice;
 
-    // Un emulador no tiene a dónde entregar: pedir permiso ahí solo asusta.
-    if (!Device.isDevice) return;
+    if (!Notifications?.getPermissionsAsync) {
+      estadoPush = 'no se pudo cargar expo-notifications';
+      return;
+    }
+
+    // Un emulador no tiene a dónde entregar. Pero si NO se puede determinar, se
+    // asume que es un teléfono real: equivocarse hacia el emulador enseña un
+    // diálogo que nadie ve; equivocarse hacia el otro lado deja al jugador sin
+    // notificaciones y sin explicación — que es justo lo que pasó en la primera
+    // prueba en aparato real.
+    if (Device?.isDevice === false) {
+      estadoPush = 'emulador: no hay a dónde entregar';
+      return;
+    }
 
     estadoPush = 'pidiendo permiso';
     const actual = await Notifications.getPermissionsAsync();
@@ -67,7 +85,7 @@ export async function registerForPush(playerId: string | null): Promise<void> {
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('default', {
         name: 'Combates y torneos',
-        importance: Notifications.AndroidImportance.DEFAULT,
+        importance: Notifications.AndroidImportance?.DEFAULT ?? 3,
         vibrationPattern: [0, 250, 250, 250],
       });
     }
@@ -111,7 +129,8 @@ export async function registerForPush(playerId: string | null): Promise<void> {
 export async function unregisterPush(): Promise<void> {
   if (Platform.OS === 'web') return;
   try {
-    const Notifications = await import('expo-notifications');
+    const modNotif: any = await import('expo-notifications');
+    const Notifications: any = modNotif?.getExpoPushTokenAsync ? modNotif : modNotif?.default;
     const id = projectId();
     const { data: token } = await Notifications.getExpoPushTokenAsync(
       id ? { projectId: id } : undefined
@@ -135,7 +154,10 @@ export async function onNotificationTap(
 ): Promise<() => void> {
   if (Platform.OS === 'web') return () => {};
   try {
-    const Notifications = await import('expo-notifications');
+    const modNotif: any = await import('expo-notifications');
+    const Notifications: any = modNotif?.addNotificationResponseReceivedListener
+      ? modNotif
+      : modNotif?.default;
     const sub = Notifications.addNotificationResponseReceivedListener((res: any) => {
       const data = res?.notification?.request?.content?.data ?? {};
       if (typeof data.screen === 'string') ir(data.screen, data);

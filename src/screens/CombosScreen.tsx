@@ -102,7 +102,7 @@ export default function CombosScreen({ navigation }: any) {
   }
 
   function remove(combo: Combo) {
-    Alert.alert('Borrar combo', `¿Borrar "${combo.name}"?`, [
+    Alert.alert('Borrar deck', `¿Borrar "${combo.name}"?`, [
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Borrar',
@@ -111,7 +111,7 @@ export default function CombosScreen({ navigation }: any) {
           const { error } = await supabase.from('combos').delete().eq('id', combo.id);
           if (error) {
             // La FK protege el historial: un combo usado en una batalla no se borra.
-            Alert.alert('No se puede borrar', 'Este combo ya se usó en una batalla registrada.');
+            Alert.alert('No se puede borrar', 'Este deck ya se usó en una batalla registrada.');
             return;
           }
           load();
@@ -138,7 +138,7 @@ export default function CombosScreen({ navigation }: any) {
               <Pressable onPress={() => navigation.goBack()} hitSlop={8}>
                 <Text style={styles.back}>‹</Text>
               </Pressable>
-              <Text style={styles.title}>Mis combos</Text>
+              <Text style={styles.title}>Mis decks</Text>
             </View>
             <Text style={styles.sub}>
               Registra lo que usas para saber después cuál te da mejores resultados.
@@ -146,10 +146,10 @@ export default function CombosScreen({ navigation }: any) {
 
             {open ? (
               <Card style={{ gap: space.lg }}>
-                <Text style={type.label}>{editingId ? 'Editar combo' : 'Nuevo combo'}</Text>
+                <Text style={type.label}>{editingId ? 'Editar deck' : 'Nuevo deck'}</Text>
                 <Field
                   label="Nombre"
-                  placeholder="Combo Tormenta"
+                  placeholder="Deck Tormenta"
                   value={form.name}
                   onChangeText={(v) => setForm({ ...form, name: v })}
                 />
@@ -175,7 +175,7 @@ export default function CombosScreen({ navigation }: any) {
                 <Button label="Cancelar" variant="ghost" onPress={cancelEdit} />
               </Card>
             ) : (
-              <Button label="＋  NUEVO COMBO" onPress={() => setOpen(true)} />
+              <Button label="＋  NUEVO DECK" onPress={() => setOpen(true)} />
             )}
 
             {combos.length > 0 && <SectionTitle>{`Tus combos (${combos.length})`}</SectionTitle>}
@@ -237,7 +237,7 @@ export default function CombosScreen({ navigation }: any) {
               <Hex size={54} color={colors.inkDim}>
                 <Text style={{ fontSize: 20 }}>🌀</Text>
               </Hex>
-              <Text style={styles.emptyTitle}>Todavía no registras combos</Text>
+              <Text style={styles.emptyTitle}>Todavía no registras decks</Text>
               <Text style={styles.meta}>
                 Al reportar una batalla podrás elegir con cuál jugaste, y con eso sabrás cuál rinde más.
               </Text>

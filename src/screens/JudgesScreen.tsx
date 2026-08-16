@@ -16,6 +16,14 @@ type Assignment = {
   players: { display_name: string; avatar_key: string | null; avatar_url: string | null } | null;
 };
 
+type GlobalJudge = {
+  id: string;
+  display_name: string;
+  judge_role: string | null;
+  avatar_key: string | null;
+  avatar_url: string | null;
+};
+
 type Candidate = {
   player_id: string;
   players: { display_name: string; avatar_key: string | null; avatar_url: string | null } | null;
@@ -30,6 +38,8 @@ export default function JudgesScreen({ route, navigation }: any) {
 
   const [rows, setRows] = useState<Assignment[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [leagueRows, setLeagueRows] = useState<Assignment[]>([]);
+  const [globalJudges, setGlobalJudges] = useState<GlobalJudge[]>([]);
   const [canManage, setCanManage] = useState(false);
   const [picking, setPicking] = useState(false);
   const [role, setRole] = useState<'support' | 'principal'>('support');
@@ -39,13 +49,22 @@ export default function JudgesScreen({ route, navigation }: any) {
   const load = useCallback(async () => {
     setLoading(true);
 
+    // `judge_assignments` apunta DOS veces a `players`: el juez (`player_id`) y
+    // quien lo nombró (`assigned_by`). Sin decir cuál, PostgREST se niega con
+    // PGRST201 y devuelve error en vez de datos — y esta pantalla lo ignoraba,
+    // así que los nombramientos se guardaban y la lista salía vacía. Parecía
+    // que el botón no servía.
     let q = supabase
       .from('judge_assignments')
       .select(
-        'id, player_id, role, players(display_name, avatar_key, avatar_url)'
+        'id, player_id, role, players!judge_assignments_player_id_fkey(display_name, avatar_key, avatar_url)'
       );
     q = tournamentId ? q.eq('tournament_id', tournamentId) : q.eq('league_id', leagueId);
-    const { data: assigned } = await q.order('created_at');
+    const { data: assigned, error: errAssigned } = await q.order('created_at');
+    if (errAssigned) {
+      // Callar el error fue justo lo que costó una sesión de QA.
+      Alert.alert('No se pudo leer el cuerpo de jueces', errAssigned.message);
+    }
     const list = ((assigned as any) ?? []) as Assignment[];
     setRows(list);
 
@@ -70,13 +89,52 @@ export default function JudgesScreen({ route, navigation }: any) {
       scopeLeague = (t as any)?.league_id ?? null;
     }
 
-    if (scopeLeague) {
-      const { data: members } = await supabase
-        .from('league_members')
-        .select('player_id, players(display_name, avatar_key, avatar_url)')
+    // Quien ya arbitra aquí SIN estar nombrado en este ámbito: los jueces
+    // globales de la app, y —si esto es un torneo— los nombrados a su liga.
+    // Estaban invisibles, y por eso parecía que un torneo no tenía jueces
+    // cuando en realidad varios podían fallar en él.
+    const { data: globales } = await supabase
+      .from('players')
+      .select('id, display_name, judge_role, avatar_key, avatar_url')
+      .not('judge_role', 'is', null);
+    setGlobalJudges(((globales as any) ?? []) as GlobalJudge[]);
+
+    if (tournamentId && scopeLeague) {
+      const { data: deLiga } = await supabase
+        .from('judge_assignments')
+        .select(
+          'id, player_id, role, players!judge_assignments_player_id_fkey(display_name, avatar_key, avatar_url)'
+        )
         .eq('league_id', scopeLeague);
+      setLeagueRows(((deLiga as any) ?? []) as Assignment[]);
+    } else {
+      setLeagueRows([]);
+    }
+
+    if (scopeLeague) {
+      // Los candidatos son los miembros de la liga MÁS los inscritos al torneo:
+      // desde 0047 inscribirse mete a la liga, pero los torneos viejos pueden
+      // tener inscritos que no son miembros, y esconderlos aquí es lo que
+      // impedía nombrarlos juez.
+      const [{ data: members }, { data: inscritos }] = await Promise.all([
+        supabase
+          .from('league_members')
+          .select('player_id, players(display_name, avatar_key, avatar_url)')
+          .eq('league_id', scopeLeague),
+        tournamentId
+          ? supabase
+              .from('tournament_registrations')
+              .select('player_id, players(display_name, avatar_key, avatar_url)')
+              .eq('tournament_id', tournamentId)
+          : Promise.resolve({ data: [] as any }),
+      ]);
+
       const taken = new Set(list.map((r) => r.player_id));
-      setCandidates((((members as any) ?? []) as Candidate[]).filter((m) => !taken.has(m.player_id)));
+      const porId = new Map<string, Candidate>();
+      for (const c of [...(((members as any) ?? []) as Candidate[]), ...(((inscritos as any) ?? []) as Candidate[])]) {
+        if (c?.player_id && !taken.has(c.player_id)) porId.set(c.player_id, c);
+      }
+      setCandidates([...porId.values()]);
     } else {
       setCandidates([]);
     }
@@ -184,6 +242,40 @@ export default function JudgesScreen({ route, navigation }: any) {
           ))
         )}
       </View>
+
+      {/* Quien ya puede fallar aquí sin estar nombrado en este ámbito. Se
+          enseña porque su ausencia hacía creer que el torneo estaba sin jueces
+          — y no lo estaba. No se quitan desde aquí: se quitan donde se
+          nombraron. */}
+      {(leagueRows.length > 0 || globalJudges.length > 0) && (
+        <View style={styles.block}>
+          <SectionTitle>También pueden fallar aquí</SectionTitle>
+
+          {globalJudges.map((g) => (
+            <Card key={`g-${g.id}`} style={[styles.row, { opacity: 0.85 }]}>
+              <Avatar uri={g.avatar_url} avatarKey={g.avatar_key} size={38} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.name}>{g.display_name}</Text>
+                <Text style={styles.meta}>Juez de la plataforma · arbitra en toda la app</Text>
+              </View>
+              <Pill label="GLOBAL" color={colors.streak} />
+            </Card>
+          ))}
+
+          {leagueRows
+            .filter((r) => !globalJudges.some((g) => g.id === r.player_id))
+            .map((r) => (
+              <Card key={`l-${r.id}`} style={[styles.row, { opacity: 0.85 }]}>
+                <Avatar uri={r.players?.avatar_url} avatarKey={r.players?.avatar_key} size={38} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.name}>{r.players?.display_name ?? '—'}</Text>
+                  <Text style={styles.meta}>Nombrado para la liga · vale en todos sus torneos</Text>
+                </View>
+                <Pill label="DE LIGA" color={colors.inkSoft} />
+              </Card>
+            ))}
+        </View>
+      )}
 
       {canManage && (
         <View style={styles.block}>

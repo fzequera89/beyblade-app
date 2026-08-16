@@ -37,7 +37,7 @@ const EXPERIENCE_LABEL: Record<string, string> = {
 // más los accesos a las vistas personales que no merecen pestaña propia.
 const LINKS = [
   { key: 'Stats', label: 'Mis estadísticas', desc: 'Win rate, rachas y finishes', glyph: '📊' },
-  { key: 'Combos', label: 'Mis combos', desc: 'Tus beyblades y su rendimiento', glyph: '🌀' },
+  { key: 'Combos', label: 'Mis decks', desc: 'Tus beyblades y su rendimiento', glyph: '🌀' },
   { key: 'Rivalries', label: 'Rivalidades', desc: 'Tu récord contra cada rival', glyph: '⚔️' },
   { key: 'Passport', label: 'League Passport', desc: 'Toda tu trayectoria', glyph: '🛂' },
   { key: 'Clubs', label: 'Clubes', desc: 'Tu equipo', glyph: '🛡️' },

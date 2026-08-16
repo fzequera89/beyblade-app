@@ -75,7 +75,7 @@ export default function DeckScreen({ route, navigation }: any) {
       if (prev.length >= maxPicks) {
         Alert.alert(
           'Deck completo',
-          `Este torneo pide ${size} principales y un extra. Quita uno para cambiarlo.`
+          `La deck card lleva ${size} principales y un extra. Quita uno para cambiarlo.`
         );
         return prev;
       }
@@ -113,18 +113,18 @@ export default function DeckScreen({ route, navigation }: any) {
       </View>
 
       <View style={styles.hero}>
-        <Text style={styles.title}>Tu deck</Text>
+        <Text style={styles.title}>Tu deck card</Text>
         <Text style={styles.sub}>{tournamentName}</Text>
         <View style={{ flexDirection: 'row', gap: space.sm, marginTop: space.sm }}>
-          <Pill label={`${size} combinaciones`} color={colors.blue} />
+          <Pill label={`${size} + 1`} color={colors.blue} />
           {locked ? <Pill label="Bloqueado" color={colors.streak} /> : null}
         </View>
       </View>
 
       <Card style={{ gap: space.sm, marginBottom: space.lg }}>
         <Text style={styles.rule}>
-          {size} principales y 1 extra opcional. Ninguna pieza se puede repetir entre ellos: ni el
-          blade, ni el ratchet, ni el bit.
+          Tu deck card lleva {size} decks principales y 1 extra opcional. Ninguna pieza se puede
+          repetir entre ellos: ni el blade, ni el ratchet, ni el bit.
         </Text>
         <Text style={styles.hint}>
           El extra se puede jugar completo o desarmar para cambiarle piezas a los principales. El
@@ -206,18 +206,18 @@ export default function DeckScreen({ route, navigation }: any) {
         </Card>
       )}
 
-      <SectionTitle>{locked ? 'Tu deck' : 'Elige tus combinaciones'}</SectionTitle>
+      <SectionTitle>{locked ? 'Tu deck card' : 'Elige tus decks'}</SectionTitle>
 
       {combos.length === 0 && !loading ? (
         <Card style={styles.empty}>
           <Hex size={50} color={colors.inkDim}>
             <Text style={{ fontSize: 18 }}>🧩</Text>
           </Hex>
-          <Text style={styles.emptyTitle}>No tienes combos registrados</Text>
+          <Text style={styles.emptyTitle}>No tienes decks registrados</Text>
           <Text style={styles.hintCenter}>
-            El deck se arma con tus combos. Créalos en Perfil › Mis combos, con su blade, ratchet y
-            bit.
+            La deck card se arma con tus decks: cada uno con su blade, ratchet y bit.
           </Text>
+          <Button label="＋  CREAR MI PRIMER DECK" onPress={() => navigation.navigate('Combos')} />
         </Card>
       ) : (
         combos.map((c) => {
@@ -249,6 +249,16 @@ export default function DeckScreen({ route, navigation }: any) {
             </Card>
           );
         })
+      )}
+
+      {/* Armar la tarjeta y no tener con qué armarla era un callejón sin
+          salida: la pantalla mandaba a Perfil sin manera de volver. */}
+      {!locked && combos.length > 0 && (
+        <Button
+          label="＋  CREAR OTRO DECK"
+          variant="ghost"
+          onPress={() => navigation.navigate('Combos')}
+        />
       )}
 
       {!locked && (

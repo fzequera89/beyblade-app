@@ -73,6 +73,8 @@ function Inicio() {
       <InicioStack.Screen name="Passport" component={PassportScreen} />
       <InicioStack.Screen name="TournamentDetail" component={TournamentDetailScreen} />
       <InicioStack.Screen name="Deck" component={DeckScreen} />
+      {/* Se llega desde la deck card: sin decks no hay tarjeta que armar. */}
+      <InicioStack.Screen name="Combos" component={CombosScreen} />
       <InicioStack.Screen name="WearGuide" component={WearGuideScreen} />
       <InicioStack.Screen name="Challenges" component={ChallengesScreen} />
       <InicioStack.Screen name="Venues" component={VenuesScreen} />
@@ -108,6 +110,7 @@ function Batallas() {
       <BatallasStack.Screen name="CreateTournament" component={CreateTournamentScreen} />
       <BatallasStack.Screen name="TournamentDetail" component={TournamentDetailScreen} />
       <BatallasStack.Screen name="Deck" component={DeckScreen} />
+      <BatallasStack.Screen name="Combos" component={CombosScreen} />
       <BatallasStack.Screen name="WearGuide" component={WearGuideScreen} />
       {/* El detalle de torneo ofrece escanear el QR de check-in, y esta pila es
           desde donde más se llega a él: sin registrarla aquí, ese botón no

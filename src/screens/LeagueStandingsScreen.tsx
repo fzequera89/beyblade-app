@@ -158,6 +158,19 @@ export default function LeagueStandingsScreen({ route, navigation }: any) {
                       {first.player_id === playerId ? 'Tú' : first.players?.display_name ?? '—'}
                     </Text>
                     {first.role === 'organizer' && <Pill label="Moderador" color={colors.streak} />}
+                    {/* El podio se dibuja aparte de la lista, así que el botón
+                        de nombrar no llegaba hasta aquí: al líder de la liga no
+                        se le podía dar moderación. */}
+                    {isAdmin && (
+                      <Pressable
+                        style={styles.modBtn}
+                        onPress={() => toggleModerator(first.player_id, first.role)}
+                      >
+                        <Text style={styles.modText}>
+                          {first.role === 'organizer' ? 'Quitar moderación' : 'Nombrar moderador'}
+                        </Text>
+                      </Pressable>
+                    )}
                     <Text style={styles.championElo}>
                       {Math.round(first.players?.elo_rating ?? 1000).toLocaleString()}
                     </Text>
@@ -209,6 +222,16 @@ export default function LeagueStandingsScreen({ route, navigation }: any) {
                         {Math.round(r.players?.elo_rating ?? 1000).toLocaleString()}
                       </Text>
                       <Text style={styles.runnerWins}>{wins[r.player_id] ?? 0} ganadas</Text>
+                      {isAdmin && (
+                        <Pressable
+                          style={styles.modBtn}
+                          onPress={() => toggleModerator(r.player_id, r.role)}
+                        >
+                          <Text style={styles.modText}>
+                            {r.role === 'organizer' ? 'Quitar' : 'Nombrar'}
+                          </Text>
+                        </Pressable>
+                      )}
                     </Pressable>
                   ) : (
                     <View key={i} style={{ flex: 1 }} />
@@ -217,7 +240,7 @@ export default function LeagueStandingsScreen({ route, navigation }: any) {
               </View>
             )}
 
-            {isAdmin && rows.length > 3 && (
+            {isAdmin && rows.length > 0 && (
               <Text style={styles.hint}>Toca «Nombrar» para dar o quitar moderación.</Text>
             )}
           </View>

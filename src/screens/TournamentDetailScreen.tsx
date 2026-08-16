@@ -82,6 +82,7 @@ type Tournament = {
   status: string;
   mode: string | null;
   season_id: string | null;
+  league_id: string | null;
   photo_url: string | null;
   combat_mode: string | null;
   deck_order: string | null;
@@ -133,8 +134,20 @@ const SIDE_LABEL: Record<string, string> = {
 const MEDAL: Record<number, string> = { 1: '#F5A524', 2: '#C3CDDD', 3: '#C77B45' };
 
 export default function TournamentDetailScreen({ route, navigation }: any) {
-  const { tournamentId, leagueId, isOrganizer, initialTab } = route.params;
+  const {
+    tournamentId,
+    leagueId: leagueIdParam,
+    isOrganizer: isOrganizerParam,
+    initialTab,
+  } = route.params;
   const { playerId } = useAuth();
+
+  // El rol y la liga se DERIVAN del torneo, no llegan por parámetro. Entrando
+  // desde Inicio no viajaban, y el mismo torneo se veía como jugador aunque
+  // fueras el organizador — y una ronda generada así habría creado combates
+  // sin liga. El parámetro se conserva solo como valor inicial, para que la
+  // pantalla no parpadee mientras se consulta.
+  const [isOrganizer, setIsOrganizer] = useState(!!isOrganizerParam);
 
   const [tab, setTab] = useState<Tab>(initialTab ?? 'resumen');
   const [tournament, setTournament] = useState<Tournament | null>(null);
@@ -148,6 +161,7 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
   const [myDeck, setMyDeck] = useState<DeckCard | null>(null);
   const [decks, setDecks] = useState<{ total: number; locked: number }>({ total: 0, locked: 0 });
   const [showQr, setShowQr] = useState(false);
+  const [checkinCode, setCheckinCode] = useState<string | null>(null);
   const [theme, setTheme] = useState<ThemeVote | null>(null);
   const [nuevaTematica, setNuevaTematica] = useState('');
   const [loading, setLoading] = useState(true);
@@ -160,7 +174,7 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
       supabase
         .from('tournaments')
         .select(
-          'id, name, status, mode, season_id, photo_url, combat_mode, deck_order, swiss_tiebreak, created_at, starts_at, registration_closes_at, capacity, level, prize, venues(name, city, address)'
+          'id, name, status, mode, season_id, league_id, photo_url, combat_mode, deck_order, swiss_tiebreak, created_at, starts_at, registration_closes_at, capacity, level, prize, venues(name, city, address)'
         )
         .eq('id', tournamentId)
         .single(),
@@ -182,6 +196,32 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
     ]);
 
     const row = t as any;
+
+    // La liga sale del torneo; el rol, de la membresía en ESA liga (o de ser
+    // administrador). Es la misma respuesta sin importar por dónde entraste.
+    if (row?.league_id && playerId) {
+      const [{ data: membresia }, { data: yo }] = await Promise.all([
+        supabase
+          .from('league_members')
+          .select('role')
+          .eq('league_id', row.league_id)
+          .eq('player_id', playerId)
+          .maybeSingle(),
+        supabase.from('players').select('is_admin').eq('id', playerId).maybeSingle(),
+      ]);
+      setIsOrganizer((membresia as any)?.role === 'organizer' || (yo as any)?.is_admin === true);
+    }
+
+    // El código del QR solo lo devuelve la base a la organización: para un
+    // jugador esta consulta viene vacía, y ahí está la gracia — si lo pudiera
+    // leer, no haría falta escanear nada.
+    const { data: codigo } = await supabase
+      .from('tournament_checkin_codes')
+      .select('code')
+      .eq('tournament_id', tournamentId)
+      .maybeSingle();
+    setCheckinCode((codigo as any)?.code ?? null);
+
     setTournament(
       row
         ? { ...row, venues: Array.isArray(row.venues) ? row.venues[0] ?? null : row.venues ?? null }
@@ -352,16 +392,6 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
     load();
   }
 
-  async function checkIn() {
-    const { error } = await supabase
-      .from('tournament_registrations')
-      .update({ checked_in_at: new Date().toISOString() })
-      .eq('tournament_id', tournamentId)
-      .eq('player_id', playerId);
-    if (error) return Alert.alert('Error', error.message);
-    load();
-  }
-
   async function toggleCheckIn(target: string, current: boolean) {
     const { error } = await supabase
       .from('tournament_registrations')
@@ -474,7 +504,9 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
     if (!phase) return;
     setBusy(true);
     try {
-      const r = await generatePhaseRound(phase, phases, leagueId);
+      const liga = tournament?.league_id ?? leagueIdParam;
+      if (!liga) throw new Error('Este torneo no tiene liga: no se pueden crear combates.');
+      const r = await generatePhaseRound(phase, phases, liga);
       if (r.finished) {
         const champ = r.championId ? nameOf.get(r.championId)?.display_name : null;
         Alert.alert(
@@ -680,16 +712,24 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
               closed={closed}
               isOrganizer={isOrganizer}
               onRegister={register}
-              onCheckIn={checkIn}
-              onQr={() => (isOrganizer ? setShowQr((v) => !v) : navigation.navigate('ScanCheckIn'))}
+              onScan={() => navigation.navigate('ScanCheckIn')}
+              onQr={() =>
+                isOrganizer
+                  ? Alert.alert('Código de check-in', '¿Qué necesitas?', [
+                      { text: 'Cancelar', style: 'cancel' },
+                      { text: 'Mostrar el QR', onPress: () => setShowQr((v) => !v) },
+                      { text: 'Escanear uno', onPress: () => navigation.navigate('ScanCheckIn') },
+                    ])
+                  : navigation.navigate('ScanCheckIn')
+              }
             />
 
             {/* El QR lo muestra quien organiza y lo escanea quien llega: es el
                 check-in de la puerta, y se usa con el torneo abierto en la mano. */}
-            {isOrganizer && showQr && (
+            {isOrganizer && showQr && checkinCode && (
               <View style={styles.qrWrap}>
                 <View style={styles.qrBox}>
-                  <QRCode value={`torneo:${tournamentId}`} size={168} />
+                  <QRCode value={`torneo:${tournamentId}:${checkinCode}`} size={168} />
                 </View>
                 <Text style={styles.hintCenter}>
                   Muéstralo en la entrada: quien lo escanea desde la app queda con check-in.
@@ -985,7 +1025,7 @@ function MyAction({
   closed,
   isOrganizer,
   onRegister,
-  onCheckIn,
+  onScan,
   onQr,
 }: {
   tournament: Tournament;
@@ -995,7 +1035,7 @@ function MyAction({
   closed: boolean;
   isOrganizer: boolean;
   onRegister: () => void;
-  onCheckIn: () => void;
+  onScan: () => void;
   onQr: () => void;
 }) {
   const canRegister = tournament.status === 'pending' && !full && !closed;
@@ -1008,8 +1048,15 @@ function MyAction({
     );
   }
 
-  const label = !mine ? 'INSCRIBIRME' : mine.checked_in_at ? 'CHECK-IN HECHO' : 'HACER CHECK-IN';
-  const action = !mine ? onRegister : mine.checked_in_at ? () => {} : onCheckIn;
+  // La presencia se PRUEBA, no se declara: ya no hay botón que marque check-in
+  // sin escanear. El servidor tampoco lo acepta (0048), así que quitarlo de
+  // aquí no es solo cosmética.
+  const label = !mine
+    ? 'INSCRIBIRME'
+    : mine.checked_in_at
+    ? 'CHECK-IN HECHO'
+    : '📷  ESCANEAR QR PARA CHECK-IN';
+  const action = !mine ? onRegister : mine.checked_in_at ? () => {} : onScan;
   const off = !mine ? !canRegister : !!mine.checked_in_at;
 
   return (
@@ -1033,6 +1080,13 @@ function MyAction({
           <Text style={{ fontSize: 19 }}>▣</Text>
         </Pressable>
       </View>
+
+      {mine && !mine.checked_in_at && (
+        <Text style={styles.hintCenter}>
+          El QR lo muestra la organización en la entrada. Si tu teléfono no puede escanear, pide que
+          te marquen a mano.
+        </Text>
+      )}
 
       {!mine && !canRegister && (
         <Text style={styles.hintCenter}>

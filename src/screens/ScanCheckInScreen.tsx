@@ -37,46 +37,36 @@ export default function ScanCheckInScreen({ navigation }: any) {
   // código suelto que ya se guardaba en `venues.qr_code`. Se distinguen por el
   // prefijo y no por buscar en las dos tablas: así un código desconocido dice
   // que no se reconoce, en vez de dar dos vueltas a la base para lo mismo.
-  async function checkInTournament(tournamentId: string) {
-    const { data: tournament } = await supabase
-      .from('tournaments')
-      .select('name')
-      .eq('id', tournamentId)
-      .maybeSingle();
+  // El QR trae "torneo:<id>:<código>". El código es la prueba de que alguien
+  // vio la pantalla del organizador: sin él, marcar presencia sería otra vez un
+  // botón, y el servidor lo rechaza.
+  async function checkInTournament(resto: string) {
+    const [tournamentId, code] = resto.split(':');
 
-    if (!tournament) {
-      Alert.alert('QR no reconocido', 'Este código no corresponde a ningún torneo.', [
-        { text: 'Reintentar', onPress: () => setScanned(false) },
-      ]);
+    if (!tournamentId || !code) {
+      Alert.alert(
+        'QR viejo',
+        'Este código no trae la clave del torneo. Pídele a la organización que muestre el QR desde la versión nueva de la app.',
+        [{ text: 'Entendido', onPress: () => setScanned(false) }]
+      );
       setBusy(false);
       return;
     }
 
-    // Devuelve las filas tocadas: si viene vacío es que no estás inscrito, que
-    // es distinto de un error y merece otro mensaje.
-    const { data: updated, error } = await supabase
-      .from('tournament_registrations')
-      .update({ checked_in_at: new Date().toISOString() })
-      .eq('tournament_id', tournamentId)
-      .eq('player_id', playerId)
-      .select('player_id');
+    const { data: nombre, error } = await supabase.rpc('check_in_with_code', {
+      p_tournament_id: tournamentId,
+      p_code: code,
+    });
     setBusy(false);
 
     if (error) {
-      Alert.alert('Error', error.message, [{ text: 'OK', onPress: () => setScanned(false) }]);
+      Alert.alert('No se pudo hacer check-in', error.message, [
+        { text: 'Reintentar', onPress: () => setScanned(false) },
+      ]);
       return;
     }
 
-    if (!updated || updated.length === 0) {
-      Alert.alert(
-        'No estás inscrito',
-        `Primero inscríbete en ${(tournament as any).name} desde la pantalla del torneo.`,
-        [{ text: 'Entendido', onPress: () => navigation.goBack() }]
-      );
-      return;
-    }
-
-    Alert.alert('¡Check-in hecho!', `Ya estás presente en ${(tournament as any).name}.`, [
+    Alert.alert('¡Check-in hecho!', `Ya estás presente en ${nombre ?? 'el torneo'}.`, [
       { text: 'Listo', onPress: () => navigation.goBack() },
     ]);
   }

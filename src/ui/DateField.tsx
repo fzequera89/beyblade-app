@@ -20,6 +20,17 @@ function aTexto(d: Date): string {
   return `${d.getFullYear()}-${mm}-${dd}`;
 }
 
+function aHoraTexto(d: Date): string {
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+function aHoraFecha(texto: string): Date {
+  const [h, m] = (texto || '').split(':').map(Number);
+  const d = new Date();
+  if (!Number.isNaN(h)) d.setHours(h, Number.isNaN(m) ? 0 : m, 0, 0);
+  return d;
+}
+
 function aFecha(texto: string): Date {
   const [y, m, d] = (texto || '').split('-').map(Number);
   if (!y || !m || !d) return new Date();
@@ -31,11 +42,14 @@ export function DateField({
   value,
   onChange,
   hint,
+  mode = 'date',
 }: {
   label: string;
   value: string;
   onChange: (valor: string) => void;
   hint?: string;
+  /** 'date' guarda AAAA-MM-DD; 'time' guarda HH:MM. */
+  mode?: 'date' | 'time';
 }) {
   const [abierto, setAbierto] = useState(false);
   const [Picker, setPicker] = useState<any>(null);
@@ -44,7 +58,7 @@ export function DateField({
     return (
       <Field
         label={label}
-        placeholder="2026-09-27"
+        placeholder={mode === 'time' ? '19:30' : '2026-09-27'}
         value={value}
         onChangeText={onChange}
         hint={hint}
@@ -66,22 +80,23 @@ export function DateField({
 
       <Pressable style={styles.caja} onPress={abrir}>
         <Text style={[styles.valor, !value && { color: colors.inkDim }]}>
-          {value || 'Elegir fecha'}
+          {value || (mode === 'time' ? 'Elegir hora' : 'Elegir fecha')}
         </Text>
-        <Text style={styles.glifo}>📅</Text>
+        <Text style={styles.glifo}>{mode === 'time' ? '🕒' : '📅'}</Text>
       </Pressable>
 
       {hint ? <Text style={styles.hint}>{hint}</Text> : null}
 
       {abierto && Picker ? (
         <Picker
-          value={aFecha(value)}
-          mode="date"
-          display="calendar"
+          value={mode === 'time' ? aHoraFecha(value) : aFecha(value)}
+          mode={mode}
+          display={mode === 'time' ? 'clock' : 'calendar'}
+          is24Hour
           onChange={(_: any, elegida?: Date) => {
-            // En Android el diálogo se cierra solo, y cancelar no trae fecha.
+            // En Android el diálogo se cierra solo, y cancelar no trae valor.
             setAbierto(false);
-            if (elegida) onChange(aTexto(elegida));
+            if (elegida) onChange(mode === 'time' ? aHoraTexto(elegida) : aTexto(elegida));
           }}
         />
       ) : null}

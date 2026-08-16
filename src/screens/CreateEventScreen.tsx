@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import Screen from '../ui/Screen';
 import Button from '../ui/Button';
 import { Field } from '../ui/Field';
+import { DateField } from '../ui/DateField';
 import { Card, Chip, OptionCard, Hex } from '../ui/primitives';
 import { IconCalendar } from '../ui/icons';
 import { EVENT_TYPES, EventCode, buildStartsAt } from '../lib/eventTypes';
@@ -149,19 +150,24 @@ export default function CreateEventScreen({ navigation }: any) {
               />
             ))}
           </View>
+          {/* En el teléfono, calendario y reloj del sistema; en la web siguen
+              siendo texto, porque el módulo es nativo y ahí no existe. Los
+              atajos de arriba (hoy, mañana…) siguen funcionando: escriben en el
+              mismo campo. */}
           <View style={styles.row}>
             <View style={{ flex: 1 }}>
-              <Field
-                placeholder="AAAA-MM-DD"
+              <DateField
+                label="Día"
                 value={form.date}
-                onChangeText={(v) => setForm({ ...form, date: v })}
+                onChange={(v) => setForm({ ...form, date: v })}
               />
             </View>
-            <View style={{ width: 110 }}>
-              <Field
-                placeholder="HH:MM"
+            <View style={{ width: 130 }}>
+              <DateField
+                label="Hora"
+                mode="time"
                 value={form.time}
-                onChangeText={(v) => setForm({ ...form, time: v })}
+                onChange={(v) => setForm({ ...form, time: v })}
               />
             </View>
           </View>

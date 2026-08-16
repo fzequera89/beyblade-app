@@ -36,6 +36,8 @@ type Match = {
   tournament_id: string | null;
   player_a_id: string;
   player_b_id: string;
+  combo_a_id: string | null;
+  combo_b_id: string | null;
   score_a: number;
   score_b: number;
   winner_id: string | null;
@@ -110,7 +112,7 @@ export default function MatchDetailScreen({ route, navigation }: any) {
     const { data, error } = await supabase
       .from('matches')
       .select(
-        'id, league_id, tournament_id, player_a_id, player_b_id, score_a, score_b, winner_id, status, reported_by, elo_a_change, elo_b_change, points_to_win, mode, penalty_points_a, penalty_points_b, arbitrated_by, arbitration_reason, countermark_by, countermark_winner_id, countermark_score_a, countermark_score_b, disputed_by, dispute_reason, player_a:players!matches_player_a_id_fkey(display_name, avatar_key, avatar_url), player_b:players!matches_player_b_id_fkey(display_name, avatar_key, avatar_url)'
+        'id, league_id, tournament_id, player_a_id, player_b_id, combo_a_id, combo_b_id, score_a, score_b, winner_id, status, reported_by, elo_a_change, elo_b_change, points_to_win, mode, penalty_points_a, penalty_points_b, arbitrated_by, arbitration_reason, countermark_by, countermark_winner_id, countermark_score_a, countermark_score_b, disputed_by, dispute_reason, player_a:players!matches_player_a_id_fkey(display_name, avatar_key, avatar_url), player_b:players!matches_player_b_id_fkey(display_name, avatar_key, avatar_url)'
       )
       .eq('id', matchId)
       .single();
@@ -204,6 +206,12 @@ export default function MatchDetailScreen({ route, navigation }: any) {
     ? rounds.filter((r) => r.winner_id === match.player_b_id).reduce((s, r) => s + finishPoints(r.finish_type), 0)
     : 0;
   const target = match?.points_to_win ?? 4;
+
+  // Cada jugador declara SU deck: el de A vive en combo_a_id y el de B en
+  // combo_b_id. Si el mío ya está puesto, no vuelvo a preguntarlo.
+  const soyA = match?.player_a_id === playerId;
+  const miDeckYaPuesto = soyA ? !!match?.combo_a_id : !!match?.combo_b_id;
+  const necesitoDeck = !miDeckYaPuesto && combos.length > 0;
   const decided = tallyA >= target || tallyB >= target;
 
   // 'void' (empate / lanzamiento nulo) no tiene ganador; los demás resultados sí.
@@ -244,8 +252,15 @@ export default function MatchDetailScreen({ route, navigation }: any) {
   // Ya no cierra el combate: deja constancia de que B se dio por convencido,
   // para que el juez lo apruebe de un toque. Todo resultado pasa por el juez.
   async function acceptReported() {
+    if (necesitoDeck && !pickedCombo) {
+      alerta('Falta el deck', 'Di con qué jugaste antes de aceptar el resultado.');
+      return;
+    }
     setBusy(true);
-    const { error } = await supabase.rpc('accept_reported_result', { p_match_id: matchId });
+    const { error } = await supabase.rpc('accept_reported_result', {
+      p_match_id: matchId,
+      p_combo_id: pickedCombo,
+    });
     setBusy(false);
     if (error) return alerta('Error', error.message);
     setClash(null);
@@ -268,12 +283,19 @@ export default function MatchDetailScreen({ route, navigation }: any) {
   // cierra el combate solo y el ELO ya viene aplicado al recargar.
   async function submitMark() {
     if (!match || markWinner === null) return;
+    if (necesitoDeck && !pickedCombo) {
+      alerta('Falta el deck', 'Di con qué jugaste: es lo que alimenta tus estadísticas.');
+      return;
+    }
     setBusy(true);
     const { data, error } = await supabase.rpc('submit_countermark', {
       p_match_id: match.id,
       p_winner_id: markWinner === 'a' ? match.player_a_id : match.player_b_id,
       p_score_a: Number(markA) || 0,
       p_score_b: Number(markB) || 0,
+      // El deck de quien marca. Sin esto, del segundo jugador nunca se
+      // registraba con qué jugó y su estadística quedaba a medias.
+      p_combo_id: pickedCombo,
     });
     setBusy(false);
     if (error) return alerta('No se pudo registrar', error.message);
@@ -541,6 +563,8 @@ export default function MatchDetailScreen({ route, navigation }: any) {
             </>
           )}
 
+          {/* PARA REPORTAR. El mismo selector vive abajo para quien marca o
+              acepta: los dos declaran el suyo, cada uno en su columna. */}
           {/* Sin deck no hay estadística: el rendimiento por combo, las piezas
               más usadas y el historial del jugador se arman con este dato. Se
               podía enviar el resultado sin él y quedaba un combate huérfano
@@ -646,10 +670,34 @@ export default function MatchDetailScreen({ route, navigation }: any) {
             </View>
           </View>
 
+          {/* Quien marca declara SU deck igual que quien reporta: si no, la
+              mitad de la estadística del combate se pierde. */}
+          {necesitoDeck && (
+            <>
+              <Text style={type.label}>¿Con qué deck jugaste?</Text>
+              <View style={styles.row}>
+                {combos.map((c) => (
+                  <Pressable
+                    key={c.id}
+                    onPress={() => setPickedCombo(c.id)}
+                    style={[styles.choice, pickedCombo === c.id && styles.choiceOn]}
+                  >
+                    <Text
+                      style={[styles.choiceText, pickedCombo === c.id && styles.choiceTextOn]}
+                      numberOfLines={1}
+                    >
+                      {c.name}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </>
+          )}
+
           <Button
-            label="ENVIAR MI MARCA"
+            label={necesitoDeck && !pickedCombo ? 'ELIGE CON QUÉ DECK JUGASTE' : 'ENVIAR MI MARCA'}
             onPress={submitMark}
-            disabled={markWinner === null || (markA === '' && markB === '')}
+            disabled={markWinner === null || (markA === '' && markB === '') || (necesitoDeck && !pickedCombo)}
             loading={busy}
           />
         </View>

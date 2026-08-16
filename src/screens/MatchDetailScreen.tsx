@@ -3,7 +3,7 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { alerta } from '../ui/alerta';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
-import { loadDeckCard } from '../lib/decks';
+import { loadDeckCard, deckSizeFor } from '../lib/decks';
 import { useAuth } from '../context/AuthContext';
 import Screen from '../ui/Screen';
 import Button from '../ui/Button';
@@ -61,7 +61,7 @@ type Match = {
   player_b: { display_name: string; avatar_key: string | null; avatar_url: string | null } | null;
 };
 
-type Round = { winner_id: string | null; finish_type: OutcomeCode };
+type Round = { winner_id: string | null; finish_type: OutcomeCode; combo_id: string | null };
 type SavedRound = {
   id: string;
   round_number: number;
@@ -112,7 +112,7 @@ export default function MatchDetailScreen({ route, navigation }: any) {
     const { data, error } = await supabase
       .from('matches')
       .select(
-        'id, league_id, tournament_id, player_a_id, player_b_id, combo_a_id, combo_b_id, score_a, score_b, winner_id, status, reported_by, elo_a_change, elo_b_change, points_to_win, mode, penalty_points_a, penalty_points_b, arbitrated_by, arbitration_reason, countermark_by, countermark_winner_id, countermark_score_a, countermark_score_b, disputed_by, dispute_reason, player_a:players!matches_player_a_id_fkey(display_name, avatar_key, avatar_url), player_b:players!matches_player_b_id_fkey(display_name, avatar_key, avatar_url)'
+        'id, league_id, tournament_id, tournaments(combat_mode), player_a_id, player_b_id, combo_a_id, combo_b_id, score_a, score_b, winner_id, status, reported_by, elo_a_change, elo_b_change, points_to_win, mode, penalty_points_a, penalty_points_b, arbitrated_by, arbitration_reason, countermark_by, countermark_winner_id, countermark_score_a, countermark_score_b, disputed_by, dispute_reason, player_a:players!matches_player_a_id_fkey(display_name, avatar_key, avatar_url), player_b:players!matches_player_b_id_fkey(display_name, avatar_key, avatar_url)'
       )
       .eq('id', matchId)
       .single();
@@ -209,6 +209,13 @@ export default function MatchDetailScreen({ route, navigation }: any) {
 
   // Cada jugador declara SU deck: el de A vive en combo_a_id y el de B en
   // combo_b_id. Si el mío ya está puesto, no vuelvo a preguntarlo.
+  // En 3 vs 3 y 5G se cambia de peonza entre rounds, así que el deck se
+  // pregunta EN CADA ronda. En 1 vs 1 y stock basta una vez por combate.
+  const modalidad = Array.isArray((match as any)?.tournaments)
+    ? (match as any)?.tournaments[0]?.combat_mode
+    : (match as any)?.tournaments?.combat_mode;
+  const deckPorRound = deckSizeFor(modalidad) > 1;
+
   const soyA = match?.player_a_id === playerId;
   const miDeckYaPuesto = soyA ? !!match?.combo_a_id : !!match?.combo_b_id;
   const necesitoDeck = !miDeckYaPuesto;
@@ -225,14 +232,22 @@ export default function MatchDetailScreen({ route, navigation }: any) {
       : pickedWinner === 'a'
         ? match.player_a_id
         : match.player_b_id;
-    setRounds([...rounds, { winner_id: winnerId, finish_type: pickedFinish }]);
+    setRounds([
+      ...rounds,
+      { winner_id: winnerId, finish_type: pickedFinish, combo_id: pickedCombo },
+    ]);
     setPickedWinner(null);
     setPickedFinish(null);
+    // En modalidad de deck, la peonza se vuelve a elegir para el round
+    // siguiente: dejarla puesta invitaría a registrar tres rounds con la misma
+    // sin querer.
+    if (deckPorRound) setPickedCombo(null);
   }
 
   async function submitReport() {
     if (!match || !decided) return;
-    if (!pickedCombo) {
+    const deckDelCombate = deckPorRound ? rounds.find((r) => r.combo_id)?.combo_id ?? null : pickedCombo;
+    if (!deckDelCombate) {
       alerta('Falta el deck', 'Di con qué jugaste: es lo que alimenta tus estadísticas.');
       return;
     }
@@ -240,7 +255,7 @@ export default function MatchDetailScreen({ route, navigation }: any) {
     const { error } = await supabase.rpc('report_match_result', {
       p_match_id: match.id,
       p_rounds: rounds,
-      p_combo_id: pickedCombo,
+      p_combo_id: deckDelCombate,
     });
     setBusy(false);
     if (error) return alerta('No se pudo registrar', error.message);
@@ -491,6 +506,8 @@ export default function MatchDetailScreen({ route, navigation }: any) {
             </Card>
           )}
 
+          {/* En modalidad de deck esto NO se pregunta aquí: cada round lleva el
+              suyo, y preguntarlo dos veces sería pedir lo mismo de dos formas. */}
           {/* El deck va ANTES de armar los rounds, no después.
               Bloquear solo el envío dejaba construir la batalla entera para
               enterarte al final de que faltaba — y peor, el aviso de "no tienes
@@ -509,7 +526,7 @@ export default function MatchDetailScreen({ route, navigation }: any) {
                 onPress={() => navigation.navigate('Combos')}
               />
             </Card>
-          ) : (
+          ) : deckPorRound ? null : (
             <>
               <Text style={type.label}>¿Con qué deck jugaste?</Text>
               <View style={styles.row}>
@@ -590,6 +607,28 @@ export default function MatchDetailScreen({ route, navigation }: any) {
                 ))}
               </View>
 
+              {deckPorRound && (
+                <>
+                  <Text style={type.label}>¿Con qué deck jugaste ESTE round?</Text>
+                  <View style={styles.row}>
+                    {combos.map((c) => (
+                      <Pressable
+                        key={c.id}
+                        onPress={() => setPickedCombo(pickedCombo === c.id ? null : c.id)}
+                        style={[styles.choice, pickedCombo === c.id && styles.choiceOn]}
+                      >
+                        <Text
+                          style={[styles.choiceText, pickedCombo === c.id && styles.choiceTextOn]}
+                          numberOfLines={1}
+                        >
+                          {c.name}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </>
+              )}
+
               <Button
                 label={!pickedCombo ? 'PRIMERO ELIGE TU DECK' : 'AGREGAR ROUND'}
                 variant="ghost"
@@ -605,12 +644,12 @@ export default function MatchDetailScreen({ route, navigation }: any) {
             label={
               !decided
                 ? `FALTAN PUNTOS PARA LLEGAR A ${target}`
-                : !pickedCombo
+                : !deckPorRound && !pickedCombo
                 ? 'ELIGE CON QUÉ DECK JUGASTE'
                 : 'ENVIAR RESULTADO'
             }
             onPress={submitReport}
-            disabled={!decided || !pickedCombo}
+            disabled={!decided || (!deckPorRound && !pickedCombo)}
             loading={busy}
           />
         </View>
@@ -630,7 +669,7 @@ export default function MatchDetailScreen({ route, navigation }: any) {
             <Text style={styles.blindTag}>A CIEGAS</Text>
             <Text style={styles.hint}>
               Tu rival ya registró su versión, pero no la vas a ver hasta que marques la tuya. Si
-              las dos coinciden, el combate se cierra solo y nadie tiene que arbitrar.
+              las dos coinciden, queda listo para que el juez lo apruebe de un toque; si no, se revela la del rival y decides.
             </Text>
           </Card>
 

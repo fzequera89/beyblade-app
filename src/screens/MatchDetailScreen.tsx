@@ -211,14 +211,14 @@ export default function MatchDetailScreen({ route, navigation }: any) {
   // combo_b_id. Si el mío ya está puesto, no vuelvo a preguntarlo.
   const soyA = match?.player_a_id === playerId;
   const miDeckYaPuesto = soyA ? !!match?.combo_a_id : !!match?.combo_b_id;
-  const necesitoDeck = !miDeckYaPuesto && combos.length > 0;
+  const necesitoDeck = !miDeckYaPuesto;
   const decided = tallyA >= target || tallyB >= target;
 
   // 'void' (empate / lanzamiento nulo) no tiene ganador; los demás resultados sí.
   const needsWinner = pickedFinish !== 'void';
 
   function addRound() {
-    if (!match || pickedFinish === null) return;
+    if (!match || pickedFinish === null || !pickedCombo) return;
     if (needsWinner && pickedWinner === null) return;
     const winnerId = !needsWinner
       ? null
@@ -491,6 +491,42 @@ export default function MatchDetailScreen({ route, navigation }: any) {
             </Card>
           )}
 
+          {/* El deck va ANTES de armar los rounds, no después.
+              Bloquear solo el envío dejaba construir la batalla entera para
+              enterarte al final de que faltaba — y peor, el aviso de "no tienes
+              decks" quedaba debajo de todo. Sin deck no hay estadística: el
+              rendimiento por deck, las piezas más usadas y el historial se
+              arman con este dato, y el combate no se corrige después. */}
+          {combos.length === 0 ? (
+            <Card style={styles.sinDecks}>
+              <Text style={styles.sinDecksTitle}>No tienes decks registrados</Text>
+              <Text style={type.soft}>
+                Hace falta decir con qué jugaste. Créalo ahora: se guarda para todos tus combates.
+              </Text>
+              <Button
+                label="＋  CREAR MI DECK"
+                variant="ghost"
+                onPress={() => navigation.navigate('Combos')}
+              />
+            </Card>
+          ) : (
+            <>
+              <Text style={type.label}>¿Con qué deck jugaste?</Text>
+              <View style={styles.row}>
+                {combos.map((c) => (
+                  <Pressable
+                    key={c.id}
+                    onPress={() => setPickedCombo(pickedCombo === c.id ? null : c.id)}
+                    style={[styles.choice, pickedCombo === c.id && styles.choiceOn]}
+                  >
+                    <Text style={[styles.choiceText, pickedCombo === c.id && styles.choiceTextOn]}>{c.name}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </>
+          )}
+
+
           {!decided && (
             <>
               <Text style={type.label}>
@@ -555,46 +591,13 @@ export default function MatchDetailScreen({ route, navigation }: any) {
               </View>
 
               <Button
-                label="AGREGAR ROUND"
+                label={!pickedCombo ? 'PRIMERO ELIGE TU DECK' : 'AGREGAR ROUND'}
                 variant="ghost"
                 onPress={addRound}
-                disabled={pickedFinish === null || (needsWinner && pickedWinner === null)}
+                disabled={
+                  !pickedCombo || pickedFinish === null || (needsWinner && pickedWinner === null)
+                }
               />
-            </>
-          )}
-
-          {/* PARA REPORTAR. El mismo selector vive abajo para quien marca o
-              acepta: los dos declaran el suyo, cada uno en su columna. */}
-          {/* Sin deck no hay estadística: el rendimiento por combo, las piezas
-              más usadas y el historial del jugador se arman con este dato. Se
-              podía enviar el resultado sin él y quedaba un combate huérfano
-              para siempre — el marcador no se corrige después. */}
-          {combos.length === 0 ? (
-            <Card style={styles.sinDecks}>
-              <Text style={styles.sinDecksTitle}>No tienes decks registrados</Text>
-              <Text style={type.soft}>
-                Hace falta decir con qué jugaste. Créalo ahora: se guarda para todos tus combates.
-              </Text>
-              <Button
-                label="＋  CREAR MI DECK"
-                variant="ghost"
-                onPress={() => navigation.navigate('Combos')}
-              />
-            </Card>
-          ) : (
-            <>
-              <Text style={type.label}>¿Con qué deck jugaste?</Text>
-              <View style={styles.row}>
-                {combos.map((c) => (
-                  <Pressable
-                    key={c.id}
-                    onPress={() => setPickedCombo(pickedCombo === c.id ? null : c.id)}
-                    style={[styles.choice, pickedCombo === c.id && styles.choiceOn]}
-                  >
-                    <Text style={[styles.choiceText, pickedCombo === c.id && styles.choiceTextOn]}>{c.name}</Text>
-                  </Pressable>
-                ))}
-              </View>
             </>
           )}
 
@@ -672,7 +675,21 @@ export default function MatchDetailScreen({ route, navigation }: any) {
 
           {/* Quien marca declara SU deck igual que quien reporta: si no, la
               mitad de la estadística del combate se pierde. */}
-          {necesitoDeck && (
+          {necesitoDeck && combos.length === 0 && (
+            <Card style={styles.sinDecks}>
+              <Text style={styles.sinDecksTitle}>No tienes decks registrados</Text>
+              <Text style={type.soft}>
+                Hace falta decir con qué jugaste para poder marcar.
+              </Text>
+              <Button
+                label="＋  CREAR MI DECK"
+                variant="ghost"
+                onPress={() => navigation.navigate('Combos')}
+              />
+            </Card>
+          )}
+
+          {necesitoDeck && combos.length > 0 && (
             <>
               <Text style={type.label}>¿Con qué deck jugaste?</Text>
               <View style={styles.row}>

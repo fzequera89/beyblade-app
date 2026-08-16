@@ -434,6 +434,38 @@ mayúsculas, a propósito— el perfil nació con `is_admin = true`.
 en `admin_emails` y correr `select apply_admin_emails();` desde el SQL Editor. No
 hace falta migración ni build.
 
+### ✅ 0045 — el administrador se define por correo, no por bandera a mano (2026-08-15)
+
+Los administradores son **`farid.zeqvil89@gmail.com`** y
+**`dmlbeybladereynosa@gmail.com`** (cuenta oficial de la liga).
+
+**Por qué no fue un simple UPDATE:** la cuenta del cliente **todavía no existe**
+en `auth.users`. No se le puede poner una bandera a una fila que no existe, y por
+eso la 0032 había quedado como "volver a correrla cuando se registre" — o sea,
+dependiendo de que alguien se acuerde. Se invirtió: **la lista de correos es el
+dato y la bandera se deriva**.
+
+- `admin_emails` — la lista. Sin políticas de RLS, ni de lectura: la app nunca la
+  consulta, sigue leyendo `players.is_admin` como siempre. Se administra desde el
+  panel de Supabase, igual que los demás catálogos del proyecto.
+- `apply_admin_emails()` — sincroniza la bandera con la lista. **Otorga y quita**,
+  porque la lista es la verdad. **Sin EXECUTE para `authenticated` a propósito**:
+  es la única función del esquema que reparte permisos, y expuesta con la anon
+  key sería una escalada de privilegios esperando un hueco. Se corre desde el
+  panel o con la service key.
+- Trigger `players_grant_admin_if_listed` — el día que el cliente cree su cuenta,
+  su perfil **nace con la bandera puesta**, sin que nadie corra nada. Solo otorga;
+  quitar es deliberado y pasa por la función.
+
+**Verificado contra la base:** hoy el único admin es `farid.zeqvil89@gmail.com`, y
+simulando el registro del cliente dentro de una transacción con rollback —con el
+correo escrito en otras mayúsculas, a propósito— el perfil nació con
+`is_admin = true`.
+
+**Para agregar o quitar un administrador de aquí en adelante:** insertar o borrar
+en `admin_emails` y correr `select apply_admin_emails();` desde el SQL Editor. Ni
+migración ni build.
+
 ### Reglamento extraído (referencia, para no releer el .docx)
 
 Investigado el 2026-08-14 leyendo `Reglamento DML Beyblade actualizado pro.docx` (secciones II–V). Reglas textuales para arrancar sin releer el .docx:

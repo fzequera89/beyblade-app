@@ -29,7 +29,7 @@ alter table admin_emails enable row level security;
 -- desde el panel de Supabase.
 
 insert into admin_emails (email, note) values
-  ('fzequera89@gmail.com', 'Cuenta del desarrollo / dueña del proyecto Supabase'),
+  ('farid.zeqvil89@gmail.com', 'Cuenta de Farid (desarrollo y operación)'),
   ('dmlbeybladereynosa@gmail.com', 'Cuenta oficial de la liga (cliente)')
 on conflict (email) do nothing;
 

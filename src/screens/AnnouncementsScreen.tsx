@@ -33,6 +33,8 @@ export default function AnnouncementsScreen({ navigation }: any) {
   const [alcance, setAlcance] = useState<Alcance>('global');
   const [destino, setDestino] = useState<string | null>(null);
   const [opciones, setOpciones] = useState<Opcion[]>([]);
+  const [busqueda, setBusqueda] = useState('');
+  const [nombreDestino, setNombreDestino] = useState<string | null>(null);
   const [historial, setHistorial] = useState<any[]>([]);
   const [busy, setBusy] = useState(false);
 
@@ -53,16 +55,35 @@ export default function AnnouncementsScreen({ navigation }: any) {
 
   // Las opciones se piden al elegir el alcance, no antes: cargar ligas, clubes y
   // jugadores de entrada serían tres consultas para usar una.
+  //
+  // Y se BUSCAN en el servidor, no se filtran aquí. Traer la lista completa y
+  // filtrarla en la app funciona con 22 jugadores y se rompe con mil: la
+  // consulta traía 60 y el resto sencillamente no existía para quien buscaba.
+  const buscarOpciones = useCallback(
+    async (nuevo: Alcance, texto: string) => {
+      if (nuevo === 'global') {
+        setOpciones([]);
+        return;
+      }
+      const tabla = nuevo === 'league' ? 'leagues' : nuevo === 'club' ? 'clubs' : 'players';
+      const campo = nuevo === 'player' ? 'display_name' : 'name';
+
+      let q = supabase.from(tabla).select(`id, ${campo}`).order(campo).limit(30);
+      if (texto.trim().length > 0) q = q.ilike(campo, `%${texto.trim()}%`);
+
+      const { data } = await q;
+      setOpciones(((data as any[]) ?? []).map((o) => ({ id: o.id, nombre: o[campo] })));
+    },
+    []
+  );
+
   async function cambiarAlcance(nuevo: Alcance) {
     setAlcance(nuevo);
     setDestino(null);
+    setNombreDestino(null);
+    setBusqueda('');
     setOpciones([]);
-    if (nuevo === 'global') return;
-
-    const tabla = nuevo === 'league' ? 'leagues' : nuevo === 'club' ? 'clubs' : 'players';
-    const campo = nuevo === 'player' ? 'display_name' : 'name';
-    const { data } = await supabase.from(tabla).select(`id, ${campo}`).order(campo).limit(60);
-    setOpciones(((data as any[]) ?? []).map((o) => ({ id: o.id, nombre: o[campo] })));
+    await buscarOpciones(nuevo, '');
   }
 
   async function enviar() {
@@ -73,7 +94,7 @@ export default function AnnouncementsScreen({ navigation }: any) {
     const aQuien =
       alcance === 'global'
         ? 'TODA la comunidad'
-        : opciones.find((o) => o.id === destino)?.nombre ?? 'el destinatario elegido';
+        : nombreDestino ?? 'el destinatario elegido';
 
     alerta('Enviar anuncio', `Va a ${aQuien}. Les llega como notificación y no se puede deshacer.`, [
       { text: 'Cancelar', style: 'cancel' },
@@ -141,20 +162,51 @@ export default function AnnouncementsScreen({ navigation }: any) {
 
         {alcance !== 'global' && (
           <View style={{ gap: space.sm }}>
+            <Field
+              label="Buscar"
+              placeholder={alcance === 'player' ? 'Nombre del jugador' : 'Nombre'}
+              value={busqueda}
+              onChangeText={(t: string) => {
+                setBusqueda(t);
+                buscarOpciones(alcance, t);
+              }}
+            />
+
+            {/* El elegido se queda a la vista aunque la búsqueda cambie: si no,
+                escribir otra cosa parecería haber borrado la selección. */}
+            {destino && nombreDestino ? (
+              <View style={[styles.opcion, styles.opcionOn]}>
+                <Text style={[styles.opcionText, { color: colors.ink }]}>
+                  ✓ {nombreDestino}
+                </Text>
+              </View>
+            ) : null}
+
             {opciones.length === 0 ? (
-              <Text style={styles.hint}>Cargando…</Text>
+              <Text style={styles.hint}>
+                {busqueda.trim() ? 'Nadie con ese nombre.' : 'Cargando…'}
+              </Text>
             ) : (
-              opciones.map((o) => (
-                <Pressable
-                  key={o.id}
-                  onPress={() => setDestino(o.id)}
-                  style={[styles.opcion, destino === o.id && styles.opcionOn]}
-                >
-                  <Text style={[styles.opcionText, destino === o.id && { color: colors.ink }]}>
-                    {o.nombre}
-                  </Text>
-                </Pressable>
-              ))
+              opciones
+                .filter((o) => o.id !== destino)
+                .map((o) => (
+                  <Pressable
+                    key={o.id}
+                    onPress={() => {
+                      setDestino(o.id);
+                      setNombreDestino(o.nombre);
+                    }}
+                    style={styles.opcion}
+                  >
+                    <Text style={styles.opcionText}>{o.nombre}</Text>
+                  </Pressable>
+                ))
+            )}
+
+            {opciones.length === 30 && (
+              <Text style={styles.hint}>
+                Se muestran los primeros 30. Escribe para acotar la búsqueda.
+              </Text>
             )}
           </View>
         )}

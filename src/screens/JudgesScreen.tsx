@@ -97,7 +97,10 @@ export default function JudgesScreen({ route, navigation }: any) {
     const { data: globales } = await supabase
       .from('players')
       .select('id, display_name, judge_role, avatar_key, avatar_url')
-      .not('judge_role', 'is', null);
+      // OJO: judge_role NUNCA es nulo — su valor por defecto es 'none'. Filtrar
+      // por "no nulo" devolvía a TODOS los jugadores marcados como jueces
+      // globales. Se piden los dos roles reales por nombre.
+      .in('judge_role', ['support', 'principal']);
     setGlobalJudges(((globales as any) ?? []) as GlobalJudge[]);
 
     if (tournamentId && scopeLeague) {
@@ -257,7 +260,9 @@ export default function JudgesScreen({ route, navigation }: any) {
               <Avatar uri={g.avatar_url} avatarKey={g.avatar_key} size={38} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.name}>{g.display_name}</Text>
-                <Text style={styles.meta}>Juez de la plataforma · arbitra en toda la app</Text>
+                <Text style={styles.meta}>
+                  {g.judge_role === 'principal' ? 'Juez principal' : 'Juez de apoyo'} de la plataforma · arbitra en toda la app
+                </Text>
               </View>
               <Pill label="GLOBAL" color={colors.streak} />
             </Card>

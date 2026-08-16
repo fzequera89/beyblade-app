@@ -15,11 +15,15 @@ expo-env.d.ts
 # el navegador, y el camino natural es dejarla caer en la carpeta del proyecto
 # "un momentito" para subirla a EAS. Un .json no llama la atención en un
 # `git status`, y quien lo tenga puede mandar notificaciones en nombre de la app.
-google-services.json
-GoogleService-Info.plist
 *firebase-adminsdk*.json
 *service-account*.json
 *serviceaccount*.json
+
+# `google-services.json` SÍ se commitea, y no es una contradicción: no es una
+# credencial, es configuración de cliente. Va dentro de cada APK que se publica,
+# así que cualquiera con la app puede leerlo — esconderlo del repo no esconde
+# nada y sí rompe el build, porque EAS sube el proyecto por git y los archivos
+# ignorados no viajan.
 
 # Native
 .kotlin/

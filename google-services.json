@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "346272628912",
+    "project_id": "beyblade-app-51310",
+    "storage_bucket": "beyblade-app-51310.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:346272628912:android:86ae1eb6c726202cad3b75",
+        "android_client_info": {
+          "package_name": "com.fzequera89.beybladeapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDDS6GuZeLZhvP3hzrFmubeSUvsmM7AVJU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

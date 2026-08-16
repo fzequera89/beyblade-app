@@ -224,6 +224,10 @@ export default function MatchDetailScreen({ route, navigation }: any) {
 
   async function submitReport() {
     if (!match || !decided) return;
+    if (!pickedCombo) {
+      alerta('Falta el deck', 'Di con qué jugaste: es lo que alimenta tus estadísticas.');
+      return;
+    }
     setBusy(true);
     const { error } = await supabase.rpc('report_match_result', {
       p_match_id: match.id,
@@ -537,9 +541,25 @@ export default function MatchDetailScreen({ route, navigation }: any) {
             </>
           )}
 
-          {combos.length > 0 && (
+          {/* Sin deck no hay estadística: el rendimiento por combo, las piezas
+              más usadas y el historial del jugador se arman con este dato. Se
+              podía enviar el resultado sin él y quedaba un combate huérfano
+              para siempre — el marcador no se corrige después. */}
+          {combos.length === 0 ? (
+            <Card style={styles.sinDecks}>
+              <Text style={styles.sinDecksTitle}>No tienes decks registrados</Text>
+              <Text style={type.soft}>
+                Hace falta decir con qué jugaste. Créalo ahora: se guarda para todos tus combates.
+              </Text>
+              <Button
+                label="＋  CREAR MI DECK"
+                variant="ghost"
+                onPress={() => navigation.navigate('Combos')}
+              />
+            </Card>
+          ) : (
             <>
-              <Text style={type.label}>¿Con qué combo jugaste?</Text>
+              <Text style={type.label}>¿Con qué deck jugaste?</Text>
               <View style={styles.row}>
                 {combos.map((c) => (
                   <Pressable
@@ -555,9 +575,15 @@ export default function MatchDetailScreen({ route, navigation }: any) {
           )}
 
           <Button
-            label={decided ? 'ENVIAR RESULTADO' : `FALTAN PUNTOS PARA LLEGAR A ${target}`}
+            label={
+              !decided
+                ? `FALTAN PUNTOS PARA LLEGAR A ${target}`
+                : !pickedCombo
+                ? 'ELIGE CON QUÉ DECK JUGASTE'
+                : 'ENVIAR RESULTADO'
+            }
             onPress={submitReport}
-            disabled={!decided}
+            disabled={!decided || !pickedCombo}
             loading={busy}
           />
         </View>
@@ -997,6 +1023,8 @@ function EloDelta({ name, delta }: { name?: string; delta: number | null }) {
 }
 
 const styles = StyleSheet.create({
+  sinDecks: { gap: space.md },
+  sinDecksTitle: { fontSize: 14, fontWeight: '800', color: colors.ink },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: space.md },
   back: { color: colors.ink, fontSize: 30, lineHeight: 32, width: 22 },

@@ -1106,10 +1106,18 @@ Notas de diseño:
 
 Es la única línea del roadmap que queda, y buena parte **no la puede cerrar un agente**: necesita builds reales, cuentas de pago y decisiones del cliente.
 
-**QA con datos reales (lo que sigue de inmediato):**
-- Ninguna fase se ha probado **desde la app con una sesión iniciada**. Lo verificado hasta hoy es: typecheck limpio, el bundle compila, las pantallas montan y renderizan, las funciones de base responden, y los datos de demo ya están sembrados. El flujo completo hecho a mano desde la UI (crear combo → reportar round a round → confirmar con la segunda cuenta → ver moverse ELO, stats, rivalidad y logros) está **sin probar**.
-- **Se necesitan dos cuentas** para cerrar el ciclo: `confirm_match_result` rechaza a propósito que quien reporta confirme su propio resultado.
-- Probar el QR de check-in (2.2) y la cámara, que solo funcionan en build real, nunca en el preview web. **Ya hay un APK instalado que sirve para esto.**
+**QA con datos reales — HECHO el 2026-08-16, y de ahí salieron ~15 correcciones.**
+Se recorrió con dos cuentas y un teléfono: crear torneo → inscribir → check-in →
+generar rondas → reportar round a round → doble marca → aprobar como juez →
+cerrar torneo y proclamar campeón. Todo funciona. Las correcciones que destapó
+están en la sección "QA en aparato real".
+
+**Lo que del QA sigue SIN probar:**
+- El camino del **escalafón** punta a punta desde la app: torneo de ranking por
+  categoría → VP local → interclubes. La base está probada con sesión simulada,
+  la interfaz no.
+- **Escanear** el QR de check-in con la cámara (mostrarlo sí se probó).
+- **Push en iOS**: depende de la cuenta de Apple.
 
 **Pulido pendiente:**
 - ~~Fecha/hora como texto~~ ✅ `DateField`: calendario del sistema en teléfono, texto en web (el módulo es nativo y no existe en el navegador).

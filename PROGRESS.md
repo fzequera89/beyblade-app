@@ -104,7 +104,7 @@ Lo que quedó:
 6. **Escrituras sensibles solo por función `SECURITY DEFINER`:** `report_match_result`, `confirm_match_result`, `accept_challenge` y `award_badges` no tienen política de INSERT/UPDATE equivalente. Es a propósito: nadie puede auto-asignarse un logro, inventar rounds ni mover su ELO con un insert directo, aunque tenga la anon key.
 7. **ELO por categoría = filtro de lectura:** se resolvió el punto 4 de `docs/elo-rules.md` en la dirección recomendada. Existe **un solo rating global** por jugador; las vistas por liga/temporada/categoría son filtros sobre `ranking_snapshots`, no ratings independientes. **Pendiente de confirmar con el cliente**, pero cambiarlo después no toca el cálculo del ELO.
 8. **Match al mejor de 5:** el primero que llega a 3 rounds gana, que es lo que ya asumía el marcador 3-0/3-1/3-2 de 1.4. Está en una constante (`ROUNDS_TO_WIN`) por si la liga cambia de formato.
-9. **Fecha y hora de eventos como texto (AAAA-MM-DD / HH:MM):** un date picker nativo exigiría `@react-native-community/datetimepicker`, que obliga a dev client. Todo el proyecto viene evitando dependencias nativas nuevas (misma razón que la decisión 2). Es el punto más obvio a pulir en la fase de QA si el cliente lo pide.
+9. ~~**Fecha y hora de eventos como texto (AAAA-MM-DD / HH:MM)**~~ **resuelto el 2026-08-16.** El argumento original —evitar una dependencia nativa— dejó de aplicar: `@react-native-community/datetimepicker` ya venía dentro del build instalado (entró en `2435a0d`, anterior al build `0f43bb7`), así que `DateField` salió **por aire, sin build nuevo**. En teléfono abre el calendario y el reloj del sistema; en web sigue siendo texto, porque el módulo es nativo y en el navegador no existe. El mismo componente hace fecha y hora con un parámetro `mode`.
 10. **Juez de apoyo y juez principal NO se diferencian** (decisión del cliente, 2026-08-16). Los dos pueden exactamente lo mismo: aprobar y fallar los combates de su ámbito. La distinción existe porque el reglamento habla de jueces principales como staff permanente, así que se guarda como etiqueta descriptiva —se ve al nombrar y en la ficha— pero **el código no consulta el rol para decidir permisos**. Si algún día tienen que diferenciarse (p. ej. que solo un principal revierta un resultado ya confirmado o resuelva una disputa), el lugar donde tocarlo es `can_arbitrate`, que hoy solo comprueba que el nombramiento exista.
 11. **Decir con qué deck jugaste es OBLIGATORIO al reportar** (decisión del cliente, 2026-08-16). Se podía enviar un resultado sin elegir deck, y el combate quedaba huérfano para siempre — el marcador no se corrige después. Sin ese dato no existen el rendimiento por deck, los finishes desglosados ni la ficha del líder. El costo aceptado: quien llega sin decks registrados tiene que crear uno antes de poder reportar, y por eso la pantalla ofrece crearlo ahí mismo en vez de dejarlo atorado. **No afecta al ELO ni al escalafón**: un combate cuenta igual con deck o sin él, que es justamente por lo que el hueco pasó desapercibido.
 12. **Solo el administrador nombra moderadores de liga** (decisión del cliente, 2026-08-16). La app ya se comportaba así, pero la política de la 0004 dejaba que **cualquier moderador ascendiera a quien quisiera dentro de su liga** escribiendo directo con la clave pública: la interfaz era más estricta que la regla, y la que manda es la regla. La 0054 alinea las dos. Se tocó solo el UPDATE: el borrado sigue igual —un moderador puede sacar a alguien de su liga— porque es otra facultad y nadie pidió cambiarla.
@@ -113,7 +113,7 @@ Lo que quedó:
 
 - **✅ Las migraciones 0001–0029 ya corrieron en Supabase.** La 0029 (factor K por partidas de ranking) verificada el 2026-08-14: `players.ranked_matches_played` responde donde antes daba `42703`, el backfill dejó a los 21 jugadores con `ranked_matches_played = matches_played` (134 = 134, correcto porque todo lo anterior a 0026 fue de ranking), y `apply_match_confirmation` sigue devolviendo `42501` — el candado de 0023 sobrevivió al `create or replace`. Verificación previa (0001–0028): `finish_points('launch_fail')=1`/`('void')=0` y `report_match_result` reconoce ambos → 0028; `tournaments.mode` filtra por `casual` → 0026; `accept_challenge` es casual → 0027; `judge_assignments`/`arbitrable_match_ids` → 0024/0025; `penalty_codes`/`penalties` → 0022; las funciones internas devuelven 42501 → 0023 sigue firme; `photo_url`/bucket `venues` → 0021; y todas las tablas rechazan lectura anónima). El esquema está completo y al día con el repo. **Ojo con el "vía Management API":** el `SUPABASE_ACCESS_TOKEN` que está en el entorno de esta máquina pertenece a **otra cuenta** de Supabase (`farid.zeq89@gmail.com`, org "Agentes Org", proyectos ROCE / Co-Meta). **No ve el proyecto DML Beyblade**, que vive en la cuenta `fzequera89` — comprobado el 2026-08-14: `/database/query` contra `vgffwqmpiunxzmlfmtyo` devuelve **403**, y `/v1/projects` con ese token no lista el proyecto. Las migraciones de ESTE proyecto se corren a mano en el SQL Editor, salvo que se genere un token de la cuenta correcta.
 - **Build de EAS pendiente de generar** desde la sub-etapa 1.1 (fix de placeholders) — el usuario pidió explícitamente esperar y acumular cambios de varias fases antes de generar el próximo build real, para no gastar builds en cada cambio chico.
-- Configurar el cliente OAuth de Google en Supabase (para que el botón "Continuar con Google" funcione en producción).
+- ~~Configurar el cliente OAuth de Google en Supabase~~ ✅ hecho el 2026-08-16 (ver "Entrar con Google").
 - ~~Cambiar `is_admin` al correo real del cliente~~ ✅ hecho en 0045: la lista de correos manda y el cliente entra como admin solo, al registrarse.
 - Mapa visual (MapLibre) si el cliente lo pide de verdad — no está en el MVP actual.
 - ~~Avatar de perfil~~ ✅ hecho (selector de imagen + Storage, en `EditProfileScreen`).
@@ -1125,8 +1125,53 @@ están en la sección "QA en aparato real".
 - ~~Notificaciones push~~ ✅ **funcionando en aparato real (Android, 2026-08-16)**, incluido el aviso automático disparado por un trigger. Falta iOS, que depende de la cuenta de Apple. Ver la sección de la 0046.
 - ~~Sin paginación en listas~~ ✅ hecha: páginas de 12 con "ver más". De paso se quitó el `.limit(100)` del ranking, que hacía invisible al jugador 101.
 
-**Publicación (requiere al cliente, no al desarrollador):**
+**Publicación — CONGELADO hasta que el cliente apruebe la app (decisión del 2026-08-16).**
+No es trabajo pendiente de desarrollo: son cuentas de pago y textos legales que
+no tiene sentido preparar antes de que la app esté aprobada.
 - Cuenta de Google Play (~$25 único) y de Apple (~$99/año).
-- Configurar el cliente OAuth de Google en Supabase para que "Continuar con Google" funcione en producción.
+- Falta `ios.bundleIdentifier`, y el ícono adaptativo de Android sigue con el
+  `#E6F4FE` de la plantilla de Expo.
+- Capturas, textos de ficha y política de privacidad (hace falta el texto **y**
+  una URL pública que lo sirva; las dos tiendas la exigen).
+- ~~Configurar el cliente OAuth de Google en Supabase~~ ✅ hecho el 2026-08-16.
 - ~~Cambiar `is_admin` al correo real del cliente~~ ✅ hecho en 0045.
-- Íconos, splash, capturas, textos de ficha y política de privacidad.
+
+## Entrar con Google — ✅ funcionando (2026-08-16)
+
+Consola configurada por el cliente: proyecto **`beyblade-app-51310`** —el mismo de
+Firebase, y por eso aparece **fuera de la organización** en el selector de Google
+Cloud—, cliente OAuth de **tipo web** con la URI de redireccionamiento
+`https://vgffwqmpiunxzmlfmtyo.supabase.co/auth/v1/callback`, y ese par
+ID/secreto en Supabase → Authentication → Providers → Google.
+
+**No hace falta un cliente de Android ni el SHA-1.** El acceso va por navegador
+contra el callback de Supabase; el SHA-1 solo lo pediría el SDK nativo de Google,
+que esta app no usa.
+
+En Supabase → URL Configuration están permitidos `beybladeapp://auth/callback` y
+`https://beyblade-league.pages.dev/**`. Sin eso Google autentica bien y el
+regreso se queda colgado, que es el fallo más difícil de diagnosticar de los tres.
+
+`skip nonce checks` y `allow users without an email` quedan **apagados**. El
+segundo importa más de lo que parece: el correo es la llave de `admin_emails`, y
+una cuenta sin correo sería un jugador que el sistema no sabe clasificar.
+
+**Lo que había roto en el código, todo silencioso:**
+1. `exchangeCodeForSession` recibe el **código**, no la URL de regreso. Se le
+   pasaba la URL entera: la llamada no falla, simplemente no hay sesión.
+2. En web se abría una **ventana emergente**. La bloquea el navegador la mitad de
+   las veces y el regreso a la pestaña hija falla en cuanto el navegador aísla
+   orígenes. Ahora se va la página completa y supabase-js canjea el código al
+   arrancar — de ahí que `detectSessionInUrl` pase a estar encendido **solo en
+   web**: en teléfono no hay URL de arranque que mirar.
+3. El botón de Google de **crear cuenta** navegaba a la pantalla de al lado en vez
+   de entrar con Google.
+
+El flujo vive en `src/lib/googleAuth.ts`, uno solo para las dos pantallas: hacían
+lo mismo y solo una estaba bien. Cancelar la ventana no se trata como error, y el
+onboarding toma el nombre que manda Google (`full_name`) en vez de arrancar vacío.
+
+**Ojo con la pantalla de consentimiento:** mientras **Audience** diga *Testing*,
+solo entran los correos dados de alta como usuarios de prueba. Para abrirlo a
+cualquiera hay que darle **Publish app**. Para QA en local hay que agregar además
+`http://localhost:8081/**` a los Redirect URLs.

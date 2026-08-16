@@ -9,6 +9,18 @@ dist/
 web-build/
 expo-env.d.ts
 
+# Credenciales que NO se commitean nunca.
+#
+# La clave de cuenta de servicio de Firebase llega como un .json cualquiera desde
+# el navegador, y el camino natural es dejarla caer en la carpeta del proyecto
+# "un momentito" para subirla a EAS. Un .json no llama la atención en un
+# `git status`, y quien lo tenga puede mandar notificaciones en nombre de la app.
+google-services.json
+GoogleService-Info.plist
+*firebase-adminsdk*.json
+*service-account*.json
+*serviceaccount*.json
+
 # Native
 .kotlin/
 *.orig.*

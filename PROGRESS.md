@@ -591,6 +591,47 @@ ticket de cada mensaje y volver a preguntar minutos después. Se deja anotado.
 **Con la app abierta**, Android no muestra el aviso salvo que se configure un
 manejador — no estaba, y por eso "no llegaba" con el teléfono en la mano.
 
+### 📣 Anuncios de la administración (0055, 2026-08-16)
+
+El admin manda un mensaje a un jugador, a un club, a una liga o a todos. **No
+hizo falta un sistema nuevo:** la bandeja de notificaciones ya era eso. Un
+anuncio es un aviso más, con la diferencia de que lo escribe una persona en vez
+de dispararlo un hecho del juego.
+
+- Se guarda **el anuncio en sí**, no solo las copias repartidas: las copias
+  desaparecen cuando alguien limpia su bandeja, y el texto es uno aunque los
+  destinatarios sean treinta.
+- **El reparto ocurre al enviar, no al leer.** Un anuncio "a la Liga Norte" se
+  copia a quienes son miembros HOY; quien entre mañana no recibe el de ayer,
+  igual que en cualquier chat. Resolverlo al leer haría aparecer anuncios viejos
+  en la bandeja de alguien que ni estaba.
+- `distinct` en los destinatarios: alguien en dos ligas no recibe el mismo
+  anuncio dos veces.
+
+**Y una que el primer anuncio global habría destapado a la mala:** `deliver_push`
+mandaba todo lo pendiente en UNA petición, y la API de Expo acepta **100
+mensajes por llamada**. Con dos o tres avisos del juego daba igual; un anuncio a
+toda la comunidad son tantos mensajes como jugadores. Ahora se trocea de 100 en
+100.
+
+**Verificado:** global llegó a los 22 jugadores con 22 copias en bandejas, el de
+liga a sus 17, y un jugador normal es rechazado por el servidor.
+
+### 🔄 Actualizar la app sin reinstalar (EAS Update, 2026-08-16)
+
+Configurado `expo-updates` con canal por perfil de build (`preview`,
+`production`) y `runtimeVersion` atado a la versión de la app.
+
+**Lo que sí viaja por aire:** pantallas, textos, lógica, correcciones — el 90% de
+lo que se ha hecho en este proyecto.
+
+**Lo que NO:** cualquier cosa que toque código nativo (cámara, notificaciones,
+calendario, dependencias nuevas). Eso sigue exigiendo build e instalación.
+
+**Ojo con el arranque:** el APK que está instalado hoy **no** trae
+`expo-updates`. Hay que generar e instalar UNA build más; a partir de esa, los
+cambios se publican con `npx eas-cli update --branch preview`.
+
 ### Reglamento extraído (referencia, para no releer el .docx)
 
 Investigado el 2026-08-14 leyendo `Reglamento DML Beyblade actualizado pro.docx` (secciones II–V). Reglas textuales para arrancar sin releer el .docx:
@@ -1033,7 +1074,7 @@ acumulándose de combates de verdad sigue sin probarse punta a punta.
 
 1. `git clone` / `git pull` del repo.
 2. Copiar `.env.example` a `.env` y llenar `EXPO_PUBLIC_SUPABASE_URL` y `EXPO_PUBLIC_SUPABASE_ANON_KEY` (Supabase → Settings → API del proyecto "CML Beyblade").
-3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-16 las 0001–0051 están corridas y verificadas contra la base** (0036 = portadas de eventos y clubes; 0037 = tabla local por victorias + escala VP 5/4/3/2/1; 0038 = Ranking Unificado Interclubes) — si se agrega una nueva, actualizar esta línea.
+3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-16 las 0001–0055 están corridas y verificadas contra la base** (0036 = portadas de eventos y clubes; 0037 = tabla local por victorias + escala VP 5/4/3/2/1; 0038 = Ranking Unificado Interclubes) — si se agrega una nueva, actualizar esta línea.
 4. `npm install`, luego `npm run web` para verificar rápido en el preview del navegador (no requiere emulador Android).
 5. Para un build real: `npx eas-cli build --platform android --profile preview --non-interactive` (requiere `eas login` ya hecho en la máquina).
 

@@ -97,6 +97,12 @@ export default function AdminScreen({ navigation }: any) {
             onPress={() => navigation.navigate('Batallas', { screen: 'Leagues' })}
           />
           <Link
+            glyph="📣"
+            title="Anuncios"
+            sub="Avisar a un jugador, a un club, a una liga o a todos"
+            onPress={() => navigation.navigate('Announcements')}
+          />
+          <Link
             glyph="📊"
             title="Ranking global"
             sub="Toda la plataforma ordenada por ELO"

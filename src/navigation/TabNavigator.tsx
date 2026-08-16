@@ -19,6 +19,7 @@ import TournamentDetailScreen from '../screens/TournamentDetailScreen';
 import MatchDetailScreen from '../screens/MatchDetailScreen';
 import DeckScreen from '../screens/DeckScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
+import AnnouncementsScreen from '../screens/AnnouncementsScreen';
 import WearGuideScreen from '../screens/WearGuideScreen';
 import LeagueStandingsScreen from '../screens/LeagueStandingsScreen';
 import AdminScreen from '../screens/AdminScreen';
@@ -184,6 +185,9 @@ function Perfil() {
       <PerfilStack.Screen name="Admin" component={AdminScreen} />
       <PerfilStack.Screen name="AdminPlayers" component={AdminPlayersScreen} />
       <PerfilStack.Screen name="AdminGlobalRanking" component={AdminGlobalRankingScreen} />
+      {/* Los anuncios se mandan desde el panel de administrador. */}
+      <PerfilStack.Screen name="Announcements" component={AnnouncementsScreen} />
+      <PerfilStack.Screen name="Notifications" component={NotificationsScreen} />
       <PerfilStack.Screen name="LeagueStandings" component={LeagueStandingsScreen} />
       <PerfilStack.Screen name="Disputes" component={DisputesScreen} />
     </PerfilStack.Navigator>

@@ -1000,13 +1000,13 @@ Es la única línea del roadmap que queda, y buena parte **no la puede cerrar un
 **QA con datos reales (lo que sigue de inmediato):**
 - Ninguna fase se ha probado **desde la app con una sesión iniciada**. Lo verificado hasta hoy es: typecheck limpio, el bundle compila, las pantallas montan y renderizan, las funciones de base responden, y los datos de demo ya están sembrados. El flujo completo hecho a mano desde la UI (crear combo → reportar round a round → confirmar con la segunda cuenta → ver moverse ELO, stats, rivalidad y logros) está **sin probar**.
 - **Se necesitan dos cuentas** para cerrar el ciclo: `confirm_match_result` rechaza a propósito que quien reporta confirme su propio resultado.
-- Probar el QR de check-in (2.2) y la cámara, que solo funcionan en build real, nunca en el preview web.
+- Probar el QR de check-in (2.2) y la cámara, que solo funcionan en build real, nunca en el preview web. **Ya hay un APK instalado que sirve para esto.**
 
 **Pulido pendiente:**
 - Fecha/hora de eventos como texto (decisión 9) — cambiar a date picker exige dev client.
 - ~~Avatar de perfil~~ ✅ hecho: `EditProfileScreen` sube foto a Storage y guarda `players.avatar_url`.
-- **Notificaciones push: construidas (0046), sin probar en aparato real.** Ver la sección de la 0046.
-- Sin paginación en listas: hoy todo carga completo. A escala de liga regional aguanta; con miles de matches habría que paginar.
+- ~~Notificaciones push~~ ✅ **funcionando en aparato real (Android, 2026-08-16)**, incluido el aviso automático disparado por un trigger. Falta iOS, que depende de la cuenta de Apple. Ver la sección de la 0046.
+- ~~Sin paginación en listas~~ ✅ hecha: páginas de 12 con "ver más". De paso se quitó el `.limit(100)` del ranking, que hacía invisible al jugador 101.
 
 **Publicación (requiere al cliente, no al desarrollador):**
 - Cuenta de Google Play (~$25 único) y de Apple (~$99/año).

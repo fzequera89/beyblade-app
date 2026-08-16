@@ -105,6 +105,7 @@ Lo que quedó:
 7. **ELO por categoría = filtro de lectura:** se resolvió el punto 4 de `docs/elo-rules.md` en la dirección recomendada. Existe **un solo rating global** por jugador; las vistas por liga/temporada/categoría son filtros sobre `ranking_snapshots`, no ratings independientes. **Pendiente de confirmar con el cliente**, pero cambiarlo después no toca el cálculo del ELO.
 8. **Match al mejor de 5:** el primero que llega a 3 rounds gana, que es lo que ya asumía el marcador 3-0/3-1/3-2 de 1.4. Está en una constante (`ROUNDS_TO_WIN`) por si la liga cambia de formato.
 9. **Fecha y hora de eventos como texto (AAAA-MM-DD / HH:MM):** un date picker nativo exigiría `@react-native-community/datetimepicker`, que obliga a dev client. Todo el proyecto viene evitando dependencias nativas nuevas (misma razón que la decisión 2). Es el punto más obvio a pulir en la fase de QA si el cliente lo pide.
+10. **Juez de apoyo y juez principal NO se diferencian** (decisión del cliente, 2026-08-16). Los dos pueden exactamente lo mismo: aprobar y fallar los combates de su ámbito. La distinción existe porque el reglamento habla de jueces principales como staff permanente, así que se guarda como etiqueta descriptiva —se ve al nombrar y en la ficha— pero **el código no consulta el rol para decidir permisos**. Si algún día tienen que diferenciarse (p. ej. que solo un principal revierta un resultado ya confirmado o resuelva una disputa), el lugar donde tocarlo es `can_arbitrate`, que hoy solo comprueba que el nombramiento exista.
 
 ## Pendientes conocidos
 

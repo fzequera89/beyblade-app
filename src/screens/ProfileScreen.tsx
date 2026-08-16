@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import Screen from '../ui/Screen';
 import Avatar from '../ui/Avatar';
 import { Card, Pill, SectionTitle, Hex } from '../ui/primitives';
+import { estadoPush } from '../lib/push';
 import { IconChevron, IconFlame } from '../ui/icons';
 import { badgeIcon } from '../lib/badges';
 import { colors, space, type, radius } from '../theme';
@@ -205,6 +206,14 @@ export default function ProfileScreen({ navigation }: any) {
           )}
         </View>
 
+        {/* Estado de las notificaciones, a la vista.
+            Un fallo de push es invisible por naturaleza: no llega algo que
+            nadie estaba mirando. Decirlo aquí convierte "no me llegan" en un
+            dato que se puede leer desde el teléfono, sin depurador. */}
+        <Text style={styles.push}>
+          Notificaciones: {estadoPush}
+        </Text>
+
         <Text style={styles.account}>{session?.user.email}</Text>
         <Pressable style={styles.signOut} onPress={() => supabase.auth.signOut()}>
           <Text style={styles.signOutText}>Cerrar sesión</Text>
@@ -309,6 +318,7 @@ const styles = StyleSheet.create({
   rowLabel: { fontSize: 14.5, fontWeight: '700', color: colors.ink },
   rowDesc: { fontSize: 11.5, color: colors.inkSoft, marginTop: 1 },
 
+  push: { fontSize: 10.5, color: colors.inkDim, textAlign: 'center', marginBottom: 4 },
   account: { fontSize: 11, color: colors.inkDim, textAlign: 'center', marginTop: space.xxl },
   signOut: { alignSelf: 'center', marginTop: space.md, padding: space.sm },
   signOutText: { color: colors.loss, fontSize: 13, fontWeight: '700' },

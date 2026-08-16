@@ -67,7 +67,7 @@ Lo que quedó:
 
 **Panel de organizador (1.5):** check-in masivo, ranking/reporte por liga.
 
-**Rol de administrador de plataforma** (agregado fuera del roadmap original, a petición del cliente): columna `players.is_admin`. Solo el admin crea ligas y nombra/quita moderadores de liga (antes cualquiera podía crear ligas). Admin actual: `farid.zeqvil89@gmail.com` — **cambiar al correo real del cliente cuando se defina**. Panel de administrador: stats globales, gestión de jugadores (incluye registrar jugadores manualmente sin cuenta, útil para gente sin la app todavía), ranking global.
+**Rol de administrador de plataforma** (agregado fuera del roadmap original, a petición del cliente): columna `players.is_admin`. Solo el admin crea ligas y nombra/quita moderadores de liga (antes cualquiera podía crear ligas). **Desde 0045 la bandera se DERIVA de una lista de correos** (`admin_emails`): hoy `fzequera89@gmail.com` y `dmlbeybladereynosa@gmail.com`. Panel de administrador: stats globales, gestión de jugadores (incluye registrar jugadores manualmente sin cuenta, útil para gente sin la app todavía), ranking global.
 
 **Venues y check-in físico (2.1, 2.2, 2.3):** alta de venues, QR de check-in (generar con `react-native-qrcode-svg`, escanear con `expo-camera` — **requiere build real, no se prueba en el preview web**), "Who's Playing Here" (check-ins de las últimas 4 horas por venue).
 
@@ -111,7 +111,7 @@ Lo que quedó:
 - **✅ Las migraciones 0001–0029 ya corrieron en Supabase.** La 0029 (factor K por partidas de ranking) verificada el 2026-08-14: `players.ranked_matches_played` responde donde antes daba `42703`, el backfill dejó a los 21 jugadores con `ranked_matches_played = matches_played` (134 = 134, correcto porque todo lo anterior a 0026 fue de ranking), y `apply_match_confirmation` sigue devolviendo `42501` — el candado de 0023 sobrevivió al `create or replace`. Verificación previa (0001–0028): `finish_points('launch_fail')=1`/`('void')=0` y `report_match_result` reconoce ambos → 0028; `tournaments.mode` filtra por `casual` → 0026; `accept_challenge` es casual → 0027; `judge_assignments`/`arbitrable_match_ids` → 0024/0025; `penalty_codes`/`penalties` → 0022; las funciones internas devuelven 42501 → 0023 sigue firme; `photo_url`/bucket `venues` → 0021; y todas las tablas rechazan lectura anónima). El esquema está completo y al día con el repo. **Ojo con el "vía Management API":** el `SUPABASE_ACCESS_TOKEN` que está en el entorno de esta máquina pertenece a **otra cuenta** de Supabase (`farid.zeq89@gmail.com`, org "Agentes Org", proyectos ROCE / Co-Meta). **No ve el proyecto DML Beyblade**, que vive en la cuenta `fzequera89` — comprobado el 2026-08-14: `/database/query` contra `vgffwqmpiunxzmlfmtyo` devuelve **403**, y `/v1/projects` con ese token no lista el proyecto. Las migraciones de ESTE proyecto se corren a mano en el SQL Editor, salvo que se genere un token de la cuenta correcta.
 - **Build de EAS pendiente de generar** desde la sub-etapa 1.1 (fix de placeholders) — el usuario pidió explícitamente esperar y acumular cambios de varias fases antes de generar el próximo build real, para no gastar builds en cada cambio chico.
 - Configurar el cliente OAuth de Google en Supabase (para que el botón "Continuar con Google" funcione en producción).
-- Cambiar `is_admin` del correo de prueba de Farid al correo real del cliente cuando se decida.
+- ~~Cambiar `is_admin` al correo real del cliente~~ ✅ hecho en 0045: la lista de correos manda y el cliente entra como admin solo, al registrarse.
 - Mapa visual (MapLibre) si el cliente lo pide de verdad — no está en el MVP actual.
 - ~~Avatar de perfil~~ ✅ hecho (selector de imagen + Storage, en `EditProfileScreen`).
 
@@ -399,6 +399,40 @@ de opinión dejaría dos votos vivos), y se puede cambiar hasta el cierre.
 - La votación: propuesta, cambio de voto (queda **un** voto), cierre prematuro
   que no hace nada, cierre pasada la fecha que fija la ganadora, y segunda
   llamada que devuelve lo mismo.
+
+### ✅ 0045 — el administrador se define por correo, no por bandera a mano (2026-08-15)
+
+Decisión del cliente: los administradores son **`fzequera89@gmail.com`** (cuenta
+del desarrollo, dueña del proyecto Supabase) y **`dmlbeybladereynosa@gmail.com`**
+(cuenta oficial de la liga). La cuenta de pruebas `farid.zeqvil89@gmail.com`
+**dejó de ser administradora**.
+
+**Por qué no fue un simple UPDATE:** la cuenta del cliente **todavía no existe**
+en `auth.users`. No se le puede poner una bandera a una fila que no existe, y por
+eso la 0032 había quedado como "volver a correrla cuando se registre" — o sea,
+dependiendo de que alguien se acuerde. Se invirtió: **la lista de correos es el
+dato y la bandera se deriva**.
+
+- `admin_emails` — la lista. Sin políticas de RLS, ni de lectura: la app nunca la
+  consulta, solo lee `players.is_admin` como siempre. Se administra desde el
+  panel de Supabase, igual que los otros catálogos.
+- `apply_admin_emails()` — sincroniza la bandera con la lista. **Otorga y quita**,
+  porque la lista es la verdad. **No se le otorga EXECUTE a `authenticated` a
+  propósito**: es la única función del esquema que reparte permisos, y expuesta
+  con la anon key sería una escalada de privilegios esperando un hueco. Se corre
+  desde el panel o con la service key.
+- Trigger `players_grant_admin_if_listed` — el día que el cliente cree su cuenta,
+  su perfil **nace con la bandera puesta**, sin que nadie corra nada. Solo otorga;
+  quitar es deliberado y pasa por la función.
+
+**Verificado contra la base:** al aplicarla cambiaron 2 filas (una alta, una
+baja) y hoy el único admin es `fzequera89@gmail.com`; y simulando el registro del
+cliente dentro de una transacción con rollback —con el correo escrito en otras
+mayúsculas, a propósito— el perfil nació con `is_admin = true`.
+
+**Para agregar o quitar un administrador de aquí en adelante:** insertar o borrar
+en `admin_emails` y correr `select apply_admin_emails();` desde el SQL Editor. No
+hace falta migración ni build.
 
 ### Reglamento extraído (referencia, para no releer el .docx)
 
@@ -831,7 +865,7 @@ acumulándose de combates de verdad sigue sin probarse punta a punta.
 
 **LO QUE SIGUE:**
 1. QA **desde la app, con dos cuentas**: crear el torneo de la temporada desde el escalafón → check-in → generar rondas por categoría → reportar → doble marca → aprobar como juez → ver moverse ELO, tabla local, VP e interclubes. La base ya está probada punta a punta (ver arriba); lo que falta es la interfaz con dedos de verdad, y **dos cuentas**, porque quien reporta no puede aprobar su propio resultado.
-3. Lo que no puede cerrar un agente: **notificaciones push** y **date picker** (los dos exigen dependencia nativa + dev client, contra la decisión 2/9 de este documento), **OAuth de Google**, `is_admin` al correo del cliente, cuentas de tienda, íconos/capturas/política de privacidad.
+3. Lo que no puede cerrar un agente: **notificaciones push** y **date picker** (los dos exigen dependencia nativa + dev client, contra la decisión 2/9 de este documento), **OAuth de Google**, cuentas de tienda, íconos/capturas/política de privacidad.
 4. ~~Paginación de listas~~ ✅ hecha (páginas de 12, ver arriba).
 
 **Correr migraciones sin pegarlas a mano:** el `SUPABASE_ACCESS_TOKEN` del entorno es de OTRA cuenta y no ve este proyecto. Con un token de la cuenta `fzequera89` sí se puede, vía Management API:
@@ -842,7 +876,7 @@ acumulándose de combates de verdad sigue sin probarse punta a punta.
 
 1. `git clone` / `git pull` del repo.
 2. Copiar `.env.example` a `.env` y llenar `EXPO_PUBLIC_SUPABASE_URL` y `EXPO_PUBLIC_SUPABASE_ANON_KEY` (Supabase → Settings → API del proyecto "CML Beyblade").
-3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-15 las 0001–0044 están corridas y verificadas contra la base** (0036 = portadas de eventos y clubes; 0037 = tabla local por victorias + escala VP 5/4/3/2/1; 0038 = Ranking Unificado Interclubes) — si se agrega una nueva, actualizar esta línea.
+3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-15 las 0001–0045 están corridas y verificadas contra la base** (0036 = portadas de eventos y clubes; 0037 = tabla local por victorias + escala VP 5/4/3/2/1; 0038 = Ranking Unificado Interclubes) — si se agrega una nueva, actualizar esta línea.
 4. `npm install`, luego `npm run web` para verificar rápido en el preview del navegador (no requiere emulador Android).
 5. Para un build real: `npx eas-cli build --platform android --profile preview --non-interactive` (requiere `eas login` ya hecho en la máquina).
 
@@ -888,5 +922,5 @@ Es la única línea del roadmap que queda, y buena parte **no la puede cerrar un
 **Publicación (requiere al cliente, no al desarrollador):**
 - Cuenta de Google Play (~$25 único) y de Apple (~$99/año).
 - Configurar el cliente OAuth de Google en Supabase para que "Continuar con Google" funcione en producción.
-- Cambiar `is_admin` del correo de prueba de Farid al correo real del cliente.
+- ~~Cambiar `is_admin` al correo real del cliente~~ ✅ hecho en 0045.
 - Íconos, splash, capturas, textos de ficha y política de privacidad.

@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -81,7 +82,7 @@ export default function PlayerProfileScreen({ route, navigation }: any) {
 
     setLoading(false);
     if (error) {
-      Alert.alert('Error', error.message);
+      alerta('Error', error.message);
       return;
     }
     setPlayer(data as any);
@@ -114,7 +115,7 @@ export default function PlayerProfileScreen({ route, navigation }: any) {
       : await supabase.from('follows').insert({ follower_id: myId, followee_id: targetId });
     setBusy(false);
     if (error) {
-      Alert.alert('Error', error.message);
+      alerta('Error', error.message);
       return;
     }
     load();
@@ -127,10 +128,10 @@ export default function PlayerProfileScreen({ route, navigation }: any) {
       .insert({ challenger_id: myId, challenged_id: targetId, status: 'pending' });
     setBusy(false);
     if (error) {
-      Alert.alert('Error', error.message);
+      alerta('Error', error.message);
       return;
     }
-    Alert.alert('Reto enviado', `${player?.display_name} tiene que aceptarlo para crear el match.`);
+    alerta('Reto enviado', `${player?.display_name} tiene que aceptarlo para crear el match.`);
   }
 
   if (loading || !player) {

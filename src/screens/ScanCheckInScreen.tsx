@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Text, View, Pressable, StyleSheet, Alert } from 'react-native';
+import { Text, View, Pressable, StyleSheet } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import Svg, { Path } from 'react-native-svg';
 import { supabase } from '../lib/supabase';
@@ -44,7 +45,7 @@ export default function ScanCheckInScreen({ navigation }: any) {
     const [tournamentId, code] = resto.split(':');
 
     if (!tournamentId || !code) {
-      Alert.alert(
+      alerta(
         'QR viejo',
         'Este código no trae la clave del torneo. Pídele a la organización que muestre el QR desde la versión nueva de la app.',
         [{ text: 'Entendido', onPress: () => setScanned(false) }]
@@ -60,13 +61,13 @@ export default function ScanCheckInScreen({ navigation }: any) {
     setBusy(false);
 
     if (error) {
-      Alert.alert('No se pudo hacer check-in', error.message, [
+      alerta('No se pudo hacer check-in', error.message, [
         { text: 'Reintentar', onPress: () => setScanned(false) },
       ]);
       return;
     }
 
-    Alert.alert('¡Check-in hecho!', `Ya estás presente en ${nombre ?? 'el torneo'}.`, [
+    alerta('¡Check-in hecho!', `Ya estás presente en ${nombre ?? 'el torneo'}.`, [
       { text: 'Listo', onPress: () => navigation.goBack() },
     ]);
   }
@@ -88,7 +89,7 @@ export default function ScanCheckInScreen({ navigation }: any) {
       .maybeSingle();
 
     if (error || !venue) {
-      Alert.alert('QR no reconocido', 'Este código no corresponde a ningún venue registrado.', [
+      alerta('QR no reconocido', 'Este código no corresponde a ningún venue registrado.', [
         { text: 'Reintentar', onPress: () => setScanned(false) },
       ]);
       setBusy(false);
@@ -101,11 +102,11 @@ export default function ScanCheckInScreen({ navigation }: any) {
     setBusy(false);
 
     if (insertError) {
-      Alert.alert('Error', insertError.message, [{ text: 'OK', onPress: () => setScanned(false) }]);
+      alerta('Error', insertError.message, [{ text: 'OK', onPress: () => setScanned(false) }]);
       return;
     }
 
-    Alert.alert('¡Check-in hecho!', `Quedaste registrado en ${venue.name}. Los demás ya te ven aquí.`, [
+    alerta('¡Check-in hecho!', `Quedaste registrado en ${venue.name}. Los demás ya te ven aquí.`, [
       { text: 'Listo', onPress: () => navigation.goBack() },
     ]);
   }

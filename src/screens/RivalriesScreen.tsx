@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { View, Text, FlatList, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -57,7 +58,7 @@ export default function RivalriesScreen({ navigation }: any) {
       .or(`player_a_id.eq.${playerId},player_b_id.eq.${playerId}`)
       .order('updated_at', { ascending: false });
     setLoading(false);
-    if (error) return Alert.alert('Error', error.message);
+    if (error) return alerta('Error', error.message);
 
     const mapped = ((data as any as RivalryRow[]) ?? []).map((r) => {
       const iAmA = r.player_a_id === playerId;

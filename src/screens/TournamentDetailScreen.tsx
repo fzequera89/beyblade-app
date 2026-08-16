@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, FlatList, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { useFocusEffect } from '@react-navigation/native';
 import QRCode from 'react-native-qrcode-svg';
 import { supabase } from '../lib/supabase';
@@ -276,7 +277,7 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
         return (live ?? next ?? list[list.length - 1])?.id ?? null;
       });
     } catch (e: any) {
-      Alert.alert('No se pudieron cargar las fases', e.message ?? String(e));
+      alerta('No se pudieron cargar las fases', e.message ?? String(e));
     }
 
     setLoading(false);
@@ -377,7 +378,7 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
     const url = await uploadCover('tournament', tournamentId, uri);
     if (url) {
       const { error } = await supabase.from('tournaments').update({ photo_url: url }).eq('id', tournamentId);
-      if (error) Alert.alert('No se pudo guardar', error.message);
+      if (error) alerta('No se pudo guardar', error.message);
     }
     setUploading(false);
     load();
@@ -388,7 +389,7 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
   // "Inscribirme" a la vez con un solo lugar libre entrarían las dos.
   async function register() {
     const { error } = await supabase.rpc('register_for_tournament', { p_tournament_id: tournamentId });
-    if (error) return Alert.alert('No te pudimos inscribir', error.message);
+    if (error) return alerta('No te pudimos inscribir', error.message);
     load();
   }
 
@@ -398,7 +399,7 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
       .update({ checked_in_at: current ? null : new Date().toISOString() })
       .eq('tournament_id', tournamentId)
       .eq('player_id', target);
-    if (error) return Alert.alert('Error', error.message);
+    if (error) return alerta('Error', error.message);
     load();
   }
 
@@ -407,7 +408,7 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
   // nadie — para eso está el reto de ascenso.
   async function seedSeason() {
     if (!tournament?.season_id) return;
-    Alert.alert(
+    alerta(
       'Fijar posiciones de la temporada',
       'El orden de llegada de este torneo pasa a ser la posición inicial de cada jugador dentro de su categoría. Se puede volver a correr si el torneo se corrige.',
       [
@@ -421,8 +422,8 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
               p_tournament_id: tournamentId,
             });
             setBusy(false);
-            if (error) return Alert.alert('No se pudo sembrar', error.message);
-            Alert.alert('Escalafón sembrado', `${data ?? 0} jugador(es) quedaron colocados.`);
+            if (error) return alerta('No se pudo sembrar', error.message);
+            alerta('Escalafón sembrado', `${data ?? 0} jugador(es) quedaron colocados.`);
           },
         },
       ]
@@ -433,7 +434,7 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
   // desgaste y deja constancia. Aprobar congela la tarjeta; rechazar la deja
   // editable para que el jugador corrija y vuelva.
   function inspect(target: string, name: string) {
-    Alert.alert(
+    alerta(
       `Revisión de deck · ${name}`,
       'Compara las piezas contra la guía de desgaste. Al aprobar, su deck queda congelado.',
       [
@@ -446,7 +447,7 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
               await recordInspection(tournamentId, target, false, 'Rechazado en revisión de desgaste');
               load();
             } catch (e: any) {
-              Alert.alert('No se pudo', e.message ?? String(e));
+              alerta('No se pudo', e.message ?? String(e));
             }
           },
         },
@@ -457,7 +458,7 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
               await recordInspection(tournamentId, target, true);
               load();
             } catch (e: any) {
-              Alert.alert('No se pudo', e.message ?? String(e));
+              alerta('No se pudo', e.message ?? String(e));
             }
           },
         },
@@ -471,14 +472,14 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
       await fn();
       load();
     } catch (e: any) {
-      Alert.alert('No se pudo', e.message ?? String(e));
+      alerta('No se pudo', e.message ?? String(e));
     } finally {
       setBusy(false);
     }
   }
 
   async function lockDecks() {
-    Alert.alert(
+    alerta(
       'Bloquear los decks',
       'Después de esto nadie puede cambiar su deck en este torneo. Hazlo al cerrar el registro.',
       [
@@ -491,8 +492,8 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
               p_tournament_id: tournamentId,
             });
             setBusy(false);
-            if (error) return Alert.alert('No se pudo', error.message);
-            Alert.alert('Decks bloqueados', `${data ?? 0} tarjeta(s) quedaron congeladas.`);
+            if (error) return alerta('No se pudo', error.message);
+            alerta('Decks bloqueados', `${data ?? 0} tarjeta(s) quedaron congeladas.`);
             load();
           },
         },
@@ -509,13 +510,13 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
       const r = await generatePhaseRound(phase, phases, liga);
       if (r.finished) {
         const champ = r.championId ? nameOf.get(r.championId)?.display_name : null;
-        Alert.alert(
+        alerta(
           'Fase terminada',
           champ ? `${champ} se lleva esta fase.` : 'Ya se jugaron todas las rondas de esta fase.'
         );
       } else {
         const byeNames = r.byes.map((b) => nameOf.get(b)?.display_name ?? '—');
-        Alert.alert(
+        alerta(
           `Ronda ${r.round} lista`,
           [
             `${r.created} combate(s) creados.`,
@@ -528,7 +529,7 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
       }
       load();
     } catch (e: any) {
-      Alert.alert('No se pudo avanzar', e.message ?? String(e));
+      alerta('No se pudo avanzar', e.message ?? String(e));
     } finally {
       setBusy(false);
     }
@@ -713,15 +714,7 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
               isOrganizer={isOrganizer}
               onRegister={register}
               onScan={() => navigation.navigate('ScanCheckIn')}
-              onQr={() =>
-                isOrganizer
-                  ? Alert.alert('Código de check-in', '¿Qué necesitas?', [
-                      { text: 'Cancelar', style: 'cancel' },
-                      { text: 'Mostrar el QR', onPress: () => setShowQr((v) => !v) },
-                      { text: 'Escanear uno', onPress: () => navigation.navigate('ScanCheckIn') },
-                    ])
-                  : navigation.navigate('ScanCheckIn')
-              }
+              onQr={() => (isOrganizer ? setShowQr((v) => !v) : navigation.navigate('ScanCheckIn'))}
             />
 
             {/* El QR lo muestra quien organiza y lo escanea quien llega: es el
@@ -734,6 +727,13 @@ export default function TournamentDetailScreen({ route, navigation }: any) {
                 <Text style={styles.hintCenter}>
                   Muéstralo en la entrada: quien lo escanea desde la app queda con check-in.
                 </Text>
+                {/* El organizador también juega: sin esto, desde aquí nunca
+                    podía abrir la cámara para hacer SU propio check-in. */}
+                <Pressable onPress={() => navigation.navigate('ScanCheckIn')} hitSlop={6}>
+                  <Text style={[styles.sectionLink, { color: accent.warm }]}>
+                    📷  ESCANEAR OTRO QR ›
+                  </Text>
+                </Pressable>
               </View>
             )}
 

@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -70,11 +71,11 @@ export default function CreateEventScreen({ navigation }: any) {
 
   async function save() {
     const title = form.title.trim();
-    if (!title) return Alert.alert('Falta el título', 'Ponle un nombre al evento.');
+    if (!title) return alerta('Falta el título', 'Ponle un nombre al evento.');
 
     const startsAt = buildStartsAt(form.date, form.time);
     if (!startsAt)
-      return Alert.alert('Fecha inválida', 'Usa AAAA-MM-DD para la fecha y HH:MM para la hora.');
+      return alerta('Fecha inválida', 'Usa AAAA-MM-DD para la fecha y HH:MM para la hora.');
 
     setBusy(true);
     const { error } = await supabase.from('events').insert({
@@ -87,7 +88,7 @@ export default function CreateEventScreen({ navigation }: any) {
       created_by: playerId,
     });
     setBusy(false);
-    if (error) return Alert.alert('No se pudo crear', error.message);
+    if (error) return alerta('No se pudo crear', error.message);
     navigation.goBack();
   }
 

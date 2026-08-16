@@ -1,5 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import { Alert } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { supabase } from './supabase';
 
 // Portadas de lo que se crea en la app: ligas, torneos, eventos, clubes.
@@ -14,7 +15,7 @@ export type CoverTable = 'leagues' | 'tournaments' | 'events' | 'clubs';
 export async function pickCoverPhoto(): Promise<string | null> {
   const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
   if (!perm.granted) {
-    Alert.alert('Sin permiso', 'Necesitamos acceso a tus fotos para poner la portada.');
+    alerta('Sin permiso', 'Necesitamos acceso a tus fotos para poner la portada.');
     return null;
   }
   const res = await ImagePicker.launchImageLibraryAsync({
@@ -46,7 +47,7 @@ export async function uploadCover(kind: CoverKind, id: string, uri: string): Pro
     // El sufijo fuerza a refrescar la caché: la ruta no cambió.
     return `${data.publicUrl}?v=${Date.now()}`;
   } catch (e: any) {
-    Alert.alert('No se pudo subir la foto', `${e.message ?? e}. Se queda la portada dibujada.`);
+    alerta('No se pudo subir la foto', `${e.message ?? e}. Se queda la portada dibujada.`);
     return null;
   }
 }
@@ -64,7 +65,7 @@ export async function changeCover(kind: CoverKind, table: CoverTable, id: string
   if (!url) return false;
   const { error } = await supabase.from(table).update({ photo_url: url }).eq('id', id);
   if (error) {
-    Alert.alert('No se pudo guardar la portada', error.message);
+    alerta('No se pudo guardar la portada', error.message);
     return false;
   }
   return true;

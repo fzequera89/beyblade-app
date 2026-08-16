@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { supabase } from '../lib/supabase';
 import Screen from '../ui/Screen';
 import Button from '../ui/Button';
@@ -119,7 +120,7 @@ export default function CreateTournamentScreen({ route, navigation }: any) {
       p_city: newVenueCity.trim() || null,
       p_address: null,
     });
-    if (error) return Alert.alert('No se pudo crear la locación', error.message);
+    if (error) return alerta('No se pudo crear la locación', error.message);
     const { data: fresh } = await supabase.from('venues').select('id, name, city').order('name');
     setVenues((fresh as any) ?? []);
     setVenueId(data as any);
@@ -171,8 +172,8 @@ export default function CreateTournamentScreen({ route, navigation }: any) {
   }
 
   async function create() {
-    if (!name.trim()) return Alert.alert('Falta el nombre');
-    if (phases.length === 0) return Alert.alert('Falta la estructura', 'Agrega al menos una fase.');
+    if (!name.trim()) return alerta('Falta el nombre');
+    if (phases.length === 0) return alerta('Falta la estructura', 'Agrega al menos una fase.');
 
     setBusy(true);
     try {
@@ -203,7 +204,7 @@ export default function CreateTournamentScreen({ route, navigation }: any) {
 
       navigation.replace('TournamentDetail', { tournamentId: id, leagueId, isOrganizer: true });
     } catch (e: any) {
-      Alert.alert('No se pudo crear', e.message ?? String(e));
+      alerta('No se pudo crear', e.message ?? String(e));
     } finally {
       setBusy(false);
     }

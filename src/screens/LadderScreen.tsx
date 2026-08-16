@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -70,7 +71,7 @@ export default function LadderScreen({ route, navigation }: any) {
 
     if (error) {
       setLoading(false);
-      return Alert.alert('Error', error.message);
+      return alerta('Error', error.message);
     }
 
     setRows(((data as any) ?? []) as Row[]);
@@ -95,12 +96,12 @@ export default function LadderScreen({ route, navigation }: any) {
       p_category_code: null,
     });
     setBusy(false);
-    if (error) return Alert.alert('No se pudo inscribir', error.message);
+    if (error) return alerta('No se pudo inscribir', error.message);
     load();
   }
 
   async function openChallenge(challengerId: string, name: string) {
-    Alert.alert(
+    alerta(
       'Reto de ascenso',
       `${name} va 1º de su categoría y puede retar al último de la superior. Se crea un combate normal; si gana, intercambian posiciones.`,
       [
@@ -115,8 +116,8 @@ export default function LadderScreen({ route, navigation }: any) {
               p_tournament_id: null,
             });
             setBusy(false);
-            if (error) return Alert.alert('No se pudo abrir', error.message);
-            Alert.alert('Reto abierto', 'El combate ya aparece en Batallas.');
+            if (error) return alerta('No se pudo abrir', error.message);
+            alerta('Reto abierto', 'El combate ya aparece en Batallas.');
             load();
           },
         },
@@ -139,13 +140,13 @@ export default function LadderScreen({ route, navigation }: any) {
         kind,
         pointsToWin: 4,
       });
-      Alert.alert(
+      alerta(
         `${label} creado`,
         `Quedaron ${enrolled} jugador(es) inscritos. Da check-in a quienes lleguen y genera la primera ronda desde la pestaña BRACKET.`
       );
       navigation.navigate('TournamentDetail', { tournamentId, leagueId, isOrganizer: true });
     } catch (e: any) {
-      Alert.alert('No se pudo crear', e.message ?? String(e));
+      alerta('No se pudo crear', e.message ?? String(e));
     } finally {
       setBusy(false);
     }
@@ -156,7 +157,7 @@ export default function LadderScreen({ route, navigation }: any) {
   // reglamento. La función está desde 0031 y no la llamaba ninguna pantalla.
   function toggleAttendance(row: Row) {
     const off = row.active;
-    Alert.alert(
+    alerta(
       off ? 'Marcar inasistencia' : 'Reactivar jugador',
       off
         ? `${row.display_name} deja de contar para esta temporada: no entra al torneo de ranking y al cerrar reingresa al último puesto de Porcelana.`
@@ -174,7 +175,7 @@ export default function LadderScreen({ route, navigation }: any) {
               p_active: !off,
             });
             setBusy(false);
-            if (error) return Alert.alert('No se pudo', error.message);
+            if (error) return alerta('No se pudo', error.message);
             load();
           },
         },
@@ -186,13 +187,13 @@ export default function LadderScreen({ route, navigation }: any) {
     setBusy(true);
     const { error } = await supabase.rpc('rebalance_divisions', { p_season_id: seasonId });
     setBusy(false);
-    if (error) return Alert.alert('Error', error.message);
-    Alert.alert('Listo', 'Las categorías que pasaban de cupo quedaron partidas en divisiones.');
+    if (error) return alerta('Error', error.message);
+    alerta('Listo', 'Las categorías que pasaban de cupo quedaron partidas en divisiones.');
     load();
   }
 
   function closeSeason(nextId: string, nextName: string) {
-    Alert.alert(
+    alerta(
       'Cerrar temporada',
       `Se cierra "${seasonName ?? 'esta temporada'}" y se siembra "${nextName}": cada quien conserva su categoría; se reinician posiciones, VP y marcadores. Quien llegó 1º suma un título (5 = Challenger). Los inactivos reingresan al final de Porcelana. ¿Seguro?`,
       [
@@ -207,7 +208,7 @@ export default function LadderScreen({ route, navigation }: any) {
               p_next_season_id: nextId,
             });
             setBusy(false);
-            if (error) return Alert.alert('No se pudo cerrar', error.message);
+            if (error) return alerta('No se pudo cerrar', error.message);
             setClosing(false);
             navigation.replace('Ladder', { seasonId: nextId, leagueId, seasonName: nextName });
           },

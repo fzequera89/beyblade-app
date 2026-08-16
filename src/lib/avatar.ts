@@ -1,5 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import { Alert } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { supabase } from './supabase';
 
 // Selección y subida de la foto de perfil. Vive aquí y no en una pantalla
@@ -8,7 +9,7 @@ import { supabase } from './supabase';
 export async function pickAvatarPhoto(): Promise<string | null> {
   const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
   if (!perm.granted) {
-    Alert.alert('Sin permiso', 'Necesitamos acceso a tus fotos para poner tu avatar.');
+    alerta('Sin permiso', 'Necesitamos acceso a tus fotos para poner tu avatar.');
     return null;
   }
   const res = await ImagePicker.launchImageLibraryAsync({
@@ -39,7 +40,7 @@ export async function uploadAvatar(userId: string, uri: string): Promise<string 
     // porque la ruta no cambió.
     return `${data.publicUrl}?v=${Date.now()}`;
   } catch (e: any) {
-    Alert.alert('No se pudo subir la foto', `${e.message ?? e}. Se usará tu avatar de la app.`);
+    alerta('No se pudo subir la foto', `${e.message ?? e}. Se usará tu avatar de la app.`);
     return null;
   }
 }

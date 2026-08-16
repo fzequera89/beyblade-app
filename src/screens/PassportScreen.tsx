@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -92,7 +93,7 @@ export default function PassportScreen({ route, navigation }: any) {
 
     if (error) {
       setLoading(false);
-      Alert.alert('Error', error.message);
+      alerta('Error', error.message);
       return;
     }
     setPlayer(playerRow as any);

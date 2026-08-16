@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { View, Text, FlatList, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import Screen from '../ui/Screen';
@@ -60,7 +61,7 @@ export default function EventsScreen({ navigation }: any) {
       .gte('starts_at', since)
       .order('starts_at', { ascending: true });
     setLoading(false);
-    if (error) return Alert.alert('Error', error.message);
+    if (error) return alerta('Error', error.message);
     setEvents((data as any) ?? []);
   }, []);
 

@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { View, Text, FlatList, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -41,7 +42,7 @@ export default function VenuesScreen({ navigation }: any) {
       supabase.from('check_ins').select('venue_id, player_id').gte('checked_in_at', since),
     ]);
     setLoading(false);
-    if (error) return Alert.alert('Error', error.message);
+    if (error) return alerta('Error', error.message);
 
     // Cuántos jugadores DISTINTOS hay en cada locación ahora. Un mismo jugador
     // que escaneó dos veces no cuenta como dos personas.

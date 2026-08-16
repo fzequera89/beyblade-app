@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import Screen from '../ui/Screen';
@@ -19,7 +20,7 @@ export default function CreateLeagueScreen({ navigation }: any) {
 
   async function create() {
     if (!name.trim()) {
-      Alert.alert('Falta el nombre de la liga');
+      alerta('Falta el nombre de la liga');
       return;
     }
     setLoading(true);
@@ -30,7 +31,7 @@ export default function CreateLeagueScreen({ navigation }: any) {
       .single();
     setLoading(false);
     if (error) {
-      Alert.alert('Error', error.message);
+      alerta('Error', error.message);
       return;
     }
     // La foto se sube DESPUÉS de crear porque la ruta lleva el id de la liga.

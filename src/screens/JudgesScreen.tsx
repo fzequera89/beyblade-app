@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -63,7 +64,7 @@ export default function JudgesScreen({ route, navigation }: any) {
     const { data: assigned, error: errAssigned } = await q.order('created_at');
     if (errAssigned) {
       // Callar el error fue justo lo que costó una sesión de QA.
-      Alert.alert('No se pudo leer el cuerpo de jueces', errAssigned.message);
+      alerta('No se pudo leer el cuerpo de jueces', errAssigned.message);
     }
     const list = ((assigned as any) ?? []) as Assignment[];
     setRows(list);
@@ -157,20 +158,20 @@ export default function JudgesScreen({ route, navigation }: any) {
       p_role: role,
     });
     setBusy(false);
-    if (error) return Alert.alert('No se pudo nombrar', error.message);
+    if (error) return alerta('No se pudo nombrar', error.message);
     setPicking(false);
     load();
   }
 
   async function remove(assignmentId: string, name?: string) {
-    Alert.alert('Quitar juez', `${name ?? 'Esta persona'} dejará de poder fallar aquí.`, [
+    alerta('Quitar juez', `${name ?? 'Esta persona'} dejará de poder fallar aquí.`, [
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Quitar',
         style: 'destructive',
         onPress: async () => {
           const { error } = await supabase.rpc('unassign_judge', { p_assignment_id: assignmentId });
-          if (error) return Alert.alert('Error', error.message);
+          if (error) return alerta('Error', error.message);
           load();
         },
       },

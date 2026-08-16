@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { View, Text, FlatList, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -46,7 +47,7 @@ export default function LeagueStandingsScreen({ route, navigation }: any) {
     ]);
     if (error) {
       setLoading(false);
-      return Alert.alert('Error', error.message);
+      return alerta('Error', error.message);
     }
     setLeagueName((league as any)?.name ?? '');
 
@@ -89,7 +90,7 @@ export default function LeagueStandingsScreen({ route, navigation }: any) {
       .update({ role: next })
       .eq('league_id', leagueId)
       .eq('player_id', target);
-    if (error) return Alert.alert('Error', error.message);
+    if (error) return alerta('Error', error.message);
     load();
   }
 

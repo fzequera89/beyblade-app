@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { View, Text, FlatList, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import Screen from '../ui/Screen';
@@ -43,7 +44,7 @@ export default function AdminGlobalRankingScreen({ navigation }: any) {
         .range(desde, hastaFila + 1);
       setLoading(false);
       if (error) {
-        Alert.alert('Error', error.message);
+        alerta('Error', error.message);
         return;
       }
       const filas = data ?? [];

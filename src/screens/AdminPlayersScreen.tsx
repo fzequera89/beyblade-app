@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
-import { View, Text, FlatList, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import Screen from '../ui/Screen';
@@ -50,7 +51,7 @@ export default function AdminPlayersScreen({ navigation }: any) {
       .order('display_name', { ascending: true });
     setLoading(false);
     if (error) {
-      Alert.alert('Error', error.message);
+      alerta('Error', error.message);
       return;
     }
     setPlayers(data ?? []);
@@ -64,7 +65,7 @@ export default function AdminPlayersScreen({ navigation }: any) {
 
   async function registerPlayer() {
     if (!name.trim()) {
-      Alert.alert('Falta el nombre');
+      alerta('Falta el nombre');
       return;
     }
     const { error } = await supabase.from('players').insert({
@@ -74,7 +75,7 @@ export default function AdminPlayersScreen({ navigation }: any) {
       auth_user_id: null,
     });
     if (error) {
-      Alert.alert('Error', error.message);
+      alerta('Error', error.message);
       return;
     }
     setName('');
@@ -89,7 +90,7 @@ export default function AdminPlayersScreen({ navigation }: any) {
     // Por RPC y no por update directo: la política de `players` solo deja
     // editar tu propia fila, así que un update aquí no afectaría nada.
     const { error } = await supabase.rpc('set_judge_role', { p_player_id: p.id, p_role: next });
-    if (error) return Alert.alert('No se pudo cambiar', error.message);
+    if (error) return alerta('No se pudo cambiar', error.message);
     load();
   }
 

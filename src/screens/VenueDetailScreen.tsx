@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { Text, View, Pressable, StyleSheet, Alert } from 'react-native';
+import { Text, View, Pressable, StyleSheet } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { useFocusEffect } from '@react-navigation/native';
 import QRCode from 'react-native-qrcode-svg';
 import { supabase } from '../lib/supabase';
@@ -68,7 +69,7 @@ export default function VenueDetailScreen({ route, navigation }: any) {
         .eq('role', 'organizer'),
     ]);
     setLoading(false);
-    if (error) return Alert.alert('Error', error.message);
+    if (error) return alerta('Error', error.message);
     setVenue(data as any);
     // Misma regla que para crear locaciones: admin o moderador de alguna liga.
     setCanEdit(isAdmin || (organizerCount ?? 0) > 0);
@@ -93,7 +94,7 @@ export default function VenueDetailScreen({ route, navigation }: any) {
     const url = await uploadVenuePhoto(venueId, uri);
     if (url) {
       const { error } = await supabase.from('venues').update({ photo_url: url }).eq('id', venueId);
-      if (error) Alert.alert('No se pudo guardar', error.message);
+      if (error) alerta('No se pudo guardar', error.message);
     }
     setUploading(false);
     load();

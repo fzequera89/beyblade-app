@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { View, Text, FlatList, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -28,7 +29,7 @@ export default function BadgesScreen({ navigation }: any) {
       supabase.from('player_badges').select('badge_id, earned_at').eq('player_id', playerId),
     ]);
     setLoading(false);
-    if (error) return Alert.alert('Error', error.message);
+    if (error) return alerta('Error', error.message);
 
     const earnedAt = new Map<string, string>();
     for (const row of ((mine as any[]) ?? [])) earnedAt.set(row.badge_id, row.earned_at);

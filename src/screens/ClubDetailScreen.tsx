@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -50,7 +51,7 @@ export default function ClubDetailScreen({ route, navigation }: any) {
         .eq('club_id', clubId),
     ]);
     setLoading(false);
-    if (error) return Alert.alert('Error', error.message);
+    if (error) return alerta('Error', error.message);
     setClub(data as any);
     // El roster se ordena por ELO: es el ranking interno del club.
     setMembers(
@@ -86,7 +87,7 @@ export default function ClubDetailScreen({ route, navigation }: any) {
 
   async function toggle() {
     if (isOwner) {
-      Alert.alert('Eres el fundador', 'Para salir tendrías que borrar el club o pasarlo a otra persona.');
+      alerta('Eres el fundador', 'Para salir tendrías que borrar el club o pasarlo a otra persona.');
       return;
     }
     setBusy(true);
@@ -94,7 +95,7 @@ export default function ClubDetailScreen({ route, navigation }: any) {
       ? await supabase.from('club_members').delete().eq('club_id', clubId).eq('player_id', playerId)
       : await supabase.from('club_members').insert({ club_id: clubId, player_id: playerId });
     setBusy(false);
-    if (error) return Alert.alert('Error', error.message);
+    if (error) return alerta('Error', error.message);
     load();
   }
 
@@ -106,14 +107,14 @@ export default function ClubDetailScreen({ route, navigation }: any) {
   }
 
   function remove() {
-    Alert.alert('Borrar club', `¿Seguro que quieres borrar "${club?.name}"?`, [
+    alerta('Borrar club', `¿Seguro que quieres borrar "${club?.name}"?`, [
       { text: 'No', style: 'cancel' },
       {
         text: 'Sí, borrar',
         style: 'destructive',
         onPress: async () => {
           const { error } = await supabase.from('clubs').delete().eq('id', clubId);
-          if (error) return Alert.alert('Error', error.message);
+          if (error) return alerta('Error', error.message);
           navigation.goBack();
         },
       },

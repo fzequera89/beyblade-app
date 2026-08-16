@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
-import { View, Text, FlatList, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -42,7 +43,7 @@ export default function TournamentsScreen({ route, navigation }: any) {
 
     if (error) {
       setLoading(false);
-      return Alert.alert('Error', error.message);
+      return alerta('Error', error.message);
     }
 
     const rows = ((data as any[]) ?? []).map((t) => ({

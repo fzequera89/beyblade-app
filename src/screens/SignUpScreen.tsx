@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { supabase } from '../lib/supabase';
 import Screen from '../ui/Screen';
 import Logo from '../ui/Logo';
@@ -35,12 +36,12 @@ export default function SignUpScreen({ navigation }: any) {
   async function signUp() {
     setTouched(true);
 
-    if (!username.trim()) return Alert.alert('Falta tu nombre', 'Elige el nombre con el que vas a competir.');
-    if (!email.trim()) return Alert.alert('Falta tu correo');
+    if (!username.trim()) return alerta('Falta tu nombre', 'Elige el nombre con el que vas a competir.');
+    if (!email.trim()) return alerta('Falta tu correo');
     const problem = passwordProblem(password);
-    if (problem) return Alert.alert('Contraseña insegura', problem);
-    if (password !== confirm) return Alert.alert('No coinciden', 'Las dos contraseñas deben ser iguales.');
-    if (!terms) return Alert.alert('Falta un paso', 'Tienes que aceptar los términos para crear tu cuenta.');
+    if (problem) return alerta('Contraseña insegura', problem);
+    if (password !== confirm) return alerta('No coinciden', 'Las dos contraseñas deben ser iguales.');
+    if (!terms) return alerta('Falta un paso', 'Tienes que aceptar los términos para crear tu cuenta.');
 
     setLoading(true);
     const { data, error } = await supabase.auth.signUp({
@@ -53,14 +54,14 @@ export default function SignUpScreen({ navigation }: any) {
     setLoading(false);
 
     if (error) {
-      Alert.alert('No pudimos crear tu cuenta', error.message);
+      alerta('No pudimos crear tu cuenta', error.message);
       return;
     }
 
     // Con sesión, la app entra sola al onboarding: RootNavigator detecta que
     // todavía no hay jugador y lleva a personalizar el perfil.
     if (!data.session) {
-      Alert.alert(
+      alerta(
         'Revisa tu correo',
         'Te mandamos un enlace para confirmar tu cuenta. Cuando lo abras, entra y terminamos tu perfil.'
       );

@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Text, View, Pressable, StyleSheet, Alert } from 'react-native';
+import { Text, View, Pressable, StyleSheet } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { supabase } from '../lib/supabase';
 import Screen from '../ui/Screen';
 import Button from '../ui/Button';
@@ -23,7 +24,7 @@ export default function CreateVenueScreen({ navigation }: any) {
 
   async function create() {
     if (!form.name.trim()) {
-      Alert.alert('Falta el nombre', 'Ponle el nombre del lugar.');
+      alerta('Falta el nombre', 'Ponle el nombre del lugar.');
       return;
     }
     setLoading(true);
@@ -40,7 +41,7 @@ export default function CreateVenueScreen({ navigation }: any) {
       .select('id')
       .single();
     setLoading(false);
-    if (error) return Alert.alert('No se pudo crear', error.message);
+    if (error) return alerta('No se pudo crear', error.message);
     navigation.replace('VenueDetail', { venueId: data.id });
   }
 

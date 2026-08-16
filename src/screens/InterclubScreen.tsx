@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { View, Text, FlatList, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -57,7 +58,7 @@ export default function InterclubScreen({ navigation }: any) {
         .maybeSingle(),
     ]);
     setLoading(false);
-    if (error) return Alert.alert('Error', error.message);
+    if (error) return alerta('Error', error.message);
     setRows(((data as any) ?? []) as Row[]);
     setPeriodLabel((period as any)?.label ?? null);
   }, []);
@@ -73,7 +74,7 @@ export default function InterclubScreen({ navigation }: any) {
   const rest = leader ? rows.slice(1) : rows;
 
   function confirmReset() {
-    Alert.alert(
+    alerta(
       'Reiniciar el interclubes',
       'Cierra el periodo actual y abre uno nuevo desde cero. El histórico del periodo que cierras se conserva. ¿Seguro?',
       [
@@ -85,7 +86,7 @@ export default function InterclubScreen({ navigation }: any) {
             setBusy(true);
             const { error } = await supabase.rpc('reset_interclub_ranking', { p_label: null });
             setBusy(false);
-            if (error) return Alert.alert('No se pudo reiniciar', error.message);
+            if (error) return alerta('No se pudo reiniciar', error.message);
             load();
           },
         },

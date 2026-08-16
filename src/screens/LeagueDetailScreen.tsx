@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -109,7 +110,7 @@ export default function LeagueDetailScreen({ route, navigation }: any) {
     const url = await uploadCover('league', leagueId, uri);
     if (url) {
       const { error } = await supabase.from('leagues').update({ photo_url: url }).eq('id', leagueId);
-      if (error) Alert.alert('No se pudo guardar', error.message);
+      if (error) alerta('No se pudo guardar', error.message);
     }
     setUploading(false);
     load();
@@ -119,14 +120,14 @@ export default function LeagueDetailScreen({ route, navigation }: any) {
     const { error } = await supabase
       .from('league_members')
       .insert({ league_id: leagueId, player_id: playerId, role: 'member' });
-    if (error) return Alert.alert('Error', error.message);
+    if (error) return alerta('Error', error.message);
     load();
   }
 
   async function createSeason() {
     if (!newSeason.trim()) return;
     const { error } = await supabase.from('seasons').insert({ league_id: leagueId, name: newSeason.trim() });
-    if (error) return Alert.alert('Error', error.message);
+    if (error) return alerta('Error', error.message);
     setNewSeason('');
     setCreating(false);
     load();

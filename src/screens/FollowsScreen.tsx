@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { View, Text, FlatList, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -41,7 +42,7 @@ export default function FollowsScreen({ navigation }: any) {
     ]);
     setLoading(false);
     if (error) {
-      Alert.alert('Error', error.message);
+      alerta('Error', error.message);
       return;
     }
     setFollowing(((out as any[]) ?? []).map((r) => r.followee).filter(Boolean));

@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import Screen from '../ui/Screen';
@@ -51,7 +52,7 @@ export default function DeckScreen({ route, navigation }: any) {
       setDeck(card);
       setPicked(card ? card.combos.map((c) => c.combo.id) : []);
     } catch (e: any) {
-      Alert.alert('Error', e.message ?? String(e));
+      alerta('Error', e.message ?? String(e));
     } finally {
       setLoading(false);
     }
@@ -73,7 +74,7 @@ export default function DeckScreen({ route, navigation }: any) {
     setPicked((prev) => {
       if (prev.includes(combo.id)) return prev.filter((id) => id !== combo.id);
       if (prev.length >= maxPicks) {
-        Alert.alert(
+        alerta(
           'Deck completo',
           `La deck card lleva ${size} principales y un extra. Quita uno para cambiarlo.`
         );
@@ -87,10 +88,10 @@ export default function DeckScreen({ route, navigation }: any) {
     setBusy(true);
     try {
       await saveDeckCard(tournamentId, picked);
-      Alert.alert('Deck registrado', 'Queda guardado. La organización lo bloquea al cerrar el registro.');
+      alerta('Deck registrado', 'Queda guardado. La organización lo bloquea al cerrar el registro.');
       load();
     } catch (e: any) {
-      Alert.alert('No se pudo guardar', e.message ?? String(e));
+      alerta('No se pudo guardar', e.message ?? String(e));
     } finally {
       setBusy(false);
     }

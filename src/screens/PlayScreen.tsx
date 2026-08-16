@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Alert, FlatList } from 'react-native';
+import { View, Text, Pressable, StyleSheet, FlatList } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -123,7 +124,7 @@ export default function PlayScreen({ navigation }: any) {
       expires_at: expires.toISOString(),
     });
     setBusy(false);
-    if (error) return Alert.alert('Error', error.message);
+    if (error) return alerta('Error', error.message);
     load();
   }
 
@@ -138,8 +139,8 @@ export default function PlayScreen({ navigation }: any) {
     const { error } = await supabase
       .from('challenges')
       .insert({ challenger_id: playerId, challenged_id: targetId });
-    if (error) return Alert.alert('Error', error.message);
-    Alert.alert('Reto enviado', `${name} tiene que aceptarlo para crear la batalla.`);
+    if (error) return alerta('Error', error.message);
+    alerta('Reto enviado', `${name} tiene que aceptarlo para crear la batalla.`);
   }
 
   const delta = RANGES.find((r) => r.key === range)?.delta ?? null;

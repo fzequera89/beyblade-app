@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { loadDeckCard } from '../lib/decks';
@@ -115,7 +116,7 @@ export default function MatchDetailScreen({ route, navigation }: any) {
       .single();
     if (error) {
       setLoading(false);
-      Alert.alert('Error', error.message);
+      alerta('Error', error.message);
       return;
     }
     setMatch(data as any);
@@ -230,7 +231,7 @@ export default function MatchDetailScreen({ route, navigation }: any) {
       p_combo_id: pickedCombo,
     });
     setBusy(false);
-    if (error) return Alert.alert('No se pudo registrar', error.message);
+    if (error) return alerta('No se pudo registrar', error.message);
     setRounds([]);
     setPickedCombo(null);
     load();
@@ -242,9 +243,9 @@ export default function MatchDetailScreen({ route, navigation }: any) {
     setBusy(true);
     const { error } = await supabase.rpc('accept_reported_result', { p_match_id: matchId });
     setBusy(false);
-    if (error) return Alert.alert('Error', error.message);
+    if (error) return alerta('Error', error.message);
     setClash(null);
-    Alert.alert('Listo', 'Quedó registrado que están de acuerdo. Falta que un juez lo apruebe.');
+    alerta('Listo', 'Quedó registrado que están de acuerdo. Falta que un juez lo apruebe.');
     load();
   }
 
@@ -254,8 +255,8 @@ export default function MatchDetailScreen({ route, navigation }: any) {
     setBusy(true);
     const { error } = await supabase.rpc('approve_match_result', { p_match_id: matchId });
     setBusy(false);
-    if (error) return Alert.alert('No se pudo aprobar', error.message);
-    Alert.alert('Aprobado', 'El resultado quedó firme y el ELO ya se aplicó.');
+    if (error) return alerta('No se pudo aprobar', error.message);
+    alerta('Aprobado', 'El resultado quedó firme y el ELO ya se aplicó.');
     load();
   }
 
@@ -271,11 +272,11 @@ export default function MatchDetailScreen({ route, navigation }: any) {
       p_score_b: Number(markB) || 0,
     });
     setBusy(false);
-    if (error) return Alert.alert('No se pudo registrar', error.message);
+    if (error) return alerta('No se pudo registrar', error.message);
 
     const r = data as any;
     if (r?.agreed) {
-      Alert.alert('Coinciden', 'Los dos marcaron lo mismo. El combate quedó cerrado.');
+      alerta('Coinciden', 'Los dos marcaron lo mismo. El combate quedó cerrado.');
       setClash(null);
     } else {
       // Recién ahora se revela lo que puso el rival.
@@ -295,7 +296,7 @@ export default function MatchDetailScreen({ route, navigation }: any) {
       p_reason: disputeNote || null,
     });
     setBusy(false);
-    if (error) return Alert.alert('Error', error.message);
+    if (error) return alerta('Error', error.message);
     setClash(null);
     setDisputeNote('');
     load();
@@ -308,7 +309,7 @@ export default function MatchDetailScreen({ route, navigation }: any) {
       .update({ status: 'pending', score_a: 0, score_b: 0, winner_id: null, reported_by: null, reported_at: null })
       .eq('id', matchId);
     setBusy(false);
-    if (error) return Alert.alert('Error', error.message);
+    if (error) return alerta('Error', error.message);
     load();
   }
 
@@ -325,10 +326,10 @@ export default function MatchDetailScreen({ route, navigation }: any) {
       p_reason: reason,
     });
     setBusy(false);
-    if (error) return Alert.alert('No se pudo resolver', error.message);
+    if (error) return alerta('No se pudo resolver', error.message);
     setPanel('none');
     setReason('');
-    Alert.alert('Resuelto', 'El resultado quedó firme y el ELO ya se aplicó.');
+    alerta('Resuelto', 'El resultado quedó firme y el ELO ya se aplicó.');
     load();
   }
 
@@ -342,10 +343,10 @@ export default function MatchDetailScreen({ route, navigation }: any) {
       p_notes: penaltyNote || null,
     });
     setBusy(false);
-    if (error) return Alert.alert('No se pudo registrar', error.message);
+    if (error) return alerta('No se pudo registrar', error.message);
 
     const r = data as any;
-    Alert.alert(
+    alerta(
       'Infracción registrada',
       r?.forfeited_match
         ? 'El infractor pierde el combate. El resultado quedó cerrado.'

@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { pickAvatarPhoto, uploadAvatar } from '../lib/avatar';
@@ -79,8 +80,8 @@ export default function EditProfileScreen({ navigation }: any) {
   }
 
   async function save() {
-    if (!form.name.trim()) return Alert.alert('Falta tu nombre', 'No puedes quedarte sin nombre de blader.');
-    if (!form.city.trim()) return Alert.alert('Falta tu ciudad', 'La usamos para encontrarte rivales cerca.');
+    if (!form.name.trim()) return alerta('Falta tu nombre', 'No puedes quedarte sin nombre de blader.');
+    if (!form.city.trim()) return alerta('Falta tu ciudad', 'La usamos para encontrarte rivales cerca.');
 
     setSaving(true);
     // Solo se sube si eligió una foto nueva en esta sesión de edición.
@@ -104,7 +105,7 @@ export default function EditProfileScreen({ navigation }: any) {
     setSaving(false);
 
     if (error) {
-      Alert.alert('No se pudo guardar', error.message);
+      alerta('No se pudo guardar', error.message);
       return;
     }
     navigation.goBack();

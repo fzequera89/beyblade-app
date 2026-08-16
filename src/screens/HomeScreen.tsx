@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, Pressable, StyleSheet, ScrollView } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -119,13 +120,13 @@ export default function HomeScreen({ navigation }: any) {
   async function respond(challengeId: string, accept: boolean) {
     if (accept) {
       const { data, error } = await supabase.rpc('accept_challenge', { p_challenge_id: challengeId });
-      if (error) return Alert.alert('Error', error.message);
+      if (error) return alerta('Error', error.message);
       load();
       navigation.navigate('MatchDetail', { matchId: data });
       return;
     }
     const { error } = await supabase.from('challenges').update({ status: 'declined' }).eq('id', challengeId);
-    if (error) return Alert.alert('Error', error.message);
+    if (error) return alerta('Error', error.message);
     load();
   }
 

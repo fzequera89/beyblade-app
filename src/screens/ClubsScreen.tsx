@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { View, Text, FlatList, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -36,7 +37,7 @@ export default function ClubsScreen({ navigation }: any) {
       supabase.from('club_members').select('club_id').eq('player_id', playerId),
     ]);
     setLoading(false);
-    if (error) return Alert.alert('Error', error.message);
+    if (error) return alerta('Error', error.message);
 
     const ids = ((mine as any[]) ?? []).map((m) => m.club_id);
     setMyClubIds(ids);
@@ -60,7 +61,7 @@ export default function ClubsScreen({ navigation }: any) {
 
   async function create() {
     const name = form.name.trim();
-    if (!name) return Alert.alert('Falta el nombre', 'Ponle nombre al club.');
+    if (!name) return alerta('Falta el nombre', 'Ponle nombre al club.');
 
     setBusy(true);
     const { error } = await supabase.from('clubs').insert({
@@ -70,7 +71,7 @@ export default function ClubsScreen({ navigation }: any) {
       owner_player_id: playerId,
     });
     setBusy(false);
-    if (error) return Alert.alert('No se pudo fundar', error.message);
+    if (error) return alerta('No se pudo fundar', error.message);
     setForm({ name: '', city: '', description: '' });
     setCreating(false);
     load();

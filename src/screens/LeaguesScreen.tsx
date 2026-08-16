@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { View, Text, FlatList, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -36,7 +37,7 @@ export default function LeaguesScreen({ navigation }: any) {
       supabase.from('league_members').select('league_id, role').eq('player_id', playerId),
     ]);
     setLoading(false);
-    if (error) return Alert.alert('Error', error.message);
+    if (error) return alerta('Error', error.message);
 
     const roleByLeague = new Map((memberships ?? []).map((m: any) => [m.league_id, m.role]));
 
@@ -97,7 +98,7 @@ export default function LeaguesScreen({ navigation }: any) {
     const { error } = await supabase
       .from('league_members')
       .insert({ league_id: leagueId, player_id: playerId, role: 'member' });
-    if (error) return Alert.alert('Error', error.message);
+    if (error) return alerta('Error', error.message);
     load();
   }
 

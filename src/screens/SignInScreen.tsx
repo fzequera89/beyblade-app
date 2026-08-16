@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { alerta } from '../ui/alerta';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import { supabase } from '../lib/supabase';
@@ -19,13 +20,13 @@ export default function SignInScreen({ navigation }: any) {
 
   async function signIn() {
     if (!email.trim() || !password) {
-      Alert.alert('Faltan datos', 'Escribe tu correo y tu contraseña.');
+      alerta('Faltan datos', 'Escribe tu correo y tu contraseña.');
       return;
     }
     setLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
     setLoading(false);
-    if (error) Alert.alert('No pudimos entrar', error.message);
+    if (error) alerta('No pudimos entrar', error.message);
   }
 
   async function signInWithGoogle() {
@@ -42,14 +43,14 @@ export default function SignInScreen({ navigation }: any) {
         await supabase.auth.exchangeCodeForSession(result.url);
       }
     } catch (e: any) {
-      Alert.alert('Error', e.message ?? 'No se pudo iniciar sesión con Google');
+      alerta('Error', e.message ?? 'No se pudo iniciar sesión con Google');
     } finally {
       setLoading(false);
     }
   }
 
   function forgot() {
-    Alert.alert(
+    alerta(
       'Recuperar contraseña',
       'Escribe tu correo arriba y te mandamos el enlace para restablecerla.',
       [
@@ -58,11 +59,11 @@ export default function SignInScreen({ navigation }: any) {
           text: 'Enviar',
           onPress: async () => {
             if (!email.trim()) {
-              Alert.alert('Falta tu correo', 'Escríbelo arriba primero.');
+              alerta('Falta tu correo', 'Escríbelo arriba primero.');
               return;
             }
             const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
-            Alert.alert(
+            alerta(
               error ? 'Error' : 'Revisa tu correo',
               error ? error.message : 'Te mandamos el enlace para restablecer tu contraseña.'
             );

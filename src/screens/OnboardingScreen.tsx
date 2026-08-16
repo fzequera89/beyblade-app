@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { supabase } from '../lib/supabase';
 import { pickAvatarPhoto, uploadAvatar } from '../lib/avatar';
 import { useAuth } from '../context/AuthContext';
@@ -109,11 +110,11 @@ export default function OnboardingScreen() {
   }
 
   function nextFromProfile() {
-    if (!name.trim()) return Alert.alert('Falta tu nombre', 'Elige el nombre con el que vas a competir.');
-    if (!city.trim()) return Alert.alert('Falta tu ciudad', 'La usamos para encontrarte rivales cerca.');
+    if (!name.trim()) return alerta('Falta tu nombre', 'Elige el nombre con el que vas a competir.');
+    if (!city.trim()) return alerta('Falta tu ciudad', 'La usamos para encontrarte rivales cerca.');
     if (birth.trim() && !parseBirth(birth))
-      return Alert.alert('Fecha inválida', 'Usa el formato DD/MM/AAAA.');
-    if (!experience) return Alert.alert('Falta un dato', 'Dinos tu nivel de experiencia.');
+      return alerta('Fecha inválida', 'Usa el formato DD/MM/AAAA.');
+    if (!experience) return alerta('Falta un dato', 'Dinos tu nivel de experiencia.');
     setStep(2);
   }
 
@@ -138,7 +139,7 @@ export default function OnboardingScreen() {
     setSaving(false);
 
     if (error) {
-      Alert.alert('No pudimos guardar tu perfil', error.message);
+      alerta('No pudimos guardar tu perfil', error.message);
       return;
     }
     await refreshPlayer();

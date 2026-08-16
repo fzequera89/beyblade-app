@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { View, Text, FlatList, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -75,10 +76,10 @@ export default function ChallengesScreen({ navigation }: any) {
     const { data, error } = await supabase.rpc('accept_challenge', { p_challenge_id: challengeId });
     setBusy(false);
     if (error) {
-      Alert.alert('Error', error.message);
+      alerta('Error', error.message);
       return;
     }
-    Alert.alert('Reto aceptado', 'Ya pueden jugar. Cuando terminen, reporten el resultado.', [
+    alerta('Reto aceptado', 'Ya pueden jugar. Cuando terminen, reporten el resultado.', [
       { text: 'Ver match', onPress: () => navigation.navigate('MatchDetail', { matchId: data }) },
       { text: 'OK' },
     ]);
@@ -90,7 +91,7 @@ export default function ChallengesScreen({ navigation }: any) {
     const { error } = await supabase.from('challenges').update({ status: 'declined' }).eq('id', challengeId);
     setBusy(false);
     if (error) {
-      Alert.alert('Error', error.message);
+      alerta('Error', error.message);
       return;
     }
     load();
@@ -101,7 +102,7 @@ export default function ChallengesScreen({ navigation }: any) {
     const { error } = await supabase.from('challenges').update({ status: 'cancelled' }).eq('id', challengeId);
     setBusy(false);
     if (error) {
-      Alert.alert('Error', error.message);
+      alerta('Error', error.message);
       return;
     }
     load();

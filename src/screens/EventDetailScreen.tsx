@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -62,7 +63,7 @@ export default function EventDetailScreen({ route, navigation }: any) {
         .eq('event_id', eventId),
     ]);
     setLoading(false);
-    if (error) return Alert.alert('Error', error.message);
+    if (error) return alerta('Error', error.message);
     setEvent(data as any);
     setAttendees((rsvps as any) ?? []);
   }, [eventId]);
@@ -94,7 +95,7 @@ export default function EventDetailScreen({ route, navigation }: any) {
       ? await supabase.from('event_rsvps').delete().eq('event_id', eventId).eq('player_id', playerId)
       : await supabase.from('event_rsvps').insert({ event_id: eventId, player_id: playerId });
     setBusy(false);
-    if (error) return Alert.alert('Error', error.message);
+    if (error) return alerta('Error', error.message);
     load();
   }
 
@@ -106,14 +107,14 @@ export default function EventDetailScreen({ route, navigation }: any) {
   }
 
   function remove() {
-    Alert.alert('Cancelar evento', '¿Seguro que quieres borrarlo? Los asistentes lo perderán de su lista.', [
+    alerta('Cancelar evento', '¿Seguro que quieres borrarlo? Los asistentes lo perderán de su lista.', [
       { text: 'No', style: 'cancel' },
       {
         text: 'Sí, borrar',
         style: 'destructive',
         onPress: async () => {
           const { error } = await supabase.from('events').delete().eq('id', eventId);
-          if (error) return Alert.alert('Error', error.message);
+          if (error) return alerta('Error', error.message);
           navigation.goBack();
         },
       },

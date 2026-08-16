@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { View, Text, FlatList, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
+import { alerta } from '../ui/alerta';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -42,7 +43,7 @@ export default function CombosScreen({ navigation }: any) {
         .or(`player_a_id.eq.${playerId},player_b_id.eq.${playerId}`),
     ]);
     setLoading(false);
-    if (error) return Alert.alert('Error', error.message);
+    if (error) return alerta('Error', error.message);
 
     setCombos((data as any) ?? []);
 
@@ -84,7 +85,7 @@ export default function CombosScreen({ navigation }: any) {
 
   async function save() {
     const name = form.name.trim();
-    if (!name) return Alert.alert('Falta el nombre', 'Ponle un nombre para reconocerlo después.');
+    if (!name) return alerta('Falta el nombre', 'Ponle un nombre para reconocerlo después.');
 
     const parts = {
       blade: form.blade.trim() || null,
@@ -96,13 +97,13 @@ export default function CombosScreen({ navigation }: any) {
       ? await supabase.from('combos').update({ name, parts }).eq('id', editingId)
       : await supabase.from('combos').insert({ player_id: playerId, name, parts });
     setBusy(false);
-    if (error) return Alert.alert('Error', error.message);
+    if (error) return alerta('Error', error.message);
     cancelEdit();
     load();
   }
 
   function remove(combo: Combo) {
-    Alert.alert('Borrar deck', `¿Borrar "${combo.name}"?`, [
+    alerta('Borrar deck', `¿Borrar "${combo.name}"?`, [
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Borrar',
@@ -111,7 +112,7 @@ export default function CombosScreen({ navigation }: any) {
           const { error } = await supabase.from('combos').delete().eq('id', combo.id);
           if (error) {
             // La FK protege el historial: un combo usado en una batalla no se borra.
-            Alert.alert('No se puede borrar', 'Este deck ya se usó en una batalla registrada.');
+            alerta('No se puede borrar', 'Este deck ya se usó en una batalla registrada.');
             return;
           }
           load();

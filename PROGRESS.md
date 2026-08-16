@@ -432,6 +432,58 @@ correo escrito en otras mayúsculas, a propósito— el perfil nació con
 en `admin_emails` y correr `select apply_admin_emails();` desde el SQL Editor. Ni
 migración ni build.
 
+### 🔔 0046 — notificaciones push (2026-08-15)
+
+**Construidas y con la tubería probada hasta Expo; falta el último salto, que
+necesita un build real y la credencial de FCM.**
+
+Tres piezas, y solo una es "la notificación":
+
+1. `push_tokens` — dónde avisar. Un jugador puede tener varios aparatos. Cada
+   quien **solo ve los suyos**: la lista de tokens ajenos es justo lo que haría
+   falta para mandarle notificaciones a otro por fuera de la app.
+2. `push_outbox` — qué avisar. Se escribe **dentro de la transacción** del hecho
+   que lo provoca: si el combate no se guarda, el aviso no existe.
+3. La entrega — `pg_net` llamando a la API de Expo, en **un solo POST por lote**
+   (una ronda de 16 combates son 32 avisos, no 32 peticiones).
+
+**Por qué no una Edge Function:** habría que desplegarla y mantenerla aparte,
+con su propio juego de secretos, para hacer un POST. Todo el proyecto ya vive en
+funciones SQL.
+
+**Por qué triggers y no editar las funciones de negocio:** `apply_match_
+confirmation` tiene 150 líneas y ya se reescribió cuatro veces. Avisar es un
+efecto de que algo pasó, no parte de que pase.
+
+**Los cuatro avisos**, elegidos porque **destraban algo detenido** y no porque
+sean interesantes — una app que avisa de todo se silencia entera: te toca marcar
+(tu rival ya reportó), resultado aprobado, tienes combate en la ronda nueva, y te
+retaron.
+
+**La pantalla de destino la manda el servidor** en `push_outbox.data`, así que
+agregar un aviso nuevo no obliga a publicar una versión de la app.
+
+**En el cliente todo está protegido por plataforma**, con import dinámico: en el
+preview web —donde se hace todo el QA de este proyecto— esto no existe y no
+rompe nada. Tampoco funciona en Expo Go desde SDK 53.
+
+**Verificado:** se encoló un aviso con un token inventado y Expo contestó **200**
+con `DeviceNotRegistered` nombrando ese token — o sea que el viaje
+Postgres → `pg_net` → Expo funciona entero. El preview web sigue compilando y
+montando sin errores con la dependencia nativa instalada. Datos de prueba
+borrados.
+
+**Lo que falta para que suene un teléfono:**
+1. Subir la clave de cuenta de servicio de FCM a EAS (`npx eas-cli credentials`).
+   Sin eso Android no entrega. **Es del cliente, no del código.**
+2. Un build real (`preview` o `development`).
+3. iOS espera a la cuenta de Apple: las push de iPhone se firman con ella.
+
+**Pendiente conocido:** cuando Expo responde `DeviceNotRegistered`, ese token
+está muerto y habría que borrarlo. Hoy la respuesta se guarda en
+`net._http_response` pero nadie la lee. No urge —un token muerto solo desperdicia
+un renglón del lote— pero es el siguiente paso natural.
+
 ### Reglamento extraído (referencia, para no releer el .docx)
 
 Investigado el 2026-08-14 leyendo `Reglamento DML Beyblade actualizado pro.docx` (secciones II–V). Reglas textuales para arrancar sin releer el .docx:
@@ -874,7 +926,7 @@ acumulándose de combates de verdad sigue sin probarse punta a punta.
 
 1. `git clone` / `git pull` del repo.
 2. Copiar `.env.example` a `.env` y llenar `EXPO_PUBLIC_SUPABASE_URL` y `EXPO_PUBLIC_SUPABASE_ANON_KEY` (Supabase → Settings → API del proyecto "CML Beyblade").
-3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-15 las 0001–0045 están corridas y verificadas contra la base** (0036 = portadas de eventos y clubes; 0037 = tabla local por victorias + escala VP 5/4/3/2/1; 0038 = Ranking Unificado Interclubes) — si se agrega una nueva, actualizar esta línea.
+3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-15 las 0001–0046 están corridas y verificadas contra la base** (0036 = portadas de eventos y clubes; 0037 = tabla local por victorias + escala VP 5/4/3/2/1; 0038 = Ranking Unificado Interclubes) — si se agrega una nueva, actualizar esta línea.
 4. `npm install`, luego `npm run web` para verificar rápido en el preview del navegador (no requiere emulador Android).
 5. Para un build real: `npx eas-cli build --platform android --profile preview --non-interactive` (requiere `eas login` ya hecho en la máquina).
 
@@ -914,7 +966,7 @@ Es la única línea del roadmap que queda, y buena parte **no la puede cerrar un
 **Pulido pendiente:**
 - Fecha/hora de eventos como texto (decisión 9) — cambiar a date picker exige dev client.
 - ~~Avatar de perfil~~ ✅ hecho: `EditProfileScreen` sube foto a Storage y guarda `players.avatar_url`.
-- Sin notificaciones push todavía (estaban en el stack acordado: FCM/Expo Push).
+- **Notificaciones push: construidas (0046), sin probar en aparato real.** Ver la sección de la 0046.
 - Sin paginación en listas: hoy todo carga completo. A escala de liga regional aguanta; con miles de matches habría que paginar.
 
 **Publicación (requiere al cliente, no al desarrollador):**

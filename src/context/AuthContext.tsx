@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { registerForPush } from '../lib/push';
 
 type AuthContextValue = {
   session: Session | null;
@@ -59,6 +60,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsAdmin(false);
     }
   }, [session]);
+
+  // El aparato se registra para push cuando ya sabemos QUIÉN es: el token se
+  // guarda contra el jugador, no contra la sesión. En web y en Expo Go esto no
+  // hace nada — está protegido por plataforma dentro de `registerForPush`.
+  useEffect(() => {
+    if (playerId) registerForPush(playerId);
+  }, [playerId]);
 
   return (
     <AuthContext.Provider value={{ session, hasPlayer, playerId, isAdmin, loading, refreshPlayer }}>

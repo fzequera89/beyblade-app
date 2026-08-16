@@ -434,8 +434,8 @@ migración ni build.
 
 ### 🔔 0046 — notificaciones push (2026-08-15)
 
-**Construidas y con la tubería probada hasta Expo; falta el último salto, que
-necesita un build real y la credencial de FCM.**
+**✅ FUNCIONANDO EN APARATO REAL (2026-08-16).** Probado punta a punta en un
+teléfono Android: la notificación llega a la pantalla bloqueada.
 
 Tres piezas, y solo una es "la notificación":
 
@@ -473,11 +473,50 @@ Postgres → `pg_net` → Expo funciona entero. El preview web sigue compilando 
 montando sin errores con la dependencia nativa instalada. Datos de prueba
 borrados.
 
-**Lo que falta para que suene un teléfono:**
-1. Subir la clave de cuenta de servicio de FCM a EAS (`npx eas-cli credentials`).
-   Sin eso Android no entrega. **Es del cliente, no del código.**
-2. Un build real (`preview` o `development`).
-3. iOS espera a la cuenta de Apple: las push de iPhone se firman con ella.
+**Las dos piezas de Firebase, que NO son la misma y hacen falta las dos** — se
+descubrió a golpes, con tres builds:
+
+| Pieza | Dónde va | Para qué |
+|---|---|---|
+| Clave de cuenta de servicio (`*firebase-adminsdk*.json`) | subida a **EAS** | que **Expo pueda mandar** a FCM |
+| `google-services.json` | **en el repo**, `android.googleServicesFile` | que **el teléfono pueda registrarse** con Firebase |
+
+`google-services.json` **se commitea y no es contradicción**: no es credencial,
+es configuración de cliente. Va dentro de cada APK publicado, así que cualquiera
+con la app puede leerlo — esconderlo del repo no esconde nada y sí rompe el
+build, porque EAS sube el proyecto por git y los archivos ignorados no viajan. La
+clave de cuenta de servicio sigue ignorada: esa sí es una llave privada.
+
+**Los tres tropiezos, porque volverán a aparecer:**
+
+1. **Salida muda.** `if (!Device.isDevice) return;` se salía sin pedir permiso,
+   sin token y sin error. Con import dinámico, Metro puede entregar el módulo
+   envuelto en `default`, así que `Device.isDevice` llegaba `undefined` — y
+   `!undefined` es verdadero. Ahora los imports leen el módulo directo o su
+   `default`, y la comprobación de emulador exige un `false` explícito:
+   equivocarse hacia el emulador enseña un diálogo que nadie ve; hacia el otro
+   lado deja al jugador sin notificaciones y sin explicación.
+2. **`getExpoPushTokenAsync` sin `projectId`.** En un APK no hay servidor de
+   desarrollo que llene `Constants.expoConfig`. Se pasa explícito.
+3. **Instalar encima de la versión vieja.** La sesión seguía abierta, el registro
+   no se reintentaba y parecía que nada pasaba. **Al probar push, desinstalar
+   primero.**
+
+**El diagnóstico visible fue lo que destrabó todo.** El `try/catch` que evita que
+un fallo de push rompa la app también borraba el rastro del error. Ahora cada
+salida deja dicho dónde se quedó y **se lee al pie del perfil**: fue esa línea la
+que nombró el problema de `google-services.json` en vez de hacernos adivinar. Un
+fallo de push es invisible por naturaleza — no llega algo que nadie estaba
+mirando.
+
+**Verificado en el teléfono (2026-08-16):** token registrado en `push_tokens`;
+aviso encolado a mano → Expo `"status":"ok"` → llegó; y **un reto insertado en la
+base disparó el trigger solo**, armó el texto con el nombre del retador y llegó
+como "Te retaron". Los otros tres avisos cuelgan de la misma mecánica sobre
+`matches`. Datos de prueba borrados.
+
+**Falta:** iOS espera a la cuenta de Apple, porque las push de iPhone se firman
+con ella.
 
 **Pendiente conocido:** cuando Expo responde `DeviceNotRegistered`, ese token
 está muerto y habría que borrarlo. Hoy la respuesta se guarda en

@@ -67,7 +67,7 @@ Lo que quedó:
 
 **Panel de organizador (1.5):** check-in masivo, ranking/reporte por liga.
 
-**Rol de administrador de plataforma** (agregado fuera del roadmap original, a petición del cliente): columna `players.is_admin`. Solo el admin crea ligas y nombra/quita moderadores de liga (antes cualquiera podía crear ligas). **Desde 0045 la bandera se DERIVA de una lista de correos** (`admin_emails`): hoy `fzequera89@gmail.com` y `dmlbeybladereynosa@gmail.com`. Panel de administrador: stats globales, gestión de jugadores (incluye registrar jugadores manualmente sin cuenta, útil para gente sin la app todavía), ranking global.
+**Rol de administrador de plataforma** (agregado fuera del roadmap original, a petición del cliente): columna `players.is_admin`. Solo el admin crea ligas y nombra/quita moderadores de liga (antes cualquiera podía crear ligas). **Desde 0045 la bandera se DERIVA de una lista de correos** (`admin_emails`): hoy `farid.zeqvil89@gmail.com` y `dmlbeybladereynosa@gmail.com`. Panel de administrador: stats globales, gestión de jugadores (incluye registrar jugadores manualmente sin cuenta, útil para gente sin la app todavía), ranking global.
 
 **Venues y check-in físico (2.1, 2.2, 2.3):** alta de venues, QR de check-in (generar con `react-native-qrcode-svg`, escanear con `expo-camera` — **requiere build real, no se prueba en el preview web**), "Who's Playing Here" (check-ins de las últimas 4 horas por venue).
 
@@ -399,40 +399,6 @@ de opinión dejaría dos votos vivos), y se puede cambiar hasta el cierre.
 - La votación: propuesta, cambio de voto (queda **un** voto), cierre prematuro
   que no hace nada, cierre pasada la fecha que fija la ganadora, y segunda
   llamada que devuelve lo mismo.
-
-### ✅ 0045 — el administrador se define por correo, no por bandera a mano (2026-08-15)
-
-Decisión del cliente: los administradores son **`fzequera89@gmail.com`** (cuenta
-del desarrollo, dueña del proyecto Supabase) y **`dmlbeybladereynosa@gmail.com`**
-(cuenta oficial de la liga). La cuenta de pruebas `farid.zeqvil89@gmail.com`
-**dejó de ser administradora**.
-
-**Por qué no fue un simple UPDATE:** la cuenta del cliente **todavía no existe**
-en `auth.users`. No se le puede poner una bandera a una fila que no existe, y por
-eso la 0032 había quedado como "volver a correrla cuando se registre" — o sea,
-dependiendo de que alguien se acuerde. Se invirtió: **la lista de correos es el
-dato y la bandera se deriva**.
-
-- `admin_emails` — la lista. Sin políticas de RLS, ni de lectura: la app nunca la
-  consulta, solo lee `players.is_admin` como siempre. Se administra desde el
-  panel de Supabase, igual que los otros catálogos.
-- `apply_admin_emails()` — sincroniza la bandera con la lista. **Otorga y quita**,
-  porque la lista es la verdad. **No se le otorga EXECUTE a `authenticated` a
-  propósito**: es la única función del esquema que reparte permisos, y expuesta
-  con la anon key sería una escalada de privilegios esperando un hueco. Se corre
-  desde el panel o con la service key.
-- Trigger `players_grant_admin_if_listed` — el día que el cliente cree su cuenta,
-  su perfil **nace con la bandera puesta**, sin que nadie corra nada. Solo otorga;
-  quitar es deliberado y pasa por la función.
-
-**Verificado contra la base:** al aplicarla cambiaron 2 filas (una alta, una
-baja) y hoy el único admin es `fzequera89@gmail.com`; y simulando el registro del
-cliente dentro de una transacción con rollback —con el correo escrito en otras
-mayúsculas, a propósito— el perfil nació con `is_admin = true`.
-
-**Para agregar o quitar un administrador de aquí en adelante:** insertar o borrar
-en `admin_emails` y correr `select apply_admin_emails();` desde el SQL Editor. No
-hace falta migración ni build.
 
 ### ✅ 0045 — el administrador se define por correo, no por bandera a mano (2026-08-15)
 

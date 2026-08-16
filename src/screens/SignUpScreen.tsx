@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { alerta } from '../ui/alerta';
 import { supabase } from '../lib/supabase';
+import { entrarConGoogle } from '../lib/googleAuth';
 import Screen from '../ui/Screen';
 import Logo from '../ui/Logo';
 import Button from '../ui/Button';
@@ -32,6 +33,17 @@ export default function SignUpScreen({ navigation }: any) {
 
   const pwProblem = password ? passwordProblem(password) : null;
   const mismatch = touched && confirm.length > 0 && confirm !== password;
+
+  // Con Google no hay "crear cuenta" separado de "entrar": es la misma puerta.
+  // Si el correo es nuevo, Supabase crea el usuario; si ya existía, entra. Lo
+  // que decide si esto es un alta o un regreso es tener o no ficha de jugador,
+  // y de eso ya se encarga el onboarding.
+  async function crearConGoogle() {
+    setLoading(true);
+    const r = await entrarConGoogle();
+    setLoading(false);
+    if (!r.ok && !r.cancelado) alerta('No se pudo entrar con Google', r.error ?? '');
+  }
 
   async function signUp() {
     setTouched(true);
@@ -136,7 +148,8 @@ export default function SignUpScreen({ navigation }: any) {
         <Button
           label="Google"
           variant="social"
-          onPress={() => navigation.navigate('SignIn')}
+          onPress={crearConGoogle}
+          disabled={loading}
           icon={<Text style={styles.glyph}>🔵</Text>}
         />
       </View>

@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { alerta } from '../ui/alerta';
 import * as WebBrowser from 'expo-web-browser';
-import * as Linking from 'expo-linking';
 import { supabase } from '../lib/supabase';
+import { entrarConGoogle } from '../lib/googleAuth';
 import Screen from '../ui/Screen';
 import Logo from '../ui/Logo';
 import Button from '../ui/Button';
@@ -46,23 +46,12 @@ export default function SignInScreen({ navigation }: any) {
   }
 
   async function signInWithGoogle() {
+    setErrorMsg(null);
     setLoading(true);
-    try {
-      const redirectTo = Linking.createURL('auth/callback');
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: { redirectTo, skipBrowserRedirect: true },
-      });
-      if (error) throw error;
-      const result = await WebBrowser.openAuthSessionAsync(data.url!, redirectTo);
-      if (result.type === 'success' && result.url) {
-        await supabase.auth.exchangeCodeForSession(result.url);
-      }
-    } catch (e: any) {
-      alerta('Error', e.message ?? 'No se pudo iniciar sesión con Google');
-    } finally {
-      setLoading(false);
-    }
+    const r = await entrarConGoogle();
+    setLoading(false);
+    // Cancelar no merece un mensaje: la persona ya sabe que cerró la ventana.
+    if (!r.ok && !r.cancelado) setErrorMsg(r.error ?? 'No se pudo entrar con Google.');
   }
 
   function forgot() {

@@ -64,7 +64,13 @@ export default function OnboardingScreen() {
 
   const [avatarKey, setAvatarKey] = useState<string>('a1');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
-  const [name, setName] = useState((session?.user.user_metadata?.username as string) ?? '');
+  // El nombre viene del alta por correo (`username`) o de Google, que lo manda
+  // como `full_name`. Sin la segunda opción, quien entra con Google empieza el
+  // onboarding con el campo vacío aunque Google ya nos dijo cómo se llama.
+  const [name, setName] = useState(() => {
+    const m = session?.user.user_metadata ?? {};
+    return (m.username as string) ?? (m.full_name as string) ?? (m.name as string) ?? '';
+  });
   const [country, setCountry] = useState('México');
   const [city, setCity] = useState('');
   const [birth, setBirth] = useState('');

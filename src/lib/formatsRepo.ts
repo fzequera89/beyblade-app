@@ -327,7 +327,14 @@ export async function generatePhaseRound(
       note = `Ronda ${nextRound} de ${all.length}`;
     }
   } else if (phase.kind === 'blocks') {
-    const blockCount = phase.block_count ?? 2;
+    // No se pueden armar más grupos que parejas. Con 2 jugadores y 2 grupos,
+    // cada grupo se queda con uno solo, no sale ningún combate y la fase se
+    // daba por terminada sin haberse jugado. Se ajusta a lo que sí se puede
+    // repartir y se avisa, en vez de dejar al organizador con una fase muerta
+    // y sin pantalla donde corregir el número de grupos.
+    const pedidos = phase.block_count ?? 2;
+    const blockCount = Math.max(1, Math.min(pedidos, Math.floor(seeded.length / 2)));
+    const ajustado = blockCount !== pedidos;
     const blocks = assignBlocks(seeded, blockCount);
     let maxRounds = 0;
     blocks.forEach((block, bi) => {
@@ -341,7 +348,10 @@ export async function generatePhaseRound(
       }
     });
     if (pairs.length === 0) finished = true;
-    else note = `Ronda ${nextRound} de ${maxRounds} · ${blockCount} grupos`;
+    else
+      note =
+        `Ronda ${nextRound} de ${maxRounds} · ${blockCount} grupo(s)` +
+        (ajustado ? ` — pedías ${pedidos}, pero con ${seeded.length} jugadores no alcanzan` : '');
   } else if (phase.kind === 'category_rr') {
     // Un round robin por cada categoría, todos avanzando al mismo paso: la
     // ronda 2 de Oro se juega la misma tarde que la ronda 2 de Bronce.
@@ -410,6 +420,16 @@ export async function generatePhaseRound(
       byes = result.byes.map((b) => b.player);
       if (result.isGrandFinal) note = 'Gran final';
     }
+  }
+
+  // Una fase que se declara terminada SIN haber jugado una sola ronda no está
+  // terminada: está mal configurada. Cerrarla en silencio fue lo que dejó una
+  // fase de grupos muerta al primer toque, sin explicación y sin vuelta atrás.
+  if (finished && roundsPlayed === 0) {
+    throw new Error(
+      `Con ${participants.length} jugador(es) presentes, esta fase no genera ningún combate. ` +
+        'Revisa el check-in y la estructura de la fase antes de empezarla.'
+    );
   }
 
   if (finished) {

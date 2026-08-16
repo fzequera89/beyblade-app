@@ -524,6 +524,71 @@ está muerto y habría que borrarlo. Hoy la respuesta se guarda en
 `net._http_response` pero nadie la lee. No urge —un token muerto solo desperdicia
 un renglón del lote— pero es el siguiente paso natural.
 
+### 🐞 QA en aparato real — lo que encontró y lo que costó (2026-08-16)
+
+Primera sesión de QA con la app instalada y dos cuentas. Diez hallazgos, y el
+patrón que los une vale más que la lista: **los fallos se veían como "el botón
+no hace nada"** porque los errores estaban tragados.
+
+**El más caro: `Alert` no existe en web.** `react-native-web` lo implementa como
+`class Alert { static alert() {} }` — una función vacía. Los **155 avisos de 41
+pantallas** eran mudos en el navegador: ni errores ni confirmaciones. Y una
+confirmación cancelada es indistinguible de una que nunca se mostró. Ahora hay
+`alerta()`: diálogo nativo en teléfono, diálogos del navegador en web.
+
+**El que rompía todo: un trigger de aviso tumbaba el reporte.** La 0046
+comparaba `coalesce(old.status, '')` sobre el enum `match_status`; esa cadena
+vacía no existe, y como el trigger corre en la transacción del reporte, **desde
+esa migración ningún resultado se podía registrar**. Arreglado en 0050, y en
+0051 se blindaron los tres triggers de aviso: si algo falla al preparar una
+notificación, se traga el error y la operación sigue. **Notificar es un efecto
+secundario; jugar no.**
+
+**Los demás:**
+- `judge_role` nunca es nulo (su valor por defecto es `'none'`), así que filtrar
+  por "no nulo" mostraba a **los 22 jugadores** como jueces globales.
+- `judge_assignments` apunta dos veces a `players` (el juez y quien lo nombró):
+  la consulta ambigua devolvía PGRST201 y la pantalla, que ignoraba el error,
+  pintaba la lista vacía. Los nombramientos **sí se estaban guardando**.
+- Los jueces que ya podían fallar en un torneo —globales, o nombrados a la
+  liga— eran invisibles ahí, y parecía que el torneo no tenía jueces.
+- Uno se inscribía a un torneo **sin entrar a su liga** (0047): por eso no se
+  le podía nombrar juez, y sus resultados no contaban en escalafón ni ranking.
+- La deck card no tenía por dónde empezar si no había decks creados.
+- El rol y la liga **viajaban por parámetro de navegación**: entrando desde
+  Inicio, el organizador veía la pantalla de jugador y una ronda generada así
+  habría creado combates sin liga.
+- El check-in se declaraba con un botón (0048: ahora se prueba escaneando).
+- "Por jugar" salía solo de retos aceptados, así que **los combates de torneo no
+  aparecían en ningún lado**.
+- El "próximo torneo" de Inicio era cualquier torneo abierto de la app, aunque
+  no tuvieras nada que ver con él.
+- El botón de avanzar ronda decía "GENERAR RONDA 2" cuando lo que hacía era
+  cerrar el torneo y proclamar campeón. **Decisión del cliente: el botón dice la
+  verdad, pero el cierre NO se automatiza** — cerrar un torneo es irreversible y
+  lo dispara alguien que lo está viendo, no una inferencia.
+
+### 🔔 Bandeja de notificaciones (0049, 2026-08-16)
+
+La campana contaba solo retos. Ahora `push_outbox` —la misma tabla que alimenta
+las push— es también la bandeja: **un aviso se genera una vez y se lee por los
+dos lados**. Ventaja que no es de ahorro: **un aviso que no se pudo entregar
+igual aparece dentro de la app**, que es justo lo que faltó cuando un token
+muerto hizo invisible una notificación real y pareció un fallo del sistema.
+
+Dos cambios de comportamiento: el aviso se guarda **aunque el jugador no tenga
+aparato registrado**, y cada quien **lee lo suyo** (política nueva).
+
+**Tokens muertos:** al desinstalar la app, el token sigue vivo en la base y todo
+aviso se manda a una dirección que ya no es de nadie — el sistema dice
+"entregado" y el teléfono nunca suena. `prune_dead_push_tokens` los borra
+leyendo la respuesta de Expo, y corre antes de cada envío. **Queda fuera el
+acuse diferido**, que es el caso que nos pasó: para eso habría que guardar el
+ticket de cada mensaje y volver a preguntar minutos después. Se deja anotado.
+
+**Con la app abierta**, Android no muestra el aviso salvo que se configure un
+manejador — no estaba, y por eso "no llegaba" con el teléfono en la mano.
+
 ### Reglamento extraído (referencia, para no releer el .docx)
 
 Investigado el 2026-08-14 leyendo `Reglamento DML Beyblade actualizado pro.docx` (secciones II–V). Reglas textuales para arrancar sin releer el .docx:
@@ -966,7 +1031,7 @@ acumulándose de combates de verdad sigue sin probarse punta a punta.
 
 1. `git clone` / `git pull` del repo.
 2. Copiar `.env.example` a `.env` y llenar `EXPO_PUBLIC_SUPABASE_URL` y `EXPO_PUBLIC_SUPABASE_ANON_KEY` (Supabase → Settings → API del proyecto "CML Beyblade").
-3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-15 las 0001–0046 están corridas y verificadas contra la base** (0036 = portadas de eventos y clubes; 0037 = tabla local por victorias + escala VP 5/4/3/2/1; 0038 = Ranking Unificado Interclubes) — si se agrega una nueva, actualizar esta línea.
+3. Confirmar que todas las migraciones en `supabase/migrations/` (0001 a la más reciente) ya corrieron en el SQL Editor de Supabase, en orden. **0005 debe correr sola**, aparte de las demás (ver el comentario en ese archivo). Las demás pueden ir seguidas. **Al 2026-08-16 las 0001–0051 están corridas y verificadas contra la base** (0036 = portadas de eventos y clubes; 0037 = tabla local por victorias + escala VP 5/4/3/2/1; 0038 = Ranking Unificado Interclubes) — si se agrega una nueva, actualizar esta línea.
 4. `npm install`, luego `npm run web` para verificar rápido en el preview del navegador (no requiere emulador Android).
 5. Para un build real: `npx eas-cli build --platform android --profile preview --non-interactive` (requiere `eas login` ya hecho en la máquina).
 
@@ -1004,7 +1069,7 @@ Es la única línea del roadmap que queda, y buena parte **no la puede cerrar un
 - Probar el QR de check-in (2.2) y la cámara, que solo funcionan en build real, nunca en el preview web. **Ya hay un APK instalado que sirve para esto.**
 
 **Pulido pendiente:**
-- Fecha/hora de eventos como texto (decisión 9) — cambiar a date picker exige dev client.
+- ~~Fecha/hora como texto~~ ✅ `DateField`: calendario del sistema en teléfono, texto en web (el módulo es nativo y no existe en el navegador).
 - ~~Avatar de perfil~~ ✅ hecho: `EditProfileScreen` sube foto a Storage y guarda `players.avatar_url`.
 - ~~Notificaciones push~~ ✅ **funcionando en aparato real (Android, 2026-08-16)**, incluido el aviso automático disparado por un trigger. Falta iOS, que depende de la cuenta de Apple. Ver la sección de la 0046.
 - ~~Sin paginación en listas~~ ✅ hecha: páginas de 12 con "ver más". De paso se quitó el `.limit(100)` del ranking, que hacía invisible al jugador 101.

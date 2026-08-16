@@ -1205,10 +1205,26 @@ function BracketTab({
     !previousPending &&
     enoughPlayers;
 
+  // ¿La siguiente pulsación CIERRA en vez de generar? En eliminación, cuando la
+  // última ronda fue un solo combate ya cerrado, solo queda un jugador vivo. En
+  // suizo, cuando ya se jugaron todas las rondas pactadas.
+  //
+  // Importa decirlo: el botón prometía "GENERAR RONDA 2" y lo que hacía era
+  // proclamar campeón. Un organizador razonable no lo toca, y el torneo se
+  // quedaba abierto para siempre.
+  const ultimaRonda = phaseMatches.filter((m) => m.bracket_round === lastRound);
+  const cierra =
+    !notStarted &&
+    openMatches.length === 0 &&
+    (((phase.kind === 'single_elim' || phase.kind === 'double_elim') && ultimaRonda.length === 1) ||
+      (phase.kind === 'swiss' && !!phase.rounds && lastRound >= phase.rounds));
+
   const advanceLabel = notStarted
     ? phase.phase_number === 1
       ? `GENERAR PRIMERA RONDA (${checkedIn} con check-in)`
       : 'ABRIR ESTA FASE'
+    : cierra
+    ? '🏆  CERRAR FASE Y PROCLAMAR CAMPEÓN'
     : `GENERAR RONDA ${lastRound + 1}`;
 
   const blocked = previousPending

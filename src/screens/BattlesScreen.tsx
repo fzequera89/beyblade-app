@@ -55,7 +55,13 @@ export default function BattlesScreen({ navigation }: any) {
   const load = useCallback(async () => {
     setLoading(true);
 
-    const [{ data: challenges }, { data: incoming }, { data: tours }, { data: memberships }] =
+    const [
+      { data: challenges },
+      { data: incoming },
+      { data: tours },
+      { data: memberships },
+      { data: deTorneo },
+    ] =
       await Promise.all([
         // Retos aceptados cuyo match sigue sin confirmarse: es lo que el jugador
         // tiene realmente pendiente de jugar o de cerrar.
@@ -84,6 +90,18 @@ export default function BattlesScreen({ navigation }: any) {
           .from('league_members')
           .select('league_id, role, leagues(id, name, description, photo_url, owner_player_id)')
           .eq('player_id', playerId),
+        // "Por jugar" salía SOLO de retos aceptados, así que un combate de
+        // torneo —que no nace de un reto— no aparecía por ningún lado. El
+        // jugador tenía un combate asignado y la app no se lo decía.
+        supabase
+          .from('matches')
+          .select(
+            'id, status, score_a, score_b, mode, points_to_win, reported_by, bracket_round, player_a_id, player_b_id, tournament_id, tournaments(name), player_a:players!matches_player_a_id_fkey(id, display_name, elo_rating, city, avatar_key, avatar_url), player_b:players!matches_player_b_id_fkey(id, display_name, elo_rating, city, avatar_key, avatar_url)'
+          )
+          .or(`player_a_id.eq.${playerId},player_b_id.eq.${playerId}`)
+          .not('tournament_id', 'is', null)
+          .neq('status', 'confirmed')
+          .limit(30),
       ]);
 
     // Si arbitras, lo que está detenido esperándote va antes que lo tuyo.
@@ -102,9 +120,32 @@ export default function BattlesScreen({ navigation }: any) {
     setIsJudge(!!judge);
     setDisputeCount(disputes ?? 0);
 
-    setPending(
-      ((challenges as any[]) ?? []).filter((c) => c.match && c.match.status !== 'confirmed')
-    );
+    // Los combates de torneo se visten con la misma forma que un reto para que
+    // la lista los pinte igual: al jugador le da lo mismo de dónde salió el
+    // combate, lo que quiere es jugarlo.
+    const deTorneoComoReto = ((deTorneo as any[]) ?? []).map((m) => ({
+      id: `torneo-${m.id}`,
+      match_id: m.id,
+      challenger: m.player_a,
+      challenged: m.player_b,
+      torneo: (Array.isArray(m.tournaments) ? m.tournaments[0] : m.tournaments)?.name ?? 'Torneo',
+      ronda: m.bracket_round,
+      match: {
+        id: m.id,
+        status: m.status,
+        score_a: m.score_a,
+        score_b: m.score_b,
+        player_a_id: m.player_a_id,
+        mode: m.mode,
+        points_to_win: m.points_to_win,
+        reported_by: m.reported_by,
+      },
+    }));
+
+    setPending([
+      ...((challenges as any[]) ?? []).filter((c) => c.match && c.match.status !== 'confirmed'),
+      ...deTorneoComoReto,
+    ]);
     setReceived((incoming as any) ?? []);
 
     // ── Torneos (global): las mismas tarjetas del lobby, pero de todas las ligas ──

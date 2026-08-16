@@ -18,6 +18,7 @@ import CreateTournamentScreen from '../screens/CreateTournamentScreen';
 import TournamentDetailScreen from '../screens/TournamentDetailScreen';
 import MatchDetailScreen from '../screens/MatchDetailScreen';
 import DeckScreen from '../screens/DeckScreen';
+import NotificationsScreen from '../screens/NotificationsScreen';
 import WearGuideScreen from '../screens/WearGuideScreen';
 import LeagueStandingsScreen from '../screens/LeagueStandingsScreen';
 import AdminScreen from '../screens/AdminScreen';
@@ -73,6 +74,8 @@ function Inicio() {
       <InicioStack.Screen name="Passport" component={PassportScreen} />
       <InicioStack.Screen name="TournamentDetail" component={TournamentDetailScreen} />
       <InicioStack.Screen name="Deck" component={DeckScreen} />
+      {/* La campana de Inicio lleva aquí. */}
+      <InicioStack.Screen name="Notifications" component={NotificationsScreen} />
       {/* Se llega desde la deck card: sin decks no hay tarjeta que armar. */}
       <InicioStack.Screen name="Combos" component={CombosScreen} />
       <InicioStack.Screen name="WearGuide" component={WearGuideScreen} />

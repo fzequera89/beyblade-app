@@ -9,6 +9,7 @@ import Logo from '../ui/Logo';
 import Avatar from '../ui/Avatar';
 import { Card, Pill, Hex, SectionTitle } from '../ui/primitives';
 import { IconBell, IconSearch, IconSwords, IconCalendar, IconPin, IconFlame, IconChevron } from '../ui/icons';
+import { unreadCount } from '../lib/notifications';
 import { colors, space, type, glow } from '../theme';
 
 type Player = {
@@ -51,6 +52,8 @@ export default function HomeScreen({ navigation }: any) {
   const [challenges, setChallenges] = useState<any[]>([]);
   const [tournament, setTournament] = useState<any | null>(null);
   const [activity, setActivity] = useState<any[]>([]);
+  const [porJugar, setPorJugar] = useState<any[]>([]);
+  const [sinLeer, setSinLeer] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -66,7 +69,14 @@ export default function HomeScreen({ navigation }: any) {
     }
     setPlayer(me as any);
 
-    const [{ count: winCount }, { count: above }, { data: matches }, { data: pending }, { data: next }] =
+    const [
+      { count: winCount },
+      { count: above },
+      { data: matches },
+      { data: pending },
+      { data: misTorneos },
+      { data: misCombates },
+    ] =
       await Promise.all([
         supabase.from('matches').select('*', { count: 'exact', head: true }).eq('status', 'confirmed').eq('winner_id', playerId),
         // Posición global: cuántos tienen más ELO que yo, más uno.
@@ -85,19 +95,44 @@ export default function HomeScreen({ navigation }: any) {
           .eq('status', 'pending')
           .order('created_at', { ascending: false })
           .limit(3),
+        // El "próximo torneo" era CUALQUIER torneo abierto de la app, aunque no
+        // tuvieras nada que ver con él — y desaparecía en cuanto empezaba. Ahora
+        // es el tuyo: donde estás inscrito y todavía no termina.
         supabase
-          .from('tournaments')
-          .select('id, name, status, created_at, leagues(name), seasons(name)')
-          .eq('status', 'pending')
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle(),
+          .from('tournament_registrations')
+          .select('tournaments(id, name, status, starts_at, created_at, leagues(name), seasons(name))')
+          .eq('player_id', playerId)
+          .limit(20),
+        // Lo que tienes pendiente de jugar, venga de un reto o de un torneo.
+        supabase
+          .from('matches')
+          .select(
+            'id, status, bracket_round, score_a, score_b, player_a_id, player_b_id, tournament_id, tournaments(name), player_a:players!matches_player_a_id_fkey(display_name), player_b:players!matches_player_b_id_fkey(display_name)'
+          )
+          .or(`player_a_id.eq.${playerId},player_b_id.eq.${playerId}`)
+          .neq('status', 'confirmed')
+          .limit(10),
       ]);
 
     setWins(winCount ?? 0);
     setRank((above ?? 0) + 1);
     setChallenges((pending as any) ?? []);
-    setTournament(next ?? null);
+
+    // El más próximo por fecha; los que están en juego primero, porque son los
+    // que te reclaman hoy.
+    const torneos = (((misTorneos as any[]) ?? [])
+      .map((r) => (Array.isArray(r.tournaments) ? r.tournaments[0] : r.tournaments))
+      .filter((t) => t && t.status !== 'completed') as any[])
+      .sort((a, b) => {
+        const rank = (t: any) => (t.status === 'in_progress' ? 0 : 1);
+        if (rank(a) !== rank(b)) return rank(a) - rank(b);
+        const at = a.starts_at ? new Date(a.starts_at).getTime() : Infinity;
+        const bt = b.starts_at ? new Date(b.starts_at).getTime() : Infinity;
+        return at - bt;
+      });
+    setTournament(torneos[0] ?? null);
+    setPorJugar(((misCombates as any[]) ?? []));
+    setSinLeer(await unreadCount());
 
     const list = ((matches as any[]) ?? []);
     setActivity(list.slice(0, 3));
@@ -147,11 +182,13 @@ export default function HomeScreen({ navigation }: any) {
     <Screen scroll padded={false}>
       <View style={styles.header}>
         <Logo size="sm" />
-        <Pressable style={styles.bell} hitSlop={8} onPress={() => navigation.navigate('Challenges')}>
+        {/* La campana dejó de ser un atajo a retos: cuenta TODO lo que la app
+            tiene que decirte y lleva a la bandeja. */}
+        <Pressable style={styles.bell} hitSlop={8} onPress={() => navigation.navigate('Notifications')}>
           <IconBell />
-          {challenges.length > 0 && (
+          {sinLeer > 0 && (
             <View style={styles.badge}>
-              <Text style={styles.badgeText}>{challenges.length}</Text>
+              <Text style={styles.badgeText}>{sinLeer > 9 ? '9+' : sinLeer}</Text>
             </View>
           )}
         </Pressable>
@@ -271,6 +308,35 @@ export default function HomeScreen({ navigation }: any) {
           </View>
         )}
 
+        {/* Lo que te toca AHORA va antes que lo que ya pasó. */}
+        {porJugar.length > 0 && (
+          <View style={styles.block}>
+            <SectionTitle>Te toca jugar</SectionTitle>
+            {porJugar.map((m: any) => {
+              const rival =
+                m.player_a_id === playerId ? m.player_b?.display_name : m.player_a?.display_name;
+              const torneo = Array.isArray(m.tournaments) ? m.tournaments[0] : m.tournaments;
+              return (
+                <Card
+                  key={m.id}
+                  style={styles.porJugar}
+                  onPress={() => navigation.navigate('MatchDetail', { matchId: m.id })}
+                >
+                  <Text style={{ fontSize: 18 }}>🥊</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.porJugarName}>vs {rival ?? '—'}</Text>
+                    <Text style={styles.meta}>
+                      {torneo?.name ? `${torneo.name} · ronda ${m.bracket_round ?? 1}` : 'Reto directo'}
+                      {m.status === 'reported' ? ' · falta tu marca' : ''}
+                    </Text>
+                  </View>
+                  <IconChevron />
+                </Card>
+              );
+            })}
+          </View>
+        )}
+
         {/* Actividad */}
         <View style={styles.block}>
           <SectionTitle>Actividad reciente</SectionTitle>
@@ -354,6 +420,9 @@ function Link({ onPress }: { onPress: () => void }) {
 }
 
 const styles = StyleSheet.create({
+  porJugar: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  porJugarName: { fontSize: 14, fontWeight: '700', color: colors.ink },
+  meta: { fontSize: 11.5, color: colors.inkSoft, marginTop: 2 },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   pad: { paddingHorizontal: space.xl },
   header: {

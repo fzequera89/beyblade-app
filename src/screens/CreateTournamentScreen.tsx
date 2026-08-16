@@ -6,6 +6,7 @@ import Screen from '../ui/Screen';
 import Button from '../ui/Button';
 import Cover from '../ui/Cover';
 import { Field } from '../ui/Field';
+import { DateField } from '../ui/DateField';
 import { Card, Pill, SectionTitle } from '../ui/primitives';
 import { colors, space, type, radius } from '../theme';
 import { pickCoverPhoto, uploadCover } from '../lib/cover';
@@ -322,12 +323,11 @@ export default function CreateTournamentScreen({ route, navigation }: any) {
 
         {step === 1 && (
           <View style={{ gap: space.md }}>
-            <Field
+            <DateField
               label="¿Qué día se juega?"
-              placeholder="2026-09-27"
               value={date}
-              onChangeText={setDate}
-              hint="Formato año-mes-día."
+              onChange={setDate}
+              hint="En el teléfono se abre el calendario; en la web se escribe año-mes-día."
             />
 
             <SectionTitle>¿Dónde?</SectionTitle>

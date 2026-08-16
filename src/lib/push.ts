@@ -50,6 +50,23 @@ export async function registerForPush(playerId: string | null): Promise<void> {
     const modDevice: any = await import('expo-device');
     const Device: any = modDevice?.default ?? modDevice;
 
+    // Sin esto, una notificación que llega con la app ABIERTA se entrega a la
+    // app y no se muestra: el jugador no ve nada y jura que no llegó. Fue justo
+    // lo que pasó en la prueba con el teléfono en la mano.
+    //
+    // Las llaves cambiaron de nombre entre versiones del SDK (`shouldShowAlert`
+    // → `shouldShowBanner`/`shouldShowList`), así que se mandan las tres: la que
+    // no aplique se ignora.
+    Notifications.setNotificationHandler?.({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+      }),
+    });
+
     if (!Notifications?.getPermissionsAsync) {
       estadoPush = 'no se pudo cargar expo-notifications';
       return;

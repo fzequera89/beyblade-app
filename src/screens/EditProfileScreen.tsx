@@ -10,7 +10,7 @@ import Button from '../ui/Button';
 import { Field } from '../ui/Field';
 import { AvatarPicker } from '../ui/Avatar';
 import { Card, Checkbox, OptionCard } from '../ui/primitives';
-import { colors, space, type } from '../theme';
+import { colors, space, type, radius } from '../theme';
 
 const EXPERIENCE = [
   { key: 'rookie', glyph: '🌱', title: 'Rookie' },
@@ -156,6 +156,22 @@ export default function EditProfileScreen({ navigation }: any) {
           </Pressable>
         ) : null}
 
+        {/* El correo se ve pero no se edita: es la llave de la cuenta y
+
+            cambiarlo es otra operación (verificación incluida). Antes
+
+            no aparecía en ningún lado y no había forma de saber con
+
+            qué cuenta estabas dentro. */}
+
+        <View style={styles.correoBox}>
+
+          <Text style={styles.correoLabel}>CORREO DE LA CUENTA</Text>
+
+          <Text style={styles.correoValor}>{session?.user?.email ?? '—'}</Text>
+
+        </View>
+
         <Field
           label="Nombre de blader"
           counter={`${form.name.length}/20`}
@@ -220,6 +236,16 @@ export default function EditProfileScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
+  correoBox: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.md,
+    paddingVertical: space.md,
+    paddingHorizontal: space.lg,
+    gap: 2,
+  },
+  correoLabel: { fontSize: 8.5, fontWeight: '800', letterSpacing: 0.8, color: colors.inkDim },
+  correoValor: { fontSize: 13.5, color: colors.inkSoft },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   head: {
     flexDirection: 'row',

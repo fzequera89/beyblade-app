@@ -17,16 +17,32 @@ export default function SignInScreen({ navigation }: any) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   async function signIn() {
     if (!email.trim() || !password) {
       alerta('Faltan datos', 'Escribe tu correo y tu contraseña.');
       return;
     }
+    setErrorMsg(null);
     setLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
     setLoading(false);
-    if (error) alerta('No pudimos entrar', error.message);
+
+    // En el formulario y no en un diálogo: un error de contraseña se corrige
+    // ahí mismo, y un diálogo tapa justo el campo que hay que arreglar. Además
+    // el mensaje de Supabase viene en inglés y dice "Invalid login
+    // credentials", que no le explica nada a nadie.
+    if (error) {
+      const m = error.message.toLowerCase();
+      setErrorMsg(
+        m.includes('invalid login')
+          ? 'Correo o contraseña incorrectos.'
+          : m.includes('email not confirmed')
+          ? 'Falta confirmar tu correo. Revisa la bandeja de entrada.'
+          : error.message
+      );
+    }
   }
 
   async function signInWithGoogle() {
@@ -105,6 +121,8 @@ export default function SignInScreen({ navigation }: any) {
           <Text style={styles.link}>¿Olvidaste tu contraseña?</Text>
         </Pressable>
 
+        {errorMsg ? <Text style={styles.errorMsg}>{errorMsg}</Text> : null}
+
         <Button label="INICIAR SESIÓN" onPress={signIn} loading={loading} />
       </View>
 
@@ -133,6 +151,13 @@ export default function SignInScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
+  errorMsg: {
+    color: colors.loss,
+    fontSize: 12.5,
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 2,
+  },
   brand: { alignItems: 'center', marginTop: space.xxxl, marginBottom: space.xxl, gap: space.sm },
   tagline: {
     ...type.label,

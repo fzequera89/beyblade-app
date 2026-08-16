@@ -269,7 +269,7 @@ export default function BattlesScreen({ navigation }: any) {
   }, [tournaments, torneoFilter]);
   const openTournamentCount = tournaments.filter((t) => t.status !== 'completed').length;
   const torneoHero =
-    shownTournaments[0] && shownTournaments[0].status === 'pending' && torneoFilter !== 'completados'
+    shownTournaments[0] && shownTournaments[0].status !== 'completed' && torneoFilter !== 'completados'
       ? shownTournaments[0]
       : null;
   const torneoRest = torneoHero ? shownTournaments.slice(1) : shownTournaments;

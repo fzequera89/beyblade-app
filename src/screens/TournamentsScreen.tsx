@@ -80,7 +80,7 @@ export default function TournamentsScreen({ route, navigation }: any) {
   }, [tournaments, filter, onlyMine]);
 
   const openCount = tournaments.filter((t) => t.status !== 'completed').length;
-  const hero = shown[0] && shown[0].status === 'pending' && filter !== 'completados' ? shown[0] : null;
+  const hero = shown[0] && shown[0].status !== 'completed' && filter !== 'completados' ? shown[0] : null;
   const rest = hero ? shown.slice(1) : shown;
 
   function open(t: Tournament, tab?: 'bracket') {

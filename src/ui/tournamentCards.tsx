@@ -55,7 +55,12 @@ export function formatLine(t: Pick<Tournament, 'combat_mode'>): string {
 // final los terminados. Sin fecha va después de los que sí la tienen: no se
 // puede decidir si urge.
 export function byRelevance(a: Tournament, b: Tournament): number {
-  const rank = (t: Tournament) => (t.status === 'pending' ? 0 : t.status === 'completed' ? 2 : 1);
+  // EN JUEGO va primero, y no es un detalle de gusto: un torneo que se está
+  // jugando ahora te reclama hoy; uno con inscripciones abiertas y sin fecha
+  // puede esperar. Estaba al revés, y el resultado era que el torneo en curso
+  // aparecía debajo de cuatro pruebas vacías.
+  const rank = (t: Tournament) =>
+    t.status === 'in_progress' ? 0 : t.status === 'completed' ? 2 : 1;
   if (rank(a) !== rank(b)) return rank(a) - rank(b);
   const at = a.starts_at ? new Date(a.starts_at).getTime() : null;
   const bt = b.starts_at ? new Date(b.starts_at).getTime() : null;
@@ -108,6 +113,7 @@ export async function attachChampions(rows: Tournament[]): Promise<void> {
 export function HeroCard({ t, onPress }: { t: Tournament; onPress: () => void }) {
   const accent = coverAccent(t.id);
   const full = t.capacity !== null && t.registered >= t.capacity;
+  const live = t.status === 'in_progress';
 
   return (
     <View style={[styles.hero, { borderColor: accent.neon }]}>
@@ -117,8 +123,20 @@ export function HeroCard({ t, onPress }: { t: Tournament; onPress: () => void })
         </View>
 
         <View style={styles.heroTop}>
-          <View style={[styles.tag, { borderColor: colors.win, backgroundColor: 'rgba(4,6,12,0.6)' }]}>
-            <Text style={[styles.tagText, { color: colors.win }]}>REGISTRO ABIERTO</Text>
+          {/* El héroe ya no es siempre uno con registro abierto: desde que el
+              torneo EN JUEGO va primero, puede ser el que se está jugando. */}
+          <View
+            style={[
+              styles.tag,
+              {
+                borderColor: live ? accent.neon : colors.win,
+                backgroundColor: 'rgba(4,6,12,0.6)',
+              },
+            ]}
+          >
+            <Text style={[styles.tagText, { color: live ? accent.warm : colors.win }]}>
+              {live ? 'EN JUEGO' : 'REGISTRO ABIERTO'}
+            </Text>
           </View>
           <CountdownBox startsAt={t.starts_at} accent={accent.warm} />
         </View>
